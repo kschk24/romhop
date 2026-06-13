@@ -46,6 +46,9 @@ The RetroArch saves/states folders default to the standard per-OS RetroArch
 paths, which are usually correct. The ROMs root has no universal default and
 must be set.
 
+As its last step, `setup` offers to scan your ROMs folder (see below) so games
+already on disk become save-syncable immediately.
+
 ## Usage
 
 Download a game by exact name or a unique substring:
@@ -54,11 +57,34 @@ Download a game by exact name or a unique substring:
 romhop download "Sonic"
 ```
 
+If the game is already in your ROMs folder, `download` skips the transfer and
+just records the mapping needed for save sync.
+
 Watch RetroArch saves/states and push changes to RomM until interrupted:
 
 ```
 romhop sync
 ```
+
+## Scan existing games
+
+Match games already in your ROMs folder to your RomM library and seed the
+save-sync cache — no re-downloading. Run it once after pointing romhop at an
+existing ES-DE library so `sync` can push saves for games you didn't download
+through romhop.
+
+```
+romhop scan          # preview matches, then confirm
+romhop scan --yes    # write mappings without prompting
+```
+
+Matching is exact (whitespace- and case-insensitive) and scoped per platform, so
+revision/region variants like `(Rev 1)` stay distinct and same-named games on
+different systems aren't confused. When two systems do share a save basename,
+`sync` disambiguates by the RetroArch core folder; map an unknown core with
+`romhop config set-core "<core folder>" <es-de-dir>`.
+
+Scanning needs no extra token scope (`roms.read`, which you already have).
 
 ## Configuration
 
@@ -66,6 +92,7 @@ romhop sync
 romhop config show                  # print current settings as JSON
 romhop config set <key> <value>     # roms_root, saves_dir, states_dir, romm_url, sync_delay_seconds
 romhop config set-platform <slug> <es-de-dir>   # override platform -> ES-DE system dir mapping
+romhop config set-core <core-folder> <es-de-dir> # map a RetroArch core folder -> ES-DE system dir
 ```
 
 `sync_delay_seconds` is the debounce window before a changed save is uploaded
