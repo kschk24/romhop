@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from romhop.retroarch_cfg import parse_save_dirs
+from romhop.retroarch_cfg import default_cfg_path, parse_save_dirs, save_dirs_from_install
 
 
 def _write_cfg(dirpath, body):
@@ -42,3 +42,31 @@ def test_tilde_expansion(tmp_path):
     cfg = _write_cfg(tmp_path, 'savefile_directory = "~/ra/saves"\n')
     saves, _ = parse_save_dirs(cfg)
     assert saves == Path.home() / "ra" / "saves"
+
+
+def test_save_dirs_from_install_reads_cfg(tmp_path):
+    _write_cfg(tmp_path, 'savefile_directory = ":/saves"\n'
+                         'savestate_directory = ":/states"\n')
+    assert save_dirs_from_install(tmp_path) == (tmp_path / "saves", tmp_path / "states")
+
+
+def test_save_dirs_from_install_no_cfg(tmp_path):
+    assert save_dirs_from_install(tmp_path) == (None, None)
+
+
+def test_default_cfg_path_uses_xdg_when_present(tmp_path, monkeypatch):
+    cfg = _write_cfg(tmp_path / "retroarch", 'savefile_directory = "x"\n')
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    assert default_cfg_path() == cfg
+
+
+def test_default_cfg_path_falls_back_to_home_config(tmp_path, monkeypatch):
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    cfg = _write_cfg(tmp_path / ".config" / "retroarch", 'savefile_directory = "x"\n')
+    assert default_cfg_path() == cfg
+
+
+def test_default_cfg_path_none_when_absent(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))  # no cfg written here
+    assert default_cfg_path() is None

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 _SAVE_KEYS = ("savefile_directory", "savestate_directory")
@@ -41,3 +42,20 @@ def parse_save_dirs(cfg_path: Path) -> tuple[Path | None, Path | None]:
         _resolve(values.get("savefile_directory"), cfg_path),
         _resolve(values.get("savestate_directory"), cfg_path),
     )
+
+
+def save_dirs_from_install(folder: Path) -> tuple[Path | None, Path | None]:
+    """Parse <folder>/retroarch.cfg; (None, None) when that file is absent."""
+    cfg = folder / "retroarch.cfg"
+    return parse_save_dirs(cfg) if cfg.exists() else (None, None)
+
+
+def default_cfg_path() -> Path | None:
+    """Standard non-Windows retroarch.cfg location, or None if it doesn't exist.
+
+    Honors $XDG_CONFIG_HOME, else ~/.config.
+    """
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    base = Path(xdg) if xdg else Path.home() / ".config"
+    cfg = base / "retroarch" / "retroarch.cfg"
+    return cfg if cfg.exists() else None
