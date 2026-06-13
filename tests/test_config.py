@@ -28,12 +28,18 @@ def test_save_and_load_roundtrip(tmp_path):
         roms_root=tmp_path / "roms",
         saves_dir=tmp_path / "saves",
         states_dir=tmp_path / "states",
+        platform_overrides={"gba": "Game Boy Advance"},
+        sync_delay_seconds=12.5,
     )
     path = tmp_path / "settings.json"
     config.save_settings(s, path)
     loaded = config.load_settings(path)
     assert loaded.romm_url == "http://romm.example"
     assert loaded.roms_root == tmp_path / "roms"
+    assert loaded.saves_dir == tmp_path / "saves"
+    assert loaded.states_dir == tmp_path / "states"
+    assert loaded.platform_overrides == {"gba": "Game Boy Advance"}
+    assert loaded.sync_delay_seconds == 12.5
 
 
 def test_token_uses_keyring_not_file(tmp_path):
