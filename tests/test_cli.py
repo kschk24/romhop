@@ -199,18 +199,35 @@ def test_setup_writes_settings_and_token(monkeypatch):
     monkeypatch.setattr(cli.config, "set_token", lambda t: stored.setdefault("t", t))
     monkeypatch.setattr(cli.config, "save_settings", lambda s: saved.setdefault("s", s))
 
-    # url, token, roms; blank lines accept the saves/states defaults
+    # url, token, roms, then "N" to keep the saves/states defaults
     result = runner.invoke(
         cli.app, ["setup"],
-        input="http://romm.test\nrmm_secret\n/tmp/MyROMs\n\n\n",
+        input="http://romm.test\nrmm_secret\n/tmp/MyROMs\nN\n",
     )
     assert result.exit_code == 0, result.output
     assert stored["t"] == "rmm_secret"
     assert saved["s"].romm_url == "http://romm.test"
     assert saved["s"].roms_root == Path("/tmp/MyROMs")
-    # saves/states defaulted to the OS RetroArch paths
+    # saves/states kept the OS RetroArch defaults (not prompted)
     assert "retroarch" in str(saved["s"].saves_dir).lower()
-    assert "only change them" in result.output.lower()
+
+
+def test_setup_changes_saves_states_when_confirmed(monkeypatch):
+    settings = cli.config.default_settings()
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "get_token", lambda: None)
+    saved = {}
+    monkeypatch.setattr(cli.config, "set_token", lambda t: None)
+    monkeypatch.setattr(cli.config, "save_settings", lambda s: saved.setdefault("s", s))
+
+    # url, token, roms, "y" to change, then custom saves + states
+    result = runner.invoke(
+        cli.app, ["setup"],
+        input="http://romm.test\nrmm_x\n/tmp/MyROMs\ny\n/tmp/sv\n/tmp/st\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert saved["s"].saves_dir == Path("/tmp/sv")
+    assert saved["s"].states_dir == Path("/tmp/st")
 
 
 def test_setup_keeps_existing_token_when_blank(monkeypatch):
@@ -223,7 +240,7 @@ def test_setup_keeps_existing_token_when_blank(monkeypatch):
     monkeypatch.setattr(cli.config, "set_token", lambda t: set_calls.append(t))
     monkeypatch.setattr(cli.config, "save_settings", lambda s: None)
 
-    # accept url default, blank token (keep existing), new roms, accept saves/states
-    result = runner.invoke(cli.app, ["setup"], input="\n\n/tmp/new\n\n\n")
+    # accept url default, blank token (keep existing), new roms, "N" keep saves/states
+    result = runner.invoke(cli.app, ["setup"], input="\n\n/tmp/new\nN\n")
     assert result.exit_code == 0, result.output
     assert set_calls == []   # token untouched because blank + existing present
