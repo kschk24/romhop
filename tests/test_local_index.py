@@ -59,6 +59,25 @@ def test_files_outside_a_system_dir_ignored(tmp_path):
     assert index_local_library(tmp_path, overrides={}) == []
 
 
+def test_txt_sidecars_ignored_as_flat_games(tmp_path):
+    # ES-DE drops a systeminfo.txt in every system dir; .txt is never a rom.
+    _touch(tmp_path / "genesis" / "systeminfo.txt", b"meta")
+    _touch(tmp_path / "genesis" / "Sonic (USA).md", b"x")
+    games = index_local_library(tmp_path, overrides={})
+    assert [g.game_name for g in games] == ["Sonic (USA).md"]
+
+
+def test_txt_sidecars_excluded_from_subfolder_file_names(tmp_path):
+    # A promo/readme .txt inside a multi-disc folder must not become a save candidate.
+    base = tmp_path / "psx" / "Game (USA)"
+    _touch(base / "Game (USA) (Disc 1).chd", b"a")
+    _touch(base / "Vimm's Lair.txt", b"promo")
+    _touch(base / "noload.txt", b"")
+    games = index_local_library(tmp_path, overrides={})
+    assert len(games) == 1
+    assert games[0].file_names == ["Game (USA) (Disc 1).chd"]
+
+
 # ---------------------------------------------------------------------------
 # match_to_roms tests (Task 3)
 # ---------------------------------------------------------------------------
