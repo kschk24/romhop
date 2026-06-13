@@ -29,6 +29,10 @@ def test_single_file_rom_written_and_cached(tmp_path):
     entry = cache.find_by_basename("Sonic (USA)")
     assert entry.rom_id == 7 and entry.system == "genesis"
 
+    # cache persisted to disk and reloads correctly
+    reloaded = MappingCache(tmp_path / "cache.json")
+    assert reloaded.find_by_basename("Sonic (USA)").rom_id == 7
+
 
 def test_multi_file_rom_zip_is_extracted(tmp_path):
     buf = io.BytesIO()
@@ -39,11 +43,12 @@ def test_multi_file_rom_zip_is_extracted(tmp_path):
               fs_name="FF7.cue", fs_name_no_ext="FF7",
               file_names=["FF7 (Disc 1).cue", "FF7 (Disc 1).bin"])
 
+    cache = MappingCache(tmp_path / "c.json")
     m3u = download_rom(rom, FakeClient(buf.getvalue()), roms_root=tmp_path,
-                       cache=MappingCache(tmp_path / "c.json"), overrides={},
-                       is_multi_file=True)
+                       cache=cache, overrides={}, is_multi_file=True)
 
     folder = tmp_path / "psx" / "FF7"
     assert (folder / "FF7 (Disc 1).cue").read_text() == "CUE1"
     # m3u references only the cue descriptor
     assert m3u.read_text().strip() == "FF7/FF7 (Disc 1).cue"
+    assert cache.find_by_basename("FF7").rom_id == 9
