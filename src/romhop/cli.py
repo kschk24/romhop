@@ -8,6 +8,7 @@ from pathlib import Path
 
 import httpx
 import typer
+import typer.rich_utils
 from rich.progress import (
     BarColumn,
     DownloadColumn,
@@ -51,15 +52,127 @@ from romhop._frog import FROG
 _DESC = "Sync a RomM library with a local ES-DE/RetroArch setup."
 
 
-def _help_text() -> str:
-    # Show the frog banner only on an interactive terminal (not when piped,
-    # redirected, or NO_COLOR is set) so logs and pipes stay clean.
-    if sys.stdout.isatty() and not os.environ.get("NO_COLOR"):
-        return f"```\n{FROG.strip(chr(10))}\n```\n\n{_DESC}"
-    return _DESC
+def _show_frog() -> bool:
+    # Frog gutter only on an interactive terminal (not when piped, redirected,
+    # or NO_COLOR is set) so logs and pipes stay clean.
+    return sys.stdout.isatty() and not os.environ.get("NO_COLOR")
 
 
-app = typer.Typer(rich_markup_mode="markdown", help=_help_text())
+def _format_help_with_frog(*, obj, ctx, markup_mode) -> None:
+    """typer help with the frog art in a left gutter and the body to its right.
+
+    Renders the usage line full-width, then composes a two-column grid: the
+    packaged frog on the left and typer's normal help body (description +
+    Options/Commands panels) captured at a reduced width on the right.
+    """
+    from collections import defaultdict
+
+    from rich.align import Align
+    from rich.console import Console
+    from rich.padding import Padding
+    from rich.table import Table
+    from rich.text import Text
+
+    import typer.rich_utils as ru
+    from typer.core import TyperArgument, TyperGroup, TyperOption
+
+    console = ru._get_rich_console()
+    art = FROG.strip("\n").split("\n")
+    art_w = max(len(line) for line in art)
+    gap = 3
+    left_pad = 1
+    body_w = max(24, console.width - art_w - gap - left_pad)
+
+    # Capture typer's normal help body (everything below the usage line) at the
+    # reduced width so the panels wrap into the right-hand column.
+    cap = Console(width=body_w, force_terminal=True,
+                  color_system=console.color_system)
+    with cap.capture() as captured:
+        if obj.help:
+            cap.print(Padding(
+                Align(ru._get_help_text(obj=obj, markup_mode=markup_mode), pad=False),
+                (0, 1, 1, 1)))
+
+        panel_to_arguments: defaultdict[str, list] = defaultdict(list)
+        panel_to_options: defaultdict[str, list] = defaultdict(list)
+        for param in obj.get_params(ctx):
+            if getattr(param, "hidden", False):
+                continue
+            if isinstance(param, TyperArgument):
+                name = getattr(param, ru._RICH_HELP_PANEL_NAME, None) or ru.ARGUMENTS_PANEL_TITLE
+                panel_to_arguments[name].append(param)
+            elif isinstance(param, TyperOption):
+                name = getattr(param, ru._RICH_HELP_PANEL_NAME, None) or ru.OPTIONS_PANEL_TITLE
+                panel_to_options[name].append(param)
+
+        ru._print_options_panel(
+            name=ru.ARGUMENTS_PANEL_TITLE,
+            params=panel_to_arguments.get(ru.ARGUMENTS_PANEL_TITLE, []),
+            ctx=ctx, markup_mode=markup_mode, console=cap)
+        for name, args in panel_to_arguments.items():
+            if name == ru.ARGUMENTS_PANEL_TITLE:
+                continue
+            ru._print_options_panel(name=name, params=args, ctx=ctx,
+                                    markup_mode=markup_mode, console=cap)
+        ru._print_options_panel(
+            name=ru.OPTIONS_PANEL_TITLE,
+            params=panel_to_options.get(ru.OPTIONS_PANEL_TITLE, []),
+            ctx=ctx, markup_mode=markup_mode, console=cap)
+        for name, opts in panel_to_options.items():
+            if name == ru.OPTIONS_PANEL_TITLE:
+                continue
+            ru._print_options_panel(name=name, params=opts, ctx=ctx,
+                                    markup_mode=markup_mode, console=cap)
+
+        if isinstance(obj, TyperGroup):
+            panel_to_commands: defaultdict[str, list] = defaultdict(list)
+            for command_name in obj.list_commands(ctx):
+                command = obj.get_command(ctx, command_name)
+                if command and not command.hidden:
+                    name = getattr(command, ru._RICH_HELP_PANEL_NAME, None) or ru.COMMANDS_PANEL_TITLE
+                    panel_to_commands[name].append(command)
+            max_cmd_len = max(
+                (len(c.name or "") for cmds in panel_to_commands.values() for c in cmds),
+                default=0)
+            ru._print_commands_panel(
+                name=ru.COMMANDS_PANEL_TITLE,
+                commands=panel_to_commands.get(ru.COMMANDS_PANEL_TITLE, []),
+                markup_mode=markup_mode, console=cap, cmd_len=max_cmd_len)
+            for name, cmds in panel_to_commands.items():
+                if name == ru.COMMANDS_PANEL_TITLE:
+                    continue
+                ru._print_commands_panel(name=name, commands=cmds,
+                                         markup_mode=markup_mode, console=cap,
+                                         cmd_len=max_cmd_len)
+
+    # Usage line, full width.
+    console.print(Padding(ru.highlighter(obj.get_usage(ctx)), 1),
+                  style=ru.STYLE_USAGE_COMMAND)
+
+    grid = Table.grid(padding=0)
+    grid.add_column(width=art_w + gap, vertical="top")
+    grid.add_column(vertical="top")
+    grid.add_row(Padding(Text("\n".join(art)), (0, 0, 0, left_pad)),
+                 Text.from_ansi(captured.get().rstrip("\n")))
+    console.print(grid)
+
+
+_orig_rich_format_help = typer.rich_utils.rich_format_help
+
+
+def _rich_format_help(*, obj, ctx, markup_mode) -> None:
+    if not _show_frog():
+        return _orig_rich_format_help(obj=obj, ctx=ctx, markup_mode=markup_mode)
+    try:
+        _format_help_with_frog(obj=obj, ctx=ctx, markup_mode=markup_mode)
+    except Exception:
+        # Never let cosmetics break --help.
+        _orig_rich_format_help(obj=obj, ctx=ctx, markup_mode=markup_mode)
+
+
+typer.rich_utils.rich_format_help = _rich_format_help
+
+app = typer.Typer(rich_markup_mode="markdown", help=_DESC)
 
 # Settings the user can change via `romhop config set`.
 _PATH_KEYS = ("roms_root", "saves_dir", "states_dir")

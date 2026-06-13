@@ -22,17 +22,29 @@ def test_login_stores_token(monkeypatch):
     assert saved["s"].romm_url == "http://romm.test"
 
 
-def test_help_banner_hidden_when_not_a_tty(monkeypatch):
-    # Frog banner must only appear on an interactive terminal.
+def test_show_frog_hidden_when_not_a_tty(monkeypatch):
+    # Frog gutter must only appear on an interactive terminal.
     monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: False)
-    assert cli.FROG.strip() not in cli._help_text()
-    assert cli._help_text() == cli._DESC
+    assert cli._show_frog() is False
 
 
-def test_help_banner_shown_on_tty(monkeypatch):
+def test_show_frog_shown_on_tty(monkeypatch):
     monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: True)
     monkeypatch.delenv("NO_COLOR", raising=False)
-    assert cli.FROG.strip() in cli._help_text()
+    assert cli._show_frog() is True
+
+
+def test_help_renders_frog_gutter_on_tty(monkeypatch):
+    # CliRunner swaps sys.stdout during invoke, so patch the gate directly.
+    monkeypatch.setattr(cli, "_show_frog", lambda: True)
+    monkeypatch.setenv("COLUMNS", "120")
+    result = runner.invoke(cli.app, ["--help"], color=True)
+    assert result.exit_code == 0
+    # Frog art and the description both present in the rendered help.
+    assert "+#++*##*+" in result.output
+    assert "RomM" in result.output
+    # A recognizable art row sits to the left of body text on the same line.
+    assert any("=*#*=" in line and len(line) > 40 for line in result.output.splitlines())
 
 
 def test_download_invokes_orchestrator(monkeypatch, tmp_path):
