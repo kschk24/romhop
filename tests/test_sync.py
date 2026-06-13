@@ -73,3 +73,38 @@ def test_push_ignores_non_save_extension(tmp_path):
     client = RecordingClient()
     assert push_save_file(f, _cache(tmp_path), client, {}) is False
     assert client.uploads == []
+
+
+def test_push_resolves_collision_by_core_system(tmp_path):
+    cache = MappingCache(tmp_path / "c.json")
+    cache.add(RomEntry(rom_id=1, system="genesis", game_name="Sonic",
+                       candidate_basenames={"Sonic"}))
+    cache.add(RomEntry(rom_id=2, system="snes", game_name="Sonic",
+                       candidate_basenames={"Sonic"}))
+    core_dir = tmp_path / "Snes9x"   # known core -> snes
+    core_dir.mkdir()
+    save = core_dir / "Sonic.srm"
+    save.write_bytes(b"S")
+    client = RecordingClient()
+    pushed = push_save_file(save, cache, client, {}, core_overrides={})
+    assert pushed is True
+    assert client.uploads == [(2, "Snes9x", "Sonic.srm", b"S")]
+
+
+def test_push_warns_and_skips_on_unresolved_collision(tmp_path):
+    cache = MappingCache(tmp_path / "c.json")
+    cache.add(RomEntry(rom_id=1, system="genesis", game_name="Sonic",
+                       candidate_basenames={"Sonic"}))
+    cache.add(RomEntry(rom_id=2, system="snes", game_name="Sonic",
+                       candidate_basenames={"Sonic"}))
+    core_dir = tmp_path / "saves"    # unknown core -> system None
+    core_dir.mkdir()
+    save = core_dir / "Sonic.srm"
+    save.write_bytes(b"S")
+    client = RecordingClient()
+    warned = []
+    pushed = push_save_file(save, cache, client, {}, core_overrides={},
+                            on_ambiguous=lambda p, c: warned.append(p))
+    assert pushed is False
+    assert client.uploads == []
+    assert warned == [save]
