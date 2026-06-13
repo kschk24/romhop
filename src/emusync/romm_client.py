@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from urllib.parse import quote
 
 import httpx
 
@@ -19,6 +20,7 @@ class RommClient:
     def __init__(self, http: httpx.Client | None = None, *, base_url: str = "",
                  token: str = ""):
         self._http = http or httpx.Client(base_url=base_url, timeout=60.0)
+        # NOTE: mutates the provided client's default headers (one client per run is expected).
         self._http.headers["Authorization"] = f"Bearer {token}"
 
     def list_roms(self) -> list[Rom]:
@@ -32,12 +34,13 @@ class RommClient:
                 platform_slug=item["platform_slug"],
                 fs_name=item["fs_name"],
                 fs_name_no_ext=item["fs_name_no_ext"],
-                file_names=[f["file_name"] for f in item.get("files", [])],
+                file_names=[f["file_name"] for f in (item.get("files") or [])],
             ))
         return roms
 
     def download_rom_content(self, rom_id: int, out_name: str) -> bytes:
-        resp = self._http.get(f"/api/roms/{rom_id}/content/{out_name}")
+        # quote out_name fully (safe="") so a slash can't break the path structure
+        resp = self._http.get(f"/api/roms/{rom_id}/content/{quote(out_name, safe='')}")
         resp.raise_for_status()
         return resp.content
 

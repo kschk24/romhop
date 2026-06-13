@@ -55,3 +55,43 @@ def test_upload_save_posts_multipart():
     assert seen["rom_id"] == "18"
     assert seen["emulator"] == "genesis_plus_gx"
     assert b"SAVE" in seen["body"]
+
+
+def test_download_rom_content_quotes_special_chars():
+    seen = {}
+    def handler(request):
+        seen["raw_path"] = request.url.raw_path
+        return httpx.Response(200, content=b"X")
+    _client(handler).download_rom_content(18, "Final Fantasy VII (Europe)/Disc 1.cue")
+    # httpx decodes %2F back to / in .path, so check raw_path (bytes) to confirm
+    # the slash inside out_name was percent-encoded and didn't corrupt the path structure
+    assert b"%2F" in seen["raw_path"]
+
+
+def test_list_roms_handles_null_files():
+    def handler(request):
+        return httpx.Response(200, json=[{
+            "id": 1, "name": "X", "platform_slug": "psx",
+            "fs_name": "X.cue", "fs_name_no_ext": "X", "files": None,
+        }])
+    roms = _client(handler).list_roms()
+    assert roms[0].file_names == []
+
+
+def test_list_saves_requests_rom_id():
+    seen = {}
+    def handler(request):
+        seen["path"] = request.url.path
+        seen["rom_id"] = request.url.params.get("rom_id")
+        return httpx.Response(200, json=[{"id": 5, "rom_id": 18}])
+    out = _client(handler).list_saves(18)
+    assert seen["path"] == "/api/saves"
+    assert seen["rom_id"] == "18"
+    assert out == [{"id": 5, "rom_id": 18}]
+
+
+def test_download_save_content_returns_bytes():
+    def handler(request):
+        assert request.url.path == "/api/saves/5/content"
+        return httpx.Response(200, content=b"SAVEBYTES")
+    assert _client(handler).download_save_content(5) == b"SAVEBYTES"
