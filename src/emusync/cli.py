@@ -1,12 +1,44 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from pathlib import Path
 
 import httpx
 import typer
+from rich.progress import (
+    BarColumn,
+    DownloadColumn,
+    Progress,
+    TextColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+)
 
 from emusync import config
+
+
+@contextmanager
+def _download_progress(label: str):
+    """Yield an on_progress(downloaded, total) callback backed by a Rich bar.
+
+    total may be None (server sent no Content-Length) — the bar shows bytes + speed.
+    """
+    progress = Progress(
+        TextColumn("[bold]{task.description}"),
+        BarColumn(),
+        DownloadColumn(),
+        TransferSpeedColumn(),
+        TimeRemainingColumn(),
+        transient=True,
+    )
+    with progress:
+        task_id = progress.add_task(label, total=None)
+
+        def on_progress(downloaded: int, total: int | None):
+            progress.update(task_id, completed=downloaded, total=total)
+
+        yield on_progress
 from emusync.download import download_rom
 from emusync.mapping_cache import MappingCache
 from emusync.romm_client import Rom, RommClient
@@ -187,8 +219,9 @@ def download(name: str = typer.Argument(..., help="Game name (substring match)")
     rom = _select_match(name, matches)
     cache = MappingCache(_cache_path())
     try:
-        m3u = download_rom(rom, client, roms_root=settings.roms_root, cache=cache,
-                           overrides=settings.platform_overrides)
+        with _download_progress(rom.name) as on_progress:
+            m3u = download_rom(rom, client, roms_root=settings.roms_root, cache=cache,
+                               overrides=settings.platform_overrides, on_progress=on_progress)
     except httpx.HTTPStatusError as exc:
         _exit_http(exc, not_found=(
             f"RomM has no downloadable files for '{rom.name}' (id {rom.id}). "

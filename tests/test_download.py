@@ -10,7 +10,7 @@ class FakeClient:
     def __init__(self, payload: bytes):
         self._payload = payload
         self.requested = None
-    def download_rom_content(self, rom_id, out_name):
+    def download_rom_content(self, rom_id, out_name, on_progress=None):
         self.requested = (rom_id, out_name)
         return self._payload
 
@@ -98,3 +98,19 @@ def test_multi_disc_drops_romm_bundled_m3u_and_noload(tmp_path):
     assert not (folder / "Game.m3u").exists()
     assert (folder / "Game (Disc 1).cue").read_text() == "C1"
     assert m3u.read_text() == "Game/Game (Disc 1).cue\n"
+
+
+def test_download_rom_forwards_on_progress(tmp_path):
+    seen = []
+
+    class ProgClient:
+        def download_rom_content(self, rom_id, out_name, on_progress=None):
+            on_progress(5, 10)
+            on_progress(10, 10)
+            return b"X"
+
+    rom = Rom(id=1, name="A", platform_slug="gba", fs_name="A.gba", fs_name_no_ext="A",
+              file_names=["A.gba"])
+    download_rom(rom, ProgClient(), roms_root=tmp_path, cache=MappingCache(tmp_path / "c.json"),
+                 overrides={}, on_progress=lambda d, t: seen.append((d, t)))
+    assert seen == [(5, 10), (10, 10)]

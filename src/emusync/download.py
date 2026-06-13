@@ -42,13 +42,15 @@ def _is_multi_disc(rom: Rom, payload: bytes) -> bool:
 
 
 def download_rom(rom: Rom, client, *, roms_root: Path, cache: MappingCache,
-                 overrides: dict[str, str], is_multi_file: bool | None = None) -> Path:
+                 overrides: dict[str, str], is_multi_file: bool | None = None,
+                 on_progress=None) -> Path:
     """Download a rom into the ES-DE layout and record a cache entry.
 
     Single-file roms are written flat into <system>/; multi-disc roms get a
     subfolder + .m3u + noload.txt. Returns the path written (the file or the .m3u).
+    `on_progress(downloaded, total)` is called during the transfer (total may be None).
     """
-    payload = client.download_rom_content(rom.id, rom.fs_name)
+    payload = client.download_rom_content(rom.id, rom.fs_name, on_progress=on_progress)
 
     if is_multi_file is None:
         is_multi_file = _is_multi_disc(rom, payload)

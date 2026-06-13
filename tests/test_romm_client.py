@@ -129,3 +129,15 @@ def test_list_roms_parses_has_multiple_files():
     roms = _client(handler).list_roms()
     assert roms[0].has_multiple_files is True
     assert roms[1].has_multiple_files is False   # default when absent
+
+
+def test_download_rom_content_reports_progress():
+    body = b"X" * 1000
+    def handler(request):
+        return httpx.Response(200, content=body)
+    calls = []
+    data = _client(handler).download_rom_content(7, "g.zip", on_progress=lambda d, t: calls.append((d, t)))
+    assert data == body
+    assert calls, "on_progress was never called"
+    assert calls[-1][0] == 1000          # cumulative bytes == total
+    assert calls[-1][1] == 1000          # Content-Length reported as total
