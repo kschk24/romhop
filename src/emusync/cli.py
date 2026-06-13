@@ -43,7 +43,7 @@ def download(name: str = typer.Argument(..., help="Game name (substring match)")
     """Download the first matching game into the ES-DE layout."""
     settings = config.load_settings()
     client = _client()
-    matches = [r for r in client.list_roms() if name.lower() in r.name.lower()]
+    matches = [r for r in client.list_roms(search_term=name) if name.lower() in r.name.lower()]
     if not matches:
         typer.echo(f"No game matching '{name}'.", err=True)
         raise typer.Exit(code=1)

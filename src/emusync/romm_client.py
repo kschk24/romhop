@@ -23,19 +23,34 @@ class RommClient:
         # NOTE: mutates the provided client's default headers (one client per run is expected).
         self._http.headers["Authorization"] = f"Bearer {token}"
 
-    def list_roms(self) -> list[Rom]:
-        resp = self._http.get("/api/roms")
-        resp.raise_for_status()
-        roms = []
-        for item in resp.json():
-            roms.append(Rom(
-                id=item["id"],
-                name=item["name"],
-                platform_slug=item["platform_slug"],
-                fs_name=item["fs_name"],
-                fs_name_no_ext=item["fs_name_no_ext"],
-                file_names=[f["file_name"] for f in (item.get("files") or [])],
-            ))
+    def list_roms(self, search_term: str | None = None) -> list[Rom]:
+        # GET /api/roms returns a paginated wrapper {items, total, limit, offset, ...}.
+        # Page through all results; pass search_term to narrow server-side.
+        roms: list[Rom] = []
+        offset = 0
+        limit = 500
+        while True:
+            params: dict = {"limit": limit, "offset": offset}
+            if search_term:
+                params["search_term"] = search_term
+            resp = self._http.get("/api/roms", params=params)
+            resp.raise_for_status()
+            page = resp.json()
+            # tolerate a bare list too (defensive)
+            items = page["items"] if isinstance(page, dict) else page
+            total = page.get("total") if isinstance(page, dict) else None
+            for item in items:
+                roms.append(Rom(
+                    id=item["id"],
+                    name=item["name"],
+                    platform_slug=item["platform_slug"],
+                    fs_name=item["fs_name"],
+                    fs_name_no_ext=item["fs_name_no_ext"],
+                    file_names=[f["file_name"] for f in (item.get("files") or [])],
+                ))
+            offset += limit
+            if not items or total is None or offset >= total:
+                break
         return roms
 
     def download_rom_content(self, rom_id: int, out_name: str) -> bytes:

@@ -95,3 +95,24 @@ def test_download_save_content_returns_bytes():
         assert request.url.path == "/api/saves/5/content"
         return httpx.Response(200, content=b"SAVEBYTES")
     assert _client(handler).download_save_content(5) == b"SAVEBYTES"
+
+
+def test_list_roms_reads_paginated_wrapper():
+    # Real RomM returns CustomLimitOffsetPage: {"items": [...], "total": N, ...}
+    def handler(request):
+        assert request.url.path == "/api/roms"
+        assert request.url.params.get("limit") == "500"
+        assert request.url.params.get("offset") == "0"
+        assert request.url.params.get("search_term") == "Sonic"
+        return httpx.Response(200, json={
+            "items": [{
+                "id": 3, "name": "Sonic (USA)", "platform_slug": "genesis",
+                "fs_name": "Sonic (USA).md", "fs_name_no_ext": "Sonic (USA)",
+                "files": None,
+            }],
+            "total": 1, "limit": 500, "offset": 0,
+        })
+    roms = _client(handler).list_roms(search_term="Sonic")
+    assert len(roms) == 1
+    assert roms[0].id == 3
+    assert roms[0].fs_name_no_ext == "Sonic (USA)"

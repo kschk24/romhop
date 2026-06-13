@@ -26,7 +26,7 @@ def test_download_invokes_orchestrator(monkeypatch, tmp_path):
 
     class FakeClient:
         def __init__(self, *a, **k): pass
-        def list_roms(self): return [rom]
+        def list_roms(self, search_term=None): return [rom]
 
     monkeypatch.setattr(cli, "RommClient", FakeClient)
     monkeypatch.setattr(cli.config, "get_token", lambda: "rmm_x")
@@ -58,7 +58,7 @@ def test_client_not_logged_in_exits_1(monkeypatch):
 def test_download_no_match_exits_1(monkeypatch, tmp_path):
     class FakeClient:
         def __init__(self, *a, **k): pass
-        def list_roms(self): return []
+        def list_roms(self, search_term=None): return []
     monkeypatch.setattr(cli, "RommClient", FakeClient)
     monkeypatch.setattr(cli.config, "get_token", lambda: "rmm_x")
     settings = cli.config.default_settings()
