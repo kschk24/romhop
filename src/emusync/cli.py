@@ -55,7 +55,7 @@ def login(url: str = typer.Option(..., "--url"),
 
 @app.command()
 def download(name: str = typer.Argument(..., help="Game name (substring match)")):
-    """Download the first matching game into the ES-DE layout."""
+    """Download a game into the ES-DE layout (exact name, or a unique substring)."""
     settings = config.load_settings()
     client = _client()
     matches = [r for r in client.list_roms(search_term=name) if name.lower() in r.name.lower()]
