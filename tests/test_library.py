@@ -68,3 +68,19 @@ def test_write_game_strips_traversal_in_file_keys(tmp_path):
     # written as basename inside the game folder, not a sibling/parent
     assert (tmp_path / "psx" / "Game (USA)" / "escape.bin").read_bytes() == b"X"
     assert not (tmp_path / "psx" / "escape.bin").exists()
+
+
+def test_write_single_file_is_flat(tmp_path):
+    from emusync.library import write_single_file
+    p = write_single_file(tmp_path, "gba", "Sonic Advance (USA).zip", b"ROM")
+    assert p == tmp_path / "gba" / "Sonic Advance (USA).zip"
+    assert p.read_bytes() == b"ROM"
+    # no subfolder, no m3u, no noload
+    assert list((tmp_path / "gba").iterdir()) == [p]
+
+
+def test_write_single_file_strips_traversal(tmp_path):
+    from emusync.library import write_single_file
+    p = write_single_file(tmp_path, "gba", "../escape.gba", b"X")
+    assert p == tmp_path / "gba" / "escape.gba"
+    assert not (tmp_path / "escape.gba").exists()

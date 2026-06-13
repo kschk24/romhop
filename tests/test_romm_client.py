@@ -116,3 +116,16 @@ def test_list_roms_reads_paginated_wrapper():
     assert len(roms) == 1
     assert roms[0].id == 3
     assert roms[0].fs_name_no_ext == "Sonic (USA)"
+
+
+def test_list_roms_parses_has_multiple_files():
+    def handler(request):
+        return httpx.Response(200, json={"items": [
+            {"id": 1, "name": "A", "platform_slug": "psx", "fs_name": "A.m3u",
+             "fs_name_no_ext": "A", "files": None, "has_multiple_files": True},
+            {"id": 2, "name": "B", "platform_slug": "gba", "fs_name": "B.zip",
+             "fs_name_no_ext": "B", "files": None},
+        ], "total": 2})
+    roms = _client(handler).list_roms()
+    assert roms[0].has_multiple_files is True
+    assert roms[1].has_multiple_files is False   # default when absent

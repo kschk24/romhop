@@ -14,6 +14,7 @@ class Rom:
     fs_name: str
     fs_name_no_ext: str
     file_names: list[str]
+    has_multiple_files: bool = False
 
 
 class RommClient:
@@ -47,6 +48,7 @@ class RommClient:
                     fs_name=item["fs_name"],
                     fs_name_no_ext=item["fs_name_no_ext"],
                     file_names=[f["file_name"] for f in (item.get("files") or [])],
+                    has_multiple_files=bool(item.get("has_multiple_files", False)),
                 ))
             offset += limit
             if not items or total is None or offset >= total:

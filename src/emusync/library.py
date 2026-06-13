@@ -59,3 +59,19 @@ def write_game(
     # newline="" keeps our explicit LF; encoding utf-8 has no BOM
     m3u_path.write_text(build_m3u(game_name, list(safe_files)), encoding="utf-8", newline="")
     return m3u_path
+
+
+def write_single_file(roms_root: Path, system: str, file_name: str, data: bytes) -> Path:
+    """Write a single-file rom directly into the platform folder (no subfolder/.m3u).
+
+    ES-DE launches cartridge roms (.zip/.gba/.sfc/.md, a lone .chd/.iso) straight from
+    <system>/<file>. Returns the written file path. file_name is reduced to its basename.
+    """
+    safe_name = Path(file_name).name
+    if not safe_name or safe_name in (".", ".."):
+        raise ValueError(f"unsafe file_name for filesystem: {file_name!r}")
+    system_dir = roms_root / system
+    system_dir.mkdir(parents=True, exist_ok=True)
+    target = system_dir / safe_name
+    target.write_bytes(data)
+    return target
