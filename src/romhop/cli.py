@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -44,7 +46,20 @@ from romhop.mapping_cache import MappingCache
 from romhop.romm_client import Rom, RommClient
 from romhop.sync import watch_and_push
 
-app = typer.Typer(help="Sync a RomM library with a local ES-DE/RetroArch setup.")
+from romhop._frog import FROG
+
+_DESC = "Sync a RomM library with a local ES-DE/RetroArch setup."
+
+
+def _help_text() -> str:
+    # Show the frog banner only on an interactive terminal (not when piped,
+    # redirected, or NO_COLOR is set) so logs and pipes stay clean.
+    if sys.stdout.isatty() and not os.environ.get("NO_COLOR"):
+        return f"```\n{FROG.strip(chr(10))}\n```\n\n{_DESC}"
+    return _DESC
+
+
+app = typer.Typer(rich_markup_mode="markdown", help=_help_text())
 
 # Settings the user can change via `romhop config set`.
 _PATH_KEYS = ("roms_root", "saves_dir", "states_dir")

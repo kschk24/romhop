@@ -22,6 +22,19 @@ def test_login_stores_token(monkeypatch):
     assert saved["s"].romm_url == "http://romm.test"
 
 
+def test_help_banner_hidden_when_not_a_tty(monkeypatch):
+    # Frog banner must only appear on an interactive terminal.
+    monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: False)
+    assert cli.FROG.strip() not in cli._help_text()
+    assert cli._help_text() == cli._DESC
+
+
+def test_help_banner_shown_on_tty(monkeypatch):
+    monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: True)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    assert cli.FROG.strip() in cli._help_text()
+
+
 def test_download_invokes_orchestrator(monkeypatch, tmp_path):
     rom = Rom(id=7, name="Sonic", platform_slug="genesis", fs_name="Sonic.md",
               fs_name_no_ext="Sonic", file_names=["Sonic.md"])
