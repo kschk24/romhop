@@ -1,4 +1,4 @@
-from romhop.library import build_m3u, candidate_basenames, write_game
+from romhop.library import build_m3u, candidate_basenames, norm, write_game
 
 
 def test_build_m3u_relative_forward_slash_lf_no_bom():
@@ -84,3 +84,13 @@ def test_write_single_file_strips_traversal(tmp_path):
     p = write_single_file(tmp_path, "gba", "../escape.gba", b"X")
     assert p == tmp_path / "gba" / "escape.gba"
     assert not (tmp_path / "escape.gba").exists()
+
+
+def test_norm_collapses_whitespace_and_casefolds():
+    assert norm("Sonic  (Rev 1)") == norm("Sonic (Rev 1)")
+    assert norm("  Sonic (Rev 1) ") == "sonic (rev 1)"
+
+
+def test_norm_keeps_revision_and_region_distinct():
+    assert norm("Sonic (Rev 1)") != norm("Sonic (Rev 2)")
+    assert norm("Game (USA)") != norm("Game (Europe)")

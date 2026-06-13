@@ -9,6 +9,12 @@ DESCRIPTOR_EXTS = {".cue", ".gdi", ".ccd", ".m3u8", ".chd", ".iso", ".pbp"}
 NOLOAD_SENTINEL = "noload.txt"
 
 
+def norm(s: str) -> str:
+	"""Match key: collapse internal whitespace, trim, case-fold. Nothing else —
+	so revision/region tags like (Rev 1) / (USA) stay distinct."""
+	return " ".join(s.split()).casefold()
+
+
 def _natural_key(name: str) -> list:
     # Split into digit / non-digit runs so numeric chunks sort numerically.
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", name)]
