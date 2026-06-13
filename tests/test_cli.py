@@ -127,3 +127,52 @@ def test_download_http_404_friendly(monkeypatch, tmp_path):
     result = runner.invoke(cli.app, ["download", "Broken"])
     assert result.exit_code == 1
     assert "rescan" in result.output.lower()
+
+
+def test_config_set_roms_root(monkeypatch, tmp_path):
+    import json as _json
+    saved = {}
+    settings = cli.config.default_settings()
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "save_settings", lambda s: saved.setdefault("s", s))
+    result = runner.invoke(cli.app, ["config", "set", "roms_root", str(tmp_path / "ROMs")])
+    assert result.exit_code == 0
+    assert saved["s"].roms_root == tmp_path / "ROMs"
+
+
+def test_config_set_unknown_key_exits_2(monkeypatch):
+    settings = cli.config.default_settings()
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "save_settings", lambda s: None)
+    result = runner.invoke(cli.app, ["config", "set", "bogus", "x"])
+    assert result.exit_code == 2
+
+
+def test_config_set_bad_float_exits_2(monkeypatch):
+    settings = cli.config.default_settings()
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "save_settings", lambda s: None)
+    result = runner.invoke(cli.app, ["config", "set", "sync_delay_seconds", "soon"])
+    assert result.exit_code == 2
+
+
+def test_config_show_outputs_json(monkeypatch):
+    import json as _json
+    settings = cli.config.default_settings()
+    settings.romm_url = "http://romm.test"
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    result = runner.invoke(cli.app, ["config", "show"])
+    assert result.exit_code == 0
+    parsed = _json.loads(result.output)
+    assert parsed["romm_url"] == "http://romm.test"
+    assert "roms_root" in parsed
+
+
+def test_config_set_platform_add_and_remove(monkeypatch):
+    settings = cli.config.default_settings()
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "save_settings", lambda s: None)
+    r1 = runner.invoke(cli.app, ["config", "set-platform", "genesis-slug", "genesis"])
+    assert r1.exit_code == 0 and settings.platform_overrides["genesis-slug"] == "genesis"
+    r2 = runner.invoke(cli.app, ["config", "set-platform", "genesis-slug"])
+    assert r2.exit_code == 0 and "genesis-slug" not in settings.platform_overrides

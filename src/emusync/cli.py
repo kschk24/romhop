@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import httpx
@@ -12,6 +13,61 @@ from emusync.romm_client import Rom, RommClient
 from emusync.sync import watch_and_push
 
 app = typer.Typer(help="Sync a RomM library with a local ES-DE/RetroArch setup.")
+
+# Settings the user can change via `emusync config set`.
+_PATH_KEYS = ("roms_root", "saves_dir", "states_dir")
+_STR_KEYS = ("romm_url",)
+_FLOAT_KEYS = ("sync_delay_seconds",)
+config_app = typer.Typer(help="View or change settings (stored in settings.json).")
+app.add_typer(config_app, name="config")
+
+
+@config_app.command("path")
+def config_path():
+    """Print the settings file location."""
+    typer.echo(str(config.settings_path()))
+
+
+@config_app.command("show")
+def config_show():
+    """Print all current settings as JSON."""
+    typer.echo(json.dumps(config.to_dict(config.load_settings()), indent=2))
+
+
+@config_app.command("set")
+def config_set(key: str = typer.Argument(..., help="e.g. roms_root, saves_dir, states_dir, romm_url, sync_delay_seconds"),
+               value: str = typer.Argument(..., help="New value")):
+    """Set one setting. Paths accept ~ expansion."""
+    settings = config.load_settings()
+    if key in _PATH_KEYS:
+        setattr(settings, key, Path(value).expanduser())
+    elif key in _STR_KEYS:
+        setattr(settings, key, value)
+    elif key in _FLOAT_KEYS:
+        try:
+            setattr(settings, key, float(value))
+        except ValueError:
+            typer.echo(f"{key} must be a number, got {value!r}", err=True)
+            raise typer.Exit(code=2)
+    else:
+        allowed = ", ".join(_PATH_KEYS + _STR_KEYS + _FLOAT_KEYS)
+        typer.echo(f"Unknown setting '{key}'. Settable: {allowed}", err=True)
+        raise typer.Exit(code=2)
+    config.save_settings(settings)
+    typer.echo(f"Set {key} = {getattr(settings, key)}")
+
+
+@config_app.command("set-platform")
+def config_set_platform(slug: str = typer.Argument(..., help="RomM platform slug"),
+                        system: str = typer.Argument("", help="ES-DE system dir; empty to remove the override")):
+    """Map a RomM platform slug to an ES-DE system dir (override). Empty system removes it."""
+    settings = config.load_settings()
+    if system:
+        settings.platform_overrides[slug] = system
+    else:
+        settings.platform_overrides.pop(slug, None)
+    config.save_settings(settings)
+    typer.echo(f"platform_overrides = {settings.platform_overrides}")
 
 
 def _select_match(name: str, matches: list[Rom]) -> Rom:

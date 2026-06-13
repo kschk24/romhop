@@ -45,14 +45,19 @@ def default_settings() -> Settings:
     )
 
 
-def save_settings(settings: Settings, path: Path | None = None) -> None:
-    path = path or settings_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
+def to_dict(settings: Settings) -> dict:
+    """JSON-serialisable view of Settings (Path fields as strings)."""
     data = asdict(settings)
     # Path objects are not JSON-serialisable; convert explicitly.
     for key in ("roms_root", "saves_dir", "states_dir"):
         data[key] = str(data[key])
-    path.write_text(json.dumps(data, indent=2))
+    return data
+
+
+def save_settings(settings: Settings, path: Path | None = None) -> None:
+    path = path or settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(to_dict(settings), indent=2))
 
 
 def load_settings(path: Path | None = None) -> Settings:
