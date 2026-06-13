@@ -271,6 +271,16 @@ def test_setup_keeps_existing_token_when_blank(monkeypatch):
     assert set_calls == []   # token untouched because blank + existing present
 
 
+def test_config_set_core_add_and_remove(monkeypatch):
+    settings = cli.config.default_settings()
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "save_settings", lambda s: None)
+    r1 = runner.invoke(cli.app, ["config", "set-core", "MyCore", "n64"])
+    assert r1.exit_code == 0 and settings.core_overrides["MyCore"] == "n64"
+    r2 = runner.invoke(cli.app, ["config", "set-core", "MyCore"])
+    assert r2.exit_code == 0 and "MyCore" not in settings.core_overrides
+
+
 def test_download_list_roms_403_friendly(monkeypatch, tmp_path):
     import httpx
     _login(monkeypatch, tmp_path)

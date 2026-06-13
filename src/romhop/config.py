@@ -19,6 +19,7 @@ class Settings:
     saves_dir: Path
     states_dir: Path
     platform_overrides: dict[str, str] = field(default_factory=dict)
+    core_overrides: dict[str, str] = field(default_factory=dict)
     sync_delay_seconds: float = 8.0
 
 
@@ -82,6 +83,7 @@ def load_settings(path: Path | None = None) -> Settings:
         saves_dir=Path(data["saves_dir"]),
         states_dir=Path(data["states_dir"]),
         platform_overrides=data.get("platform_overrides", {}),
+        core_overrides=data.get("core_overrides", {}),
         sync_delay_seconds=data.get("sync_delay_seconds", 8.0),
     )
 

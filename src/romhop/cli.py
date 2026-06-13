@@ -230,6 +230,19 @@ def config_set_platform(slug: str = typer.Argument(..., help="RomM platform slug
     typer.echo(f"platform_overrides = {settings.platform_overrides}")
 
 
+@config_app.command("set-core")
+def config_set_core(core: str = typer.Argument(..., help="RetroArch core folder name"),
+                    system: str = typer.Argument("", help="ES-DE system dir; empty to remove the override")):
+    """Map a RetroArch core folder name to an ES-DE system dir (override). Empty system removes it."""
+    settings = config.load_settings()
+    if system:
+        settings.core_overrides[core] = system
+    else:
+        settings.core_overrides.pop(core, None)
+    config.save_settings(settings)
+    typer.echo(f"core_overrides = {settings.core_overrides}")
+
+
 def _select_match(name: str, matches: list[Rom]) -> Rom:
     """Pick the rom to download. Prefer an exact (case-insensitive) name match;
     otherwise refuse to guess and list the candidates so the user can be specific."""

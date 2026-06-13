@@ -48,3 +48,18 @@ def test_token_uses_keyring_not_file(tmp_path):
     path = tmp_path / "settings.json"
     config.save_settings(config.default_settings(), path)
     assert "rmm_secret" not in path.read_text()
+
+
+def test_core_overrides_round_trips(tmp_path):
+    from romhop import config
+    s = config.default_settings()
+    s.core_overrides = {"MyCore": "n64"}
+    p = tmp_path / "settings.json"
+    config.save_settings(s, p)
+    loaded = config.load_settings(p)
+    assert loaded.core_overrides == {"MyCore": "n64"}
+
+
+def test_core_overrides_defaults_empty(tmp_path):
+    from romhop import config
+    assert config.default_settings().core_overrides == {}
