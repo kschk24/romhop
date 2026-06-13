@@ -67,3 +67,63 @@ def test_download_no_match_exits_1(monkeypatch, tmp_path):
     monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
     result = runner.invoke(cli.app, ["download", "Nope"])
     assert result.exit_code == 1
+
+
+def _login(monkeypatch, tmp_path):
+    monkeypatch.setattr(cli.config, "get_token", lambda: "rmm_x")
+    settings = cli.config.default_settings()
+    settings.romm_url = "http://romm.test"
+    settings.roms_root = tmp_path
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+
+
+def _fake_client(monkeypatch, roms):
+    class FakeClient:
+        def __init__(self, *a, **k): pass
+        def list_roms(self, search_term=None): return roms
+    monkeypatch.setattr(cli, "RommClient", FakeClient)
+
+
+def test_download_ambiguous_aborts_exit_2(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    roms = [
+        Rom(id=1, name="Sonic Advance", platform_slug="gba", fs_name="a.zip", fs_name_no_ext="a", file_names=["a.zip"]),
+        Rom(id=2, name="Aerobiz Supersonic", platform_slug="snes", fs_name="b.zip", fs_name_no_ext="b", file_names=["b.zip"]),
+    ]
+    _fake_client(monkeypatch, roms)
+    called = {"n": 0}
+    monkeypatch.setattr(cli, "download_rom", lambda *a, **k: called.__setitem__("n", called["n"] + 1))
+    result = runner.invoke(cli.app, ["download", "sonic"])
+    assert result.exit_code == 2
+    assert called["n"] == 0  # never downloaded anything
+
+
+def test_download_exact_name_wins_over_substring(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    roms = [
+        Rom(id=1, name="Sonic Advance", platform_slug="gba", fs_name="a.zip", fs_name_no_ext="a", file_names=["a.zip"]),
+        Rom(id=2, name="Sonic", platform_slug="genesis", fs_name="s.md", fs_name_no_ext="s", file_names=["s.md"]),
+    ]
+    _fake_client(monkeypatch, roms)
+    picked = {}
+    monkeypatch.setattr(cli, "download_rom", lambda rom, *a, **k: picked.setdefault("id", rom.id) or (tmp_path / "x.m3u"))
+    result = runner.invoke(cli.app, ["download", "Sonic"])
+    assert result.exit_code == 0
+    assert picked["id"] == 2  # exact "Sonic", not the substring match
+
+
+def test_download_http_404_friendly(monkeypatch, tmp_path):
+    import httpx
+    _login(monkeypatch, tmp_path)
+    rom = Rom(id=9, name="Broken", platform_slug="snes", fs_name="x.zip", fs_name_no_ext="x", file_names=["x.zip"])
+    _fake_client(monkeypatch, [rom])
+
+    def boom(*a, **k):
+        raise httpx.HTTPStatusError(
+            "404", request=httpx.Request("GET", "http://romm.test"),
+            response=httpx.Response(404),
+        )
+    monkeypatch.setattr(cli, "download_rom", boom)
+    result = runner.invoke(cli.app, ["download", "Broken"])
+    assert result.exit_code == 1
+    assert "rescan" in result.output.lower()
