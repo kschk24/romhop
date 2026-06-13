@@ -18,7 +18,7 @@ from rich.progress import (
     TransferSpeedColumn,
 )
 
-from romhop import config
+from romhop import config, retroarch_cfg
 
 
 @contextmanager
@@ -285,6 +285,26 @@ def login(url: str = typer.Option(..., "--url"),
     typer.echo(f"Saved RomM URL {url} and token.")
 
 
+def _retroarch_save_dirs(current) -> tuple[Path | None, Path | None]:
+    """Detect RetroArch's saves/states dirs from retroarch.cfg.
+
+    Windows: prompt for the install folder (no reliable auto-location for a
+    portable install) and read its retroarch.cfg. Other OSes: auto-locate the
+    standard ~/.config/retroarch/retroarch.cfg. Either path may be None when the
+    cfg is absent or the directory is unset/'default'.
+    """
+    if sys.platform.startswith("win"):
+        appdata = os.environ.get("APPDATA")
+        guess = Path(appdata) / "RetroArch" if appdata else None
+        folder = typer.prompt(
+            "RetroArch installation folder (where retroarch.cfg lives)",
+            default=str(guess) if guess and guess.exists() else None,
+        )
+        return retroarch_cfg.save_dirs_from_install(Path(folder).expanduser())
+    cfg = retroarch_cfg.default_cfg_path()
+    return retroarch_cfg.parse_save_dirs(cfg) if cfg else (None, None)
+
+
 @app.command()
 def setup():
     """Interactive first-time setup: RomM URL + token and the local ROM/save paths."""
@@ -301,16 +321,23 @@ def setup():
         "Local ROMs folder (your ES-DE library root)",
         default=str(current.roms_root) if config.roms_root_configured(current) else None,
     )
-    # saves/states default to the standard per-OS RetroArch paths — usually correct,
-    # so only prompt for them if the user opts in.
-    typer.echo(f"RetroArch saves:  {current.saves_dir}")
-    typer.echo(f"RetroArch states: {current.states_dir}")
-    if typer.confirm("Change the saves/states folders?", default=False):
-        saves = typer.prompt("RetroArch saves folder", default=str(current.saves_dir))
-        states = typer.prompt("RetroArch states folder", default=str(current.states_dir))
+    # Detect the saves/states folders from retroarch.cfg. When both are found we
+    # show them and let the user override; if either is unknown we re-prompt.
+    det_saves, det_states = _retroarch_save_dirs(current)
+    if det_saves is not None and det_states is not None:
+        typer.echo(f"RetroArch saves:  {det_saves}")
+        typer.echo(f"RetroArch states: {det_states}")
+        if typer.confirm("Change the saves/states folders?", default=False):
+            saves = typer.prompt("RetroArch saves folder", default=str(det_saves))
+            states = typer.prompt("RetroArch states folder", default=str(det_states))
+        else:
+            saves = str(det_saves)
+            states = str(det_states)
     else:
-        saves = str(current.saves_dir)
-        states = str(current.states_dir)
+        saves = typer.prompt("RetroArch saves folder",
+                             default=str(det_saves or current.saves_dir))
+        states = typer.prompt("RetroArch states folder",
+                              default=str(det_states or current.states_dir))
 
     if token.strip():
         config.set_token(token.strip())
