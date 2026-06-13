@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections import defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
 
-from romhop.library import NOLOAD_SENTINEL, norm
+from romhop.library import NOLOAD_SENTINEL, candidate_basenames, norm
+from romhop.platform_map import esde_system_for_slug
+from romhop.romm_client import Rom
 
 
 @dataclass
@@ -63,3 +66,52 @@ def index_local_library(roms_root: Path, overrides: dict[str, str]) -> list[Loca
                 match_key=norm(f.name),
             ))
     return games
+
+
+@dataclass
+class Collision:
+    basename: str          # normalized save basename shared by 2+ matched roms
+    rom_ids: list[int]
+
+
+@dataclass
+class MatchResult:
+    matched: list[tuple[LocalGame, Rom]] = field(default_factory=list)
+    unmatched: list[LocalGame] = field(default_factory=list)
+    collisions: list[Collision] = field(default_factory=list)
+
+
+def match_to_roms(local_games: list[LocalGame], roms: list[Rom],
+                  overrides: dict[str, str]) -> MatchResult:
+    """Pair each LocalGame to a Rom by exact, normalized, platform-scoped key.
+
+    A rom is registered under (system, norm(fs_name)) and (system, norm(fs_name_no_ext)).
+    A local game matches only when exactly one rom sits at (its system, its match_key).
+    """
+    by_key: dict[tuple[str, str], list[Rom]] = defaultdict(list)
+    for rom in roms:
+        system = esde_system_for_slug(rom.platform_slug, overrides)
+        for value in (rom.fs_name, rom.fs_name_no_ext):
+            roms_at = by_key[(system, norm(value))]
+            if rom not in roms_at:
+                roms_at.append(rom)
+
+    result = MatchResult()
+    for local in local_games:
+        candidates = by_key.get((local.system, local.match_key), [])
+        if len(candidates) == 1:
+            result.matched.append((local, candidates[0]))
+        else:
+            result.unmatched.append(local)
+
+    # Collisions: a save basename shared by 2+ matched roms (sync keys on basename
+    # across all entries, then disambiguates by system).
+    basename_to_roms: dict[str, set[int]] = defaultdict(set)
+    for local, rom in result.matched:
+        for b in candidate_basenames(rom.fs_name_no_ext, local.file_names):
+            basename_to_roms[norm(b)].add(rom.id)
+    for basename, ids in sorted(basename_to_roms.items()):
+        if len(ids) > 1:
+            result.collisions.append(Collision(basename=basename, rom_ids=sorted(ids)))
+
+    return result

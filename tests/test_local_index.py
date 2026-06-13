@@ -1,4 +1,5 @@
-from romhop.local_index import LocalGame, index_local_library
+from romhop.local_index import Collision, LocalGame, MatchResult, index_local_library, match_to_roms
+from romhop.romm_client import Rom
 
 
 def _touch(p, data=b""):
@@ -56,3 +57,77 @@ def test_orphan_m3u_indexed_on_stem(tmp_path):
 def test_files_outside_a_system_dir_ignored(tmp_path):
     _touch(tmp_path / "loose.txt", b"x")  # directly under roms_root, not a system dir file
     assert index_local_library(tmp_path, overrides={}) == []
+
+
+# ---------------------------------------------------------------------------
+# match_to_roms tests (Task 3)
+# ---------------------------------------------------------------------------
+
+def _rom(rid, name, slug, fs_name, fs_no_ext, files=None):
+    return Rom(id=rid, name=name, platform_slug=slug, fs_name=fs_name,
+               fs_name_no_ext=fs_no_ext, file_names=files or [fs_name])
+
+
+def test_flat_file_matches_on_fs_name():
+    local = LocalGame("genesis", "Sonic (USA).md", ["Sonic (USA).md"], "sonic (usa).md")
+    rom = _rom(7, "Sonic", "genesis", "Sonic (USA).md", "Sonic (USA)")
+    result = match_to_roms([local], [rom], overrides={})
+    assert result.matched == [(local, rom)]
+    assert result.unmatched == []
+
+
+def test_subfolder_matches_on_fs_name_no_ext():
+    local = LocalGame("psx", "FF7 (USA)", ["FF7 (USA) (Disc 1).chd"], "ff7 (usa)")
+    rom = _rom(9, "FF7", "psx", "FF7 (USA).m3u", "FF7 (USA)",
+               files=["FF7 (USA) (Disc 1).chd"])
+    result = match_to_roms([local], [rom], overrides={})
+    assert result.matched == [(local, rom)]
+
+
+def test_whitespace_differences_still_match():
+    local = LocalGame("genesis", "Sonic  (USA).md", ["Sonic  (USA).md"], "sonic (usa).md")
+    rom = _rom(7, "Sonic", "genesis", "Sonic (USA).md", "Sonic (USA)")
+    assert match_to_roms([local], [rom], overrides={}).matched == [(local, rom)]
+
+
+def test_revision_difference_does_not_match():
+    local = LocalGame("genesis", "Sonic (Rev 1).md", ["Sonic (Rev 1).md"], "sonic (rev 1).md")
+    rom = _rom(7, "Sonic", "genesis", "Sonic (Rev 2).md", "Sonic (Rev 2)")
+    result = match_to_roms([local], [rom], overrides={})
+    assert result.matched == []
+    assert result.unmatched == [local]
+
+
+def test_wrong_system_does_not_match():
+    local = LocalGame("snes", "Sonic (USA).md", ["Sonic (USA).md"], "sonic (usa).md")
+    rom = _rom(7, "Sonic", "genesis", "Sonic (USA).md", "Sonic (USA)")
+    assert match_to_roms([local], [rom], overrides={}).matched == []
+
+
+def test_overrides_apply_to_system_scope():
+    # rom platform slug "md" maps to ES-DE "genesis" via override.
+    local = LocalGame("genesis", "Sonic (USA).md", ["Sonic (USA).md"], "sonic (usa).md")
+    rom = _rom(7, "Sonic", "md", "Sonic (USA).md", "Sonic (USA)")
+    result = match_to_roms([local], [rom], overrides={"md": "genesis"})
+    assert result.matched == [(local, rom)]
+
+
+def test_ambiguous_rom_side_left_unmatched():
+    # Two roms in the same system normalize to the same name — can't choose.
+    local = LocalGame("genesis", "Sonic (USA).md", ["Sonic (USA).md"], "sonic (usa).md")
+    r1 = _rom(1, "Sonic", "genesis", "Sonic (USA).md", "Sonic (USA)")
+    r2 = _rom(2, "Sonic", "genesis", "Sonic (USA).md", "Sonic (USA)")
+    result = match_to_roms([local], [r1, r2], overrides={})
+    assert result.matched == []
+    assert result.unmatched == [local]
+
+
+def test_collision_reported_across_systems():
+    # Same save basename across two systems => collision flagged for sync awareness.
+    l1 = LocalGame("genesis", "Sonic.md", ["Sonic.md"], "sonic.md")
+    l2 = LocalGame("snes", "Sonic.sfc", ["Sonic.sfc"], "sonic.sfc")
+    r1 = _rom(1, "Sonic", "genesis", "Sonic.md", "Sonic")
+    r2 = _rom(2, "Sonic", "snes", "Sonic.sfc", "Sonic")
+    result = match_to_roms([l1, l2], [r1, r2], overrides={})
+    assert {rid for c in result.collisions for rid in c.rom_ids} == {1, 2}
+    assert any(c.basename == "sonic" for c in result.collisions)
