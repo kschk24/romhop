@@ -341,3 +341,25 @@ def test_scan_requires_roms_root(monkeypatch):
     result = runner.invoke(cli.app, ["scan"])
     assert result.exit_code == 1
     assert "setup" in result.output.lower()
+
+
+def test_download_skips_when_already_local(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    # game already present on disk
+    (tmp_path / "genesis").mkdir()
+    (tmp_path / "genesis" / "Sonic (USA).md").write_bytes(b"x")
+    rom = Rom(id=7, name="Sonic", platform_slug="genesis",
+              fs_name="Sonic (USA).md", fs_name_no_ext="Sonic (USA)",
+              file_names=["Sonic (USA).md"])
+    _fake_client(monkeypatch, [rom])
+    monkeypatch.setattr(cli, "_cache_path", lambda: tmp_path / "cache.json")
+
+    called = {"n": 0}
+    monkeypatch.setattr(cli, "download_rom", lambda *a, **k: called.__setitem__("n", called["n"] + 1))
+
+    result = runner.invoke(cli.app, ["download", "Sonic"])
+    assert result.exit_code == 0, result.output
+    assert called["n"] == 0                       # never downloaded
+    assert "Already local" in result.output
+    from romhop.mapping_cache import MappingCache
+    assert MappingCache(tmp_path / "cache.json").find_by_basename("Sonic (USA)").rom_id == 7

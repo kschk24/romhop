@@ -43,6 +43,7 @@ def _download_progress(label: str):
 
         yield on_progress
 from romhop.download import download_rom
+from romhop.library import norm
 from romhop.local_index import index_local_library, match_to_roms
 from romhop.mapping_cache import MappingCache, seed_entry
 from romhop.platform_map import esde_system_for_slug
@@ -360,6 +361,18 @@ def download(name: str = typer.Argument(..., help="Game name (substring match)")
         typer.echo(f"No game matching '{name}'.", err=True)
         raise typer.Exit(code=1)
     rom = _select_match(name, matches)
+    # Already on disk? Skip the transfer, just record the mapping for save sync.
+    system = esde_system_for_slug(rom.platform_slug, settings.platform_overrides)
+    locals_ = [g for g in index_local_library(settings.roms_root, settings.platform_overrides)
+               if g.system == system]
+    target_keys = {norm(rom.fs_name), norm(rom.fs_name_no_ext)}
+    already = next((g for g in locals_ if g.match_key in target_keys), None)
+    if already is not None:
+        cache = MappingCache(_cache_path())
+        cache.add(seed_entry(rom.id, system, rom.fs_name_no_ext, already.file_names))
+        cache.save()
+        typer.echo(f"Already local: {rom.name} — mapped for save sync (no download).")
+        raise typer.Exit(code=0)
     cache = MappingCache(_cache_path())
     try:
         with _download_progress(rom.name) as on_progress:
