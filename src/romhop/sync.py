@@ -5,7 +5,7 @@ from pathlib import Path
 
 from watchfiles import watch
 
-from emusync.mapping_cache import MappingCache
+from romhop.mapping_cache import MappingCache
 
 SAVE_EXTS = {".srm", ".sav"}
 STATE_EXTS = {".state", ".state1", ".state2", ".state3", ".state4",

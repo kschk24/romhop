@@ -1,9 +1,9 @@
 import io
 import zipfile
 
-from emusync.download import download_rom
-from emusync.romm_client import Rom
-from emusync.mapping_cache import MappingCache
+from romhop.download import download_rom
+from romhop.romm_client import Rom
+from romhop.mapping_cache import MappingCache
 
 
 class FakeClient:

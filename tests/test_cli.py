@@ -2,8 +2,8 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from emusync import cli
-from emusync.romm_client import Rom
+from romhop import cli
+from romhop.romm_client import Rom
 
 runner = CliRunner()
 

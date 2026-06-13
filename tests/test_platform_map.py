@@ -1,4 +1,4 @@
-from emusync.platform_map import esde_system_for_slug
+from romhop.platform_map import esde_system_for_slug
 
 
 def test_identity_when_no_override():

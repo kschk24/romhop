@@ -8,7 +8,7 @@ from pathlib import Path
 import keyring
 import platformdirs
 
-KEYRING_SERVICE = "emusync"
+KEYRING_SERVICE = "romhop"
 KEYRING_USER = "api_token"
 
 
@@ -23,7 +23,7 @@ class Settings:
 
 
 def settings_path() -> Path:
-    return Path(platformdirs.user_config_dir("emusync")) / "settings.json"
+    return Path(platformdirs.user_config_dir("romhop")) / "settings.json"
 
 
 # Sentinel for an unset ROMs root. There is no universal default ROM library

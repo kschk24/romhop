@@ -1,6 +1,6 @@
-import emusync
+import romhop
 
 
 def test_version_is_exposed():
-    assert isinstance(emusync.__version__, str)
-    assert emusync.__version__
+    assert isinstance(romhop.__version__, str)
+    assert romhop.__version__

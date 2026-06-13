@@ -1,5 +1,5 @@
-from emusync.mapping_cache import MappingCache, RomEntry
-from emusync.sync import push_save_file
+from romhop.mapping_cache import MappingCache, RomEntry
+from romhop.sync import push_save_file
 
 
 class RecordingClient:

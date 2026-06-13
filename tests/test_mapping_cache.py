@@ -1,4 +1,4 @@
-from emusync.mapping_cache import MappingCache, RomEntry
+from romhop.mapping_cache import MappingCache, RomEntry
 
 
 def test_add_lookup_persist(tmp_path):

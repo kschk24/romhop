@@ -1,6 +1,6 @@
 import httpx
 
-from emusync.romm_client import RommClient, Rom
+from romhop.romm_client import RommClient, Rom
 
 
 def _client(handler) -> RommClient:

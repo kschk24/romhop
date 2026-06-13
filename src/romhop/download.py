@@ -4,14 +4,14 @@ import io
 import zipfile
 from pathlib import Path
 
-from emusync.library import (
+from romhop.library import (
     candidate_basenames,
     write_game,
     write_single_file,
 )
-from emusync.mapping_cache import MappingCache, RomEntry
-from emusync.platform_map import esde_system_for_slug
-from emusync.romm_client import Rom
+from romhop.mapping_cache import MappingCache, RomEntry
+from romhop.platform_map import esde_system_for_slug
+from romhop.romm_client import Rom
 
 # Rom files that are themselves archives — a zip payload IS the rom, not a server bundle.
 ARCHIVE_EXTS = {".zip", ".7z"}

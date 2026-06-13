@@ -1,4 +1,4 @@
-from emusync.library import build_m3u, candidate_basenames, write_game
+from romhop.library import build_m3u, candidate_basenames, write_game
 
 
 def test_build_m3u_relative_forward_slash_lf_no_bom():
@@ -52,7 +52,7 @@ def test_m3u_excludes_bin_when_cue_present(tmp_path):
 
 
 def test_discs_sorted_naturally(tmp_path):
-    from emusync.library import build_m3u
+    from romhop.library import build_m3u
     content = build_m3u("G", ["G (Disc 10).cue", "G (Disc 2).cue", "G (Disc 1).cue"])
     assert content == "G/G (Disc 1).cue\nG/G (Disc 2).cue\nG/G (Disc 10).cue\n"
 
@@ -71,7 +71,7 @@ def test_write_game_strips_traversal_in_file_keys(tmp_path):
 
 
 def test_write_single_file_is_flat(tmp_path):
-    from emusync.library import write_single_file
+    from romhop.library import write_single_file
     p = write_single_file(tmp_path, "gba", "Sonic Advance (USA).zip", b"ROM")
     assert p == tmp_path / "gba" / "Sonic Advance (USA).zip"
     assert p.read_bytes() == b"ROM"
@@ -80,7 +80,7 @@ def test_write_single_file_is_flat(tmp_path):
 
 
 def test_write_single_file_strips_traversal(tmp_path):
-    from emusync.library import write_single_file
+    from romhop.library import write_single_file
     p = write_single_file(tmp_path, "gba", "../escape.gba", b"X")
     assert p == tmp_path / "gba" / "escape.gba"
     assert not (tmp_path / "escape.gba").exists()

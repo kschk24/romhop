@@ -15,7 +15,7 @@ from rich.progress import (
     TransferSpeedColumn,
 )
 
-from emusync import config
+from romhop import config
 
 
 @contextmanager
@@ -39,14 +39,14 @@ def _download_progress(label: str):
             progress.update(task_id, completed=downloaded, total=total)
 
         yield on_progress
-from emusync.download import download_rom
-from emusync.mapping_cache import MappingCache
-from emusync.romm_client import Rom, RommClient
-from emusync.sync import watch_and_push
+from romhop.download import download_rom
+from romhop.mapping_cache import MappingCache
+from romhop.romm_client import Rom, RommClient
+from romhop.sync import watch_and_push
 
 app = typer.Typer(help="Sync a RomM library with a local ES-DE/RetroArch setup.")
 
-# Settings the user can change via `emusync config set`.
+# Settings the user can change via `romhop config set`.
 _PATH_KEYS = ("roms_root", "saves_dir", "states_dir")
 _STR_KEYS = ("romm_url",)
 _FLOAT_KEYS = ("sync_delay_seconds",)
@@ -120,14 +120,14 @@ def _client() -> RommClient:
     settings = config.load_settings()
     token = config.get_token()
     if not settings.romm_url or not token:
-        typer.echo("Not logged in. Run: emusync login --url <url> --token <rmm_...>", err=True)
+        typer.echo("Not logged in. Run: romhop login --url <url> --token <rmm_...>", err=True)
         raise typer.Exit(code=1)
     return RommClient(base_url=settings.romm_url, token=token)
 
 
 def _cache_path() -> Path:
     import platformdirs
-    return Path(platformdirs.user_data_dir("emusync")) / "mapping_cache.json"
+    return Path(platformdirs.user_data_dir("romhop")) / "mapping_cache.json"
 
 
 @app.command()
@@ -188,7 +188,7 @@ def _exit_http(exc: httpx.HTTPStatusError, *, not_found: str | None = None):
     if code in (401, 403):
         msg = (f"RomM rejected the request ({code} {exc.response.reason_phrase}). The API token is "
                "invalid or lacks scope (needs roms.read + assets.read/write). "
-               "Re-run `emusync login` or `emusync setup` with a valid token.")
+               "Re-run `romhop login` or `romhop setup` with a valid token.")
     elif code == 404 and not_found:
         msg = not_found
     else:
@@ -202,7 +202,7 @@ def download(name: str = typer.Argument(..., help="Game name (substring match)")
     """Download a game into the ES-DE layout (exact name, or a unique substring)."""
     settings = config.load_settings()
     if not config.roms_root_configured(settings):
-        typer.echo("ROMs folder not set. Run: emusync setup  (or: emusync config set roms_root <path>)", err=True)
+        typer.echo("ROMs folder not set. Run: romhop setup  (or: romhop config set roms_root <path>)", err=True)
         raise typer.Exit(code=1)
     client = _client()
     try:

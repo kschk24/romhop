@@ -1,4 +1,4 @@
-# emusync
+# romhop
 
 Sync a self-hosted [RomM](https://github.com/rommapp/romm) library with a local
 [ES-DE](https://es-de.org/) / [RetroArch](https://www.retroarch.com/) setup.
@@ -22,24 +22,24 @@ Two things:
 pip install .
 ```
 
-This installs the `emusync` command.
+This installs the `romhop` command.
 
 ## Setup
 
 Interactive first-time setup (RomM URL, API token, and your local paths):
 
 ```
-emusync setup
+romhop setup
 ```
 
 The token is stored in the OS keyring, never in a config file. Everything else
-is written to `settings.json` (run `emusync config path` to see where).
+is written to `settings.json` (run `romhop config path` to see where).
 
 Non-interactive equivalent:
 
 ```
-emusync login --url https://romm.example --token rmm_xxx
-emusync config set roms_root ~/Games/Emulation
+romhop login --url https://romm.example --token rmm_xxx
+romhop config set roms_root ~/Games/Emulation
 ```
 
 The RetroArch saves/states folders default to the standard per-OS RetroArch
@@ -51,21 +51,21 @@ must be set.
 Download a game by exact name or a unique substring:
 
 ```
-emusync download "Sonic"
+romhop download "Sonic"
 ```
 
 Watch RetroArch saves/states and push changes to RomM until interrupted:
 
 ```
-emusync sync
+romhop sync
 ```
 
 ## Configuration
 
 ```
-emusync config show                  # print current settings as JSON
-emusync config set <key> <value>     # roms_root, saves_dir, states_dir, romm_url, sync_delay_seconds
-emusync config set-platform <slug> <es-de-dir>   # override platform -> ES-DE system dir mapping
+romhop config show                  # print current settings as JSON
+romhop config set <key> <value>     # roms_root, saves_dir, states_dir, romm_url, sync_delay_seconds
+romhop config set-platform <slug> <es-de-dir>   # override platform -> ES-DE system dir mapping
 ```
 
 `sync_delay_seconds` is the debounce window before a changed save is uploaded

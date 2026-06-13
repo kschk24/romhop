@@ -2,7 +2,7 @@ import keyring
 from keyring.backends.fail import Keyring as FailKeyring
 import pytest
 
-from emusync import config
+from romhop import config
 
 
 class MemoryKeyring(FailKeyring):

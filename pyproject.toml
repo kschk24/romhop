@@ -1,5 +1,5 @@
 [project]
-name = "emusync"
+name = "romhop"
 dynamic = ["version"]
 description = "Sync a self-hosted RomM library with a local ES-DE/RetroArch setup"
 license = "AGPL-3.0-only"
@@ -17,17 +17,17 @@ dependencies = [
 dev = ["pytest>=8.0"]
 
 [project.scripts]
-emusync = "emusync.cli:app"
+romhop = "romhop.cli:app"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
-path = "src/emusync/__init__.py"
+path = "src/romhop/__init__.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/emusync"]
+packages = ["src/romhop"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
