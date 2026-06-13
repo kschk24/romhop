@@ -125,6 +125,10 @@ def setup():
         "Local ROMs folder (your ES-DE library root)",
         default=str(current.roms_root) if config.roms_root_configured(current) else None,
     )
+    typer.echo(
+        "The saves/states defaults are the standard RetroArch locations for your OS — "
+        "the defaults are probably correct; only change them if your RetroArch uses a custom path."
+    )
     saves = typer.prompt("RetroArch saves folder", default=str(current.saves_dir))
     states = typer.prompt("RetroArch states folder", default=str(current.states_dir))
 

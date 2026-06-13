@@ -210,6 +210,7 @@ def test_setup_writes_settings_and_token(monkeypatch):
     assert saved["s"].roms_root == Path("/tmp/MyROMs")
     # saves/states defaulted to the OS RetroArch paths
     assert "retroarch" in str(saved["s"].saves_dir).lower()
+    assert "only change them" in result.output.lower()
 
 
 def test_setup_keeps_existing_token_when_blank(monkeypatch):
