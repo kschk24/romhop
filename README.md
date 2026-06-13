@@ -83,4 +83,7 @@ with no network and no live server.
 
 ## License
 
-Not yet licensed. All rights reserved until a license is added.
+GNU Affero General Public License v3.0 (AGPL-3.0). See [LICENSE](LICENSE).
+
+If you run a modified version as a network-accessible service, the AGPL
+requires you to make the modified source available to its users.
