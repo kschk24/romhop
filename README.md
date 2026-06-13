@@ -42,9 +42,11 @@ romhop login --url https://romm.example --token rmm_xxx
 romhop config set roms_root ~/Games/Emulation
 ```
 
-The RetroArch saves/states folders default to the standard per-OS RetroArch
-paths, which are usually correct. The ROMs root has no universal default and
-must be set.
+`setup` reads your RetroArch `retroarch.cfg` to fill in the saves/states folders:
+on Linux/macOS it auto-locates `~/.config/retroarch/retroarch.cfg`; on Windows it
+asks for your RetroArch installation folder (where `retroarch.cfg` lives, e.g. a
+portable `D:\RetroArch`). If the cfg doesn't specify them, it prompts. The ROMs
+root has no universal default and must be set.
 
 As its last step, `setup` offers to scan your ROMs folder (see below) so games
 already on disk become save-syncable immediately.
