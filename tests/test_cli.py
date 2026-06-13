@@ -45,3 +45,25 @@ def test_download_invokes_orchestrator(monkeypatch, tmp_path):
 
     assert result.exit_code == 0
     assert called["rom_id"] == 7
+
+
+def test_client_not_logged_in_exits_1(monkeypatch):
+    settings = cli.config.default_settings()  # romm_url == ""
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "get_token", lambda: None)
+    result = runner.invoke(cli.app, ["download", "Sonic"])
+    assert result.exit_code == 1
+
+
+def test_download_no_match_exits_1(monkeypatch, tmp_path):
+    class FakeClient:
+        def __init__(self, *a, **k): pass
+        def list_roms(self): return []
+    monkeypatch.setattr(cli, "RommClient", FakeClient)
+    monkeypatch.setattr(cli.config, "get_token", lambda: "rmm_x")
+    settings = cli.config.default_settings()
+    settings.romm_url = "http://romm.test"
+    settings.roms_root = tmp_path
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    result = runner.invoke(cli.app, ["download", "Nope"])
+    assert result.exit_code == 1

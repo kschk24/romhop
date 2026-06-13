@@ -31,10 +31,10 @@ def _cache_path() -> Path:
 def login(url: str = typer.Option(..., "--url"),
           token: str = typer.Option(..., "--token")):
     """Store the RomM URL and API token."""
+    config.set_token(token)           # store token first; if keyring fails, no partial state
     settings = config.load_settings()
     settings.romm_url = url
     config.save_settings(settings)
-    config.set_token(token)
     typer.echo(f"Saved RomM URL {url} and token.")
 
 
@@ -47,6 +47,8 @@ def download(name: str = typer.Argument(..., help="Game name (substring match)")
     if not matches:
         typer.echo(f"No game matching '{name}'.", err=True)
         raise typer.Exit(code=1)
+    if len(matches) > 1:
+        typer.echo(f"{len(matches)} matches; downloading first: {matches[0].name}", err=True)
     rom = matches[0]
     cache = MappingCache(_cache_path())
     m3u = download_rom(rom, client, roms_root=settings.roms_root, cache=cache,
