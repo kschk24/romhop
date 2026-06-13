@@ -10,9 +10,9 @@ NOLOAD_SENTINEL = "noload.txt"
 
 
 def norm(s: str) -> str:
-	"""Match key: collapse internal whitespace, trim, case-fold. Nothing else —
-	so revision/region tags like (Rev 1) / (USA) stay distinct."""
-	return " ".join(s.split()).casefold()
+    """Match key: collapse internal whitespace, trim, case-fold. Nothing else —
+    so revision/region tags like (Rev 1) / (USA) stay distinct."""
+    return " ".join(s.split()).casefold()
 
 
 def _natural_key(name: str) -> list:
