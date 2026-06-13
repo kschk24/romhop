@@ -244,3 +244,21 @@ def test_setup_keeps_existing_token_when_blank(monkeypatch):
     result = runner.invoke(cli.app, ["setup"], input="\n\n/tmp/new\nN\n")
     assert result.exit_code == 0, result.output
     assert set_calls == []   # token untouched because blank + existing present
+
+
+def test_download_list_roms_403_friendly(monkeypatch, tmp_path):
+    import httpx
+    _login(monkeypatch, tmp_path)
+
+    class FakeClient:
+        def __init__(self, *a, **k): pass
+        def list_roms(self, search_term=None):
+            raise httpx.HTTPStatusError(
+                "403", request=httpx.Request("GET", "http://romm.test/api/roms"),
+                response=httpx.Response(403),
+            )
+    monkeypatch.setattr(cli, "RommClient", FakeClient)
+    result = runner.invoke(cli.app, ["download", "Sonic"])
+    assert result.exit_code == 1
+    assert "token" in result.output.lower()
+    assert "Traceback" not in result.output

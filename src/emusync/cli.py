@@ -150,6 +150,21 @@ def setup():
     typer.echo(f"Setup complete. Settings saved to {config.settings_path()}")
 
 
+def _exit_http(exc: httpx.HTTPStatusError, *, not_found: str | None = None):
+    """Turn an httpx error into a friendly message + exit 1 (no traceback)."""
+    code = exc.response.status_code
+    if code in (401, 403):
+        msg = (f"RomM rejected the request ({code} {exc.response.reason_phrase}). The API token is "
+               "invalid or lacks scope (needs roms.read + assets.read/write). "
+               "Re-run `emusync login` or `emusync setup` with a valid token.")
+    elif code == 404 and not_found:
+        msg = not_found
+    else:
+        msg = f"RomM returned HTTP {code} {exc.response.reason_phrase}."
+    typer.echo(msg, err=True)
+    raise typer.Exit(code=1)
+
+
 @app.command()
 def download(name: str = typer.Argument(..., help="Game name (substring match)")):
     """Download a game into the ES-DE layout (exact name, or a unique substring)."""
@@ -158,7 +173,14 @@ def download(name: str = typer.Argument(..., help="Game name (substring match)")
         typer.echo("ROMs folder not set. Run: emusync setup  (or: emusync config set roms_root <path>)", err=True)
         raise typer.Exit(code=1)
     client = _client()
-    matches = [r for r in client.list_roms(search_term=name) if name.lower() in r.name.lower()]
+    try:
+        roms = client.list_roms(search_term=name)
+    except httpx.HTTPStatusError as exc:
+        _exit_http(exc)
+    except httpx.HTTPError as exc:
+        typer.echo(f"Could not reach RomM: {exc}", err=True)
+        raise typer.Exit(code=1)
+    matches = [r for r in roms if name.lower() in r.name.lower()]
     if not matches:
         typer.echo(f"No game matching '{name}'.", err=True)
         raise typer.Exit(code=1)
@@ -168,15 +190,9 @@ def download(name: str = typer.Argument(..., help="Game name (substring match)")
         m3u = download_rom(rom, client, roms_root=settings.roms_root, cache=cache,
                            overrides=settings.platform_overrides)
     except httpx.HTTPStatusError as exc:
-        if exc.response.status_code == 404:
-            typer.echo(
-                f"RomM has no downloadable files for '{rom.name}' (id {rom.id}). "
-                "It looks unmatched/unscanned on the server — try a rescan in RomM.",
-                err=True,
-            )
-        else:
-            typer.echo(f"Download failed for '{rom.name}': HTTP {exc.response.status_code}", err=True)
-        raise typer.Exit(code=1)
+        _exit_http(exc, not_found=(
+            f"RomM has no downloadable files for '{rom.name}' (id {rom.id}). "
+            "It looks unmatched/unscanned on the server — try a rescan in RomM."))
     except httpx.HTTPError as exc:
         typer.echo(f"Could not reach RomM: {exc}", err=True)
         raise typer.Exit(code=1)
