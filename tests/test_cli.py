@@ -297,3 +297,47 @@ def test_download_list_roms_403_friendly(monkeypatch, tmp_path):
     assert result.exit_code == 1
     assert "token" in result.output.lower()
     assert "Traceback" not in result.output
+
+
+def test_scan_matches_and_writes_with_yes(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    # one local flat game on disk
+    (tmp_path / "genesis").mkdir()
+    (tmp_path / "genesis" / "Sonic (USA).md").write_bytes(b"x")
+    rom = Rom(id=7, name="Sonic", platform_slug="genesis",
+              fs_name="Sonic (USA).md", fs_name_no_ext="Sonic (USA)",
+              file_names=["Sonic (USA).md"])
+    _fake_client(monkeypatch, [rom])
+    monkeypatch.setattr(cli, "_cache_path", lambda: tmp_path / "cache.json")
+
+    result = runner.invoke(cli.app, ["scan", "--yes"])
+    assert result.exit_code == 0, result.output
+    from romhop.mapping_cache import MappingCache
+    cache = MappingCache(tmp_path / "cache.json")
+    assert cache.find_by_basename("Sonic (USA)").rom_id == 7
+
+
+def test_scan_preview_aborts_without_confirm(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    (tmp_path / "genesis").mkdir()
+    (tmp_path / "genesis" / "Sonic (USA).md").write_bytes(b"x")
+    rom = Rom(id=7, name="Sonic", platform_slug="genesis",
+              fs_name="Sonic (USA).md", fs_name_no_ext="Sonic (USA)",
+              file_names=["Sonic (USA).md"])
+    _fake_client(monkeypatch, [rom])
+    monkeypatch.setattr(cli, "_cache_path", lambda: tmp_path / "cache.json")
+
+    result = runner.invoke(cli.app, ["scan"], input="n\n")
+    assert result.exit_code == 0
+    assert not (tmp_path / "cache.json").exists()
+    assert "1 matched" in result.output
+
+
+def test_scan_requires_roms_root(monkeypatch):
+    settings = cli.config.default_settings()
+    settings.romm_url = "http://romm.test"   # roms_root still unset
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "get_token", lambda: "rmm_x")
+    result = runner.invoke(cli.app, ["scan"])
+    assert result.exit_code == 1
+    assert "setup" in result.output.lower()

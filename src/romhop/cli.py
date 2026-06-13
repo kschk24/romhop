@@ -43,7 +43,9 @@ def _download_progress(label: str):
 
         yield on_progress
 from romhop.download import download_rom
-from romhop.mapping_cache import MappingCache
+from romhop.local_index import index_local_library, match_to_roms
+from romhop.mapping_cache import MappingCache, seed_entry
+from romhop.platform_map import esde_system_for_slug
 from romhop.romm_client import Rom, RommClient
 from romhop.sync import watch_and_push
 
@@ -391,6 +393,57 @@ def sync():
             f"Set a core mapping: romhop config set-core '{p.parent.name}' <system>",
             err=True),
     )
+
+
+def _run_scan(settings, *, assume_yes: bool) -> None:
+    """Match local games to RomM roms and seed the cache. Preview then confirm
+    unless assume_yes. Assumes roms_root is configured and login is valid."""
+    client = _client()
+    try:
+        roms = client.list_roms()
+    except httpx.HTTPStatusError as exc:
+        _exit_http(exc)
+    except httpx.HTTPError as exc:
+        typer.echo(f"Could not reach RomM: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    locals_ = index_local_library(settings.roms_root, settings.platform_overrides)
+    result = match_to_roms(locals_, roms, settings.platform_overrides)
+
+    typer.echo(f"{len(result.matched)} matched, {len(result.unmatched)} unmatched, "
+               f"{len(result.collisions)} basename collisions.")
+    if result.unmatched:
+        typer.echo("Unmatched (no RomM rom found — rescan in RomM or rename):")
+        for g in result.unmatched:
+            typer.echo(f"  {g.system}/{g.game_name}")
+    if result.collisions:
+        typer.echo("Collisions (saves disambiguated by core at sync time):")
+        for c in result.collisions:
+            typer.echo(f"  {c.basename}: roms {c.rom_ids}")
+
+    if not result.matched:
+        typer.echo("Nothing to map.")
+        return
+    if not assume_yes and not typer.confirm(f"Write {len(result.matched)} mappings?", default=False):
+        typer.echo("Aborted; cache unchanged.")
+        return
+
+    cache = MappingCache(_cache_path())
+    for local, rom in result.matched:
+        system = esde_system_for_slug(rom.platform_slug, settings.platform_overrides)
+        cache.add(seed_entry(rom.id, system, rom.fs_name_no_ext, local.file_names))
+    cache.save()
+    typer.echo(f"Wrote {len(result.matched)} mappings to {_cache_path()}")
+
+
+@app.command()
+def scan(yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt.")):
+    """Match games already in your ROMs folder to RomM and seed the save-sync cache."""
+    settings = config.load_settings()
+    if not config.roms_root_configured(settings):
+        typer.echo("ROMs folder not set. Run: romhop setup  (or: romhop config set roms_root <path>)", err=True)
+        raise typer.Exit(code=1)
+    _run_scan(settings, assume_yes=yes)
 
 
 if __name__ == "__main__":
