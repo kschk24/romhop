@@ -52,3 +52,24 @@ def test_push_returns_false_when_no_match(tmp_path):
     client = RecordingClient()
     assert push_save_file(save, _cache(tmp_path), client, {}) is False
     assert client.uploads == []
+
+
+def test_push_matches_state_file(tmp_path):
+    core_dir = tmp_path / "PCSX-ReARMed"
+    core_dir.mkdir()
+    save = core_dir / "Metal Gear Solid (USA).state1"
+    save.write_bytes(b"STATE")
+    client = RecordingClient()
+    pushed = push_save_file(save, _cache(tmp_path), client, {})
+    assert pushed is True
+    assert client.uploads == [(18, "PCSX-ReARMed", "Metal Gear Solid (USA).state1", b"STATE")]
+
+
+def test_push_ignores_non_save_extension(tmp_path):
+    core_dir = tmp_path / "PCSX-ReARMed"
+    core_dir.mkdir()
+    f = core_dir / "Metal Gear Solid (USA).txt"
+    f.write_bytes(b"X")
+    client = RecordingClient()
+    assert push_save_file(f, _cache(tmp_path), client, {}) is False
+    assert client.uploads == []

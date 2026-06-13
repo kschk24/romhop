@@ -29,7 +29,11 @@ def push_save_file(path: Path, cache: MappingCache, client,
     entry = cache.find_by_basename(path.stem)
     if entry is None:
         return False
-    data = path.read_bytes()
+    try:
+        data = path.read_bytes()
+    except OSError:
+        # File vanished/locked between detection and read; skip this event.
+        return False
     digest = _digest(data)
     if seen.get(str(path)) == digest:
         return False
