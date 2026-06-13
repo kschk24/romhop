@@ -223,11 +223,12 @@ def test_setup_writes_settings_and_token(monkeypatch):
     saved = {}
     monkeypatch.setattr(cli.config, "set_token", lambda t: stored.setdefault("t", t))
     monkeypatch.setattr(cli.config, "save_settings", lambda s: saved.setdefault("s", s))
+    monkeypatch.setattr(cli, "_run_scan", lambda *a, **k: None)
 
-    # url, token, roms, then "N" to keep the saves/states defaults
+    # url, token, roms, then "N" to keep the saves/states defaults, "N" to skip scan
     result = runner.invoke(
         cli.app, ["setup"],
-        input="http://romm.test\nrmm_secret\n/tmp/MyROMs\nN\n",
+        input="http://romm.test\nrmm_secret\n/tmp/MyROMs\nN\nN\n",
     )
     assert result.exit_code == 0, result.output
     assert stored["t"] == "rmm_secret"
@@ -244,11 +245,12 @@ def test_setup_changes_saves_states_when_confirmed(monkeypatch):
     saved = {}
     monkeypatch.setattr(cli.config, "set_token", lambda t: None)
     monkeypatch.setattr(cli.config, "save_settings", lambda s: saved.setdefault("s", s))
+    monkeypatch.setattr(cli, "_run_scan", lambda *a, **k: None)
 
-    # url, token, roms, "y" to change, then custom saves + states
+    # url, token, roms, "y" to change, then custom saves + states, "N" to skip scan
     result = runner.invoke(
         cli.app, ["setup"],
-        input="http://romm.test\nrmm_x\n/tmp/MyROMs\ny\n/tmp/sv\n/tmp/st\n",
+        input="http://romm.test\nrmm_x\n/tmp/MyROMs\ny\n/tmp/sv\n/tmp/st\nN\n",
     )
     assert result.exit_code == 0, result.output
     assert saved["s"].saves_dir == Path("/tmp/sv")
@@ -264,9 +266,10 @@ def test_setup_keeps_existing_token_when_blank(monkeypatch):
     set_calls = []
     monkeypatch.setattr(cli.config, "set_token", lambda t: set_calls.append(t))
     monkeypatch.setattr(cli.config, "save_settings", lambda s: None)
+    monkeypatch.setattr(cli, "_run_scan", lambda *a, **k: None)
 
-    # accept url default, blank token (keep existing), new roms, "N" keep saves/states
-    result = runner.invoke(cli.app, ["setup"], input="\n\n/tmp/new\nN\n")
+    # accept url default, blank token (keep existing), new roms, "N" keep saves/states, "N" skip scan
+    result = runner.invoke(cli.app, ["setup"], input="\n\n/tmp/new\nN\nN\n")
     assert result.exit_code == 0, result.output
     assert set_calls == []   # token untouched because blank + existing present
 
@@ -341,6 +344,41 @@ def test_scan_requires_roms_root(monkeypatch):
     result = runner.invoke(cli.app, ["scan"])
     assert result.exit_code == 1
     assert "setup" in result.output.lower()
+
+
+def test_setup_offers_scan_at_end(monkeypatch, tmp_path):
+    settings = cli.config.default_settings()
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "get_token", lambda: None)
+    monkeypatch.setattr(cli.config, "set_token", lambda t: None)
+    monkeypatch.setattr(cli.config, "save_settings", lambda s: None)
+    ran = {"scan": False}
+    monkeypatch.setattr(cli, "_run_scan", lambda s, *, assume_yes: ran.__setitem__("scan", assume_yes))
+
+    # url, token, roms, "N" keep saves/states, then "y" to scan now
+    result = runner.invoke(
+        cli.app, ["setup"],
+        input="http://romm.test\nrmm_x\n/tmp/MyROMs\nN\ny\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert ran["scan"] is True          # scan ran with assume_yes=True
+
+
+def test_setup_skips_scan_when_declined(monkeypatch, tmp_path):
+    settings = cli.config.default_settings()
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "get_token", lambda: None)
+    monkeypatch.setattr(cli.config, "set_token", lambda t: None)
+    monkeypatch.setattr(cli.config, "save_settings", lambda s: None)
+    ran = {"scan": 0}
+    monkeypatch.setattr(cli, "_run_scan", lambda s, *, assume_yes: ran.__setitem__("scan", ran["scan"] + 1))
+
+    result = runner.invoke(
+        cli.app, ["setup"],
+        input="http://romm.test\nrmm_x\n/tmp/MyROMs\nN\nn\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert ran["scan"] == 0
 
 
 def test_download_skips_when_already_local(monkeypatch, tmp_path):

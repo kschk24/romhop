@@ -324,6 +324,9 @@ def setup():
     current.states_dir = Path(states).expanduser()
     config.save_settings(current)
     typer.echo(f"Setup complete. Settings saved to {config.settings_path()}")
+    if typer.confirm("Scan your ROMs folder now to enable save sync for existing games?",
+                     default=True):
+        _run_scan(config.load_settings(), assume_yes=True)
 
 
 def _exit_http(exc: httpx.HTTPStatusError, *, not_found: str | None = None):
