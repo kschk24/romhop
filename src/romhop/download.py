@@ -5,11 +5,10 @@ import zipfile
 from pathlib import Path
 
 from romhop.library import (
-    candidate_basenames,
     write_game,
     write_single_file,
 )
-from romhop.mapping_cache import MappingCache, RomEntry
+from romhop.mapping_cache import MappingCache, seed_entry
 from romhop.platform_map import esde_system_for_slug
 from romhop.romm_client import Rom
 
@@ -72,11 +71,6 @@ def download_rom(rom: Rom, client, *, roms_root: Path, cache: MappingCache,
         written = write_single_file(roms_root, system, rom.fs_name, payload)
         cache_files = [rom.fs_name]
 
-    cache.add(RomEntry(
-        rom_id=rom.id,
-        system=system,
-        game_name=game_name,
-        candidate_basenames=candidate_basenames(game_name, cache_files),
-    ))
+    cache.add(seed_entry(rom.id, system, game_name, cache_files))
     cache.save()
     return written
