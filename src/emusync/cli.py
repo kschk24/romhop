@@ -101,7 +101,7 @@ def _cache_path() -> Path:
 @app.command()
 def login(url: str = typer.Option(..., "--url"),
           token: str = typer.Option(..., "--token")):
-    """Store the RomM URL and API token."""
+    """Store the RomM URL and API token (non-interactive). For first-time setup use `setup`."""
     config.set_token(token)           # store token first; if keyring fails, no partial state
     settings = config.load_settings()
     settings.romm_url = url
@@ -110,9 +110,45 @@ def login(url: str = typer.Option(..., "--url"),
 
 
 @app.command()
+def setup():
+    """Interactive first-time setup: RomM URL + token and the local ROM/save paths."""
+    current = config.load_settings()
+    existing_token = config.get_token()
+
+    url = typer.prompt("RomM URL", default=current.romm_url or None)
+    token = typer.prompt(
+        "RomM API token (rmm_...)" + (" [leave blank to keep current]" if existing_token else ""),
+        default="" if existing_token else None,
+        hide_input=True, show_default=False,
+    )
+    roms = typer.prompt(
+        "Local ROMs folder (your ES-DE library root)",
+        default=str(current.roms_root) if config.roms_root_configured(current) else None,
+    )
+    saves = typer.prompt("RetroArch saves folder", default=str(current.saves_dir))
+    states = typer.prompt("RetroArch states folder", default=str(current.states_dir))
+
+    if token.strip():
+        config.set_token(token.strip())
+    elif not existing_token:
+        typer.echo("A token is required.", err=True)
+        raise typer.Exit(code=1)
+
+    current.romm_url = url.strip()
+    current.roms_root = Path(roms).expanduser()
+    current.saves_dir = Path(saves).expanduser()
+    current.states_dir = Path(states).expanduser()
+    config.save_settings(current)
+    typer.echo(f"Setup complete. Settings saved to {config.settings_path()}")
+
+
+@app.command()
 def download(name: str = typer.Argument(..., help="Game name (substring match)")):
     """Download a game into the ES-DE layout (exact name, or a unique substring)."""
     settings = config.load_settings()
+    if not config.roms_root_configured(settings):
+        typer.echo("ROMs folder not set. Run: emusync setup  (or: emusync config set roms_root <path>)", err=True)
+        raise typer.Exit(code=1)
     client = _client()
     matches = [r for r in client.list_roms(search_term=name) if name.lower() in r.name.lower()]
     if not matches:

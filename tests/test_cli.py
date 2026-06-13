@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from typer.testing import CliRunner
 
 from emusync import cli
@@ -176,3 +178,51 @@ def test_config_set_platform_add_and_remove(monkeypatch):
     assert r1.exit_code == 0 and settings.platform_overrides["genesis-slug"] == "genesis"
     r2 = runner.invoke(cli.app, ["config", "set-platform", "genesis-slug"])
     assert r2.exit_code == 0 and "genesis-slug" not in settings.platform_overrides
+
+
+def test_download_requires_roms_root(monkeypatch):
+    settings = cli.config.default_settings()   # roms_root unset
+    settings.romm_url = "http://romm.test"
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "get_token", lambda: "rmm_x")
+    result = runner.invoke(cli.app, ["download", "Sonic"])
+    assert result.exit_code == 1
+    assert "setup" in result.output.lower()
+
+
+def test_setup_writes_settings_and_token(monkeypatch):
+    settings = cli.config.default_settings()    # romm_url "", roms_root unset
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "get_token", lambda: None)
+    stored = {}
+    saved = {}
+    monkeypatch.setattr(cli.config, "set_token", lambda t: stored.setdefault("t", t))
+    monkeypatch.setattr(cli.config, "save_settings", lambda s: saved.setdefault("s", s))
+
+    # url, token, roms; blank lines accept the saves/states defaults
+    result = runner.invoke(
+        cli.app, ["setup"],
+        input="http://romm.test\nrmm_secret\n/tmp/MyROMs\n\n\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert stored["t"] == "rmm_secret"
+    assert saved["s"].romm_url == "http://romm.test"
+    assert saved["s"].roms_root == Path("/tmp/MyROMs")
+    # saves/states defaulted to the OS RetroArch paths
+    assert "retroarch" in str(saved["s"].saves_dir).lower()
+
+
+def test_setup_keeps_existing_token_when_blank(monkeypatch):
+    settings = cli.config.default_settings()
+    settings.romm_url = "http://romm.test"
+    settings.roms_root = Path("/tmp/old")
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "get_token", lambda: "rmm_existing")
+    set_calls = []
+    monkeypatch.setattr(cli.config, "set_token", lambda t: set_calls.append(t))
+    monkeypatch.setattr(cli.config, "save_settings", lambda s: None)
+
+    # accept url default, blank token (keep existing), new roms, accept saves/states
+    result = runner.invoke(cli.app, ["setup"], input="\n\n/tmp/new\n\n\n")
+    assert result.exit_code == 0, result.output
+    assert set_calls == []   # token untouched because blank + existing present

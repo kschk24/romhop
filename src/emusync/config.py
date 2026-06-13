@@ -26,23 +26,34 @@ def settings_path() -> Path:
     return Path(platformdirs.user_config_dir("emusync")) / "settings.json"
 
 
+# Sentinel for an unset ROMs root. There is no universal default ROM library
+# path (every user's layout differs), so it must be set via `setup`/`config`.
+UNSET_PATH = Path("")
+
+
 def default_settings() -> Settings:
+    # saves/states DO have standard per-OS RetroArch defaults; roms_root does not.
     if sys.platform.startswith("win"):
         import os
         appdata = Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming"))
         ra = appdata / "RetroArch"
         return Settings(
             romm_url="",
-            roms_root=Path.home() / "Games" / "Emulation",
+            roms_root=UNSET_PATH,
             saves_dir=ra / "saves",
             states_dir=ra / "states",
         )
     return Settings(
         romm_url="",
-        roms_root=Path.home() / "Games" / "Emulation",
+        roms_root=UNSET_PATH,
         saves_dir=Path.home() / ".config" / "retroarch" / "saves",
         states_dir=Path.home() / ".config" / "retroarch" / "states",
     )
+
+
+def roms_root_configured(settings: Settings) -> bool:
+    """True if the user has set a real ROMs root (not the unset sentinel)."""
+    return str(settings.roms_root) not in ("", ".")
 
 
 def to_dict(settings: Settings) -> dict:
