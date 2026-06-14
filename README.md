@@ -68,6 +68,20 @@ Watch RetroArch saves/states and push changes to RomM until interrupted:
 romhop sync
 ```
 
+Restore saves/states from RomM into your local RetroArch layout:
+
+```
+romhop pull "Sonic"          # one game
+romhop pull --all            # every game in the mapping cache
+romhop pull --all --remote   # bulk restore, always take RomM's version
+```
+
+`pull` writes a save only when it's new or you choose it: an unchanged save is
+skipped, and a differing local save prompts you (showing both dates) to keep
+local or take RomM's — unless `--remote` is set. New saves are placed by your
+RetroArch sort setting (per-core subfolder or flat), read from `retroarch.cfg`
+during `setup`. Needs the RomM token to have `assets.read` scope.
+
 ## Scan existing games
 
 Match games already in your ROMs folder to your RomM library and seed the
