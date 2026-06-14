@@ -14,3 +14,9 @@ def test_render_qss_fills_missing_tokens_from_defaults():
     out = theme.render_qss(base, {"text": "#fff"})
     assert "{{" not in out
     assert theme.DEFAULT_TOKENS["accent"] in out
+
+
+def test_render_qss_caller_overrides_default():
+    # A caller-supplied token must win over the default for the same key.
+    out = theme.render_qss("{{bg}}", {"bg": "#custom"})
+    assert out == "#custom"
