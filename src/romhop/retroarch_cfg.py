@@ -59,3 +59,25 @@ def default_cfg_path() -> Path | None:
     base = Path(xdg) if xdg else Path.home() / ".config"
     cfg = base / "retroarch" / "retroarch.cfg"
     return cfg if cfg.exists() else None
+
+
+def parse_sort_flags(cfg_path: Path) -> tuple[bool, bool]:
+    """(sort_savefiles_enable, sort_savestates_enable) as booleans.
+
+    'true' (any case) -> True; anything else, an absent key, or an unreadable
+    file -> False.
+    """
+    try:
+        text = cfg_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return (False, False)
+    values: dict[str, bool] = {}
+    for line in text.splitlines():
+        if "=" not in line:
+            continue
+        key, _, raw = line.partition("=")
+        key = key.strip()
+        if key in ("sort_savefiles_enable", "sort_savestates_enable"):
+            values[key] = raw.strip().strip('"').lower() == "true"
+    return (values.get("sort_savefiles_enable", False),
+            values.get("sort_savestates_enable", False))

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from romhop.retroarch_cfg import default_cfg_path, parse_save_dirs, save_dirs_from_install
+from romhop.retroarch_cfg import default_cfg_path, parse_save_dirs, parse_sort_flags, save_dirs_from_install
 
 
 def _write_cfg(dirpath, body):
@@ -70,3 +70,18 @@ def test_default_cfg_path_falls_back_to_home_config(tmp_path, monkeypatch):
 def test_default_cfg_path_none_when_absent(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))  # no cfg written here
     assert default_cfg_path() is None
+
+
+def test_parse_sort_flags_true(tmp_path):
+    cfg = _write_cfg(tmp_path, 'sort_savefiles_enable = "true"\n'
+                               'sort_savestates_enable = "true"\n')
+    assert parse_sort_flags(cfg) == (True, True)
+
+
+def test_parse_sort_flags_false_and_absent(tmp_path):
+    cfg = _write_cfg(tmp_path, 'sort_savefiles_enable = "false"\n')  # savestates key absent
+    assert parse_sort_flags(cfg) == (False, False)
+
+
+def test_parse_sort_flags_missing_file(tmp_path):
+    assert parse_sort_flags(tmp_path / "nope.cfg") == (False, False)
