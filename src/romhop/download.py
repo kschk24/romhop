@@ -4,6 +4,8 @@ import io
 import zipfile
 from pathlib import Path
 
+import httpx
+
 from romhop.library import (
     write_game,
     write_single_file,
@@ -14,6 +16,29 @@ from romhop.romm_client import Rom
 
 # Rom files that are themselves archives — a zip payload IS the rom, not a server bundle.
 ARCHIVE_EXTS = {".zip", ".7z"}
+
+
+def friendly_download_error(rom_name: str, rom_id: int, exc: Exception) -> str:
+    """User-facing message for a failed rom download.
+
+    A bare ``404`` from ``/api/roms/<id>/content`` means RomM has the rom's
+    metadata but no actual file to serve (unscanned / missing on the server) —
+    the common cause behind a raw "No files found for ROM <id>". Map that, and
+    auth failures, to actionable text; fall back to ``str(exc)`` otherwise.
+    Mirrors the CLI's ``_exit_http`` wording so both frontends agree.
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        if code in (401, 403):
+            return (f"RomM rejected the request ({code}). The API token is invalid "
+                    "or lacks scope — re-run login/setup with a valid token.")
+        if code == 404:
+            return (f"RomM has no downloadable files for '{rom_name}' (id {rom_id}). "
+                    "It looks unscanned/missing on the server — try a rescan in RomM.")
+        return f"RomM returned HTTP {code}."
+    if isinstance(exc, httpx.HTTPError):
+        return f"Could not reach RomM: {exc}"
+    return str(exc)
 
 
 def _zip_to_files(payload: bytes) -> dict[str, bytes]:

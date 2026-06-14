@@ -321,3 +321,22 @@ def test_filter_dropdown_uses_names_cache_when_platform_name_absent(qtbot, monke
     qtbot.addWidget(win)
     win.load_library()
     assert win.filter_bar.platform_combo.itemText(1) == "Game Boy"
+
+
+def test_item_error_surfaces_in_download_area_not_sync(qtbot):
+    from romhop.gui.main_window import MainWindow
+
+    win = MainWindow(settings=config.default_settings())
+    qtbot.addWidget(win)
+    sync_before = win.sync_status_text()
+
+    win._begin_progress()
+    win._on_item_started(1, 1, "Animal Crossing")
+    win._on_item_error("Animal Crossing", "no downloadable files (id 1542) — rescan in RomM")
+
+    # The failure shows in the download progress label, with the rom + reason.
+    assert "Animal Crossing" in win.progress_label.text()
+    assert "rescan" in win.progress_label.text().lower()
+    # ...and must NOT hijack the sync indicator.
+    assert win.sync_status_text() == sync_before
+    assert "error" not in win.sync_status_text().lower()

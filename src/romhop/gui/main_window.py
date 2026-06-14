@@ -325,7 +325,10 @@ class MainWindow(QWidget):
         )
 
     def _on_item_error(self, name: str, message: str) -> None:
-        self.set_sync_status(f"error: {name}: {message}")
+        # A download failure belongs in the download area, not on the sync dot.
+        # The batch keeps going; the label is overwritten by the next item (or
+        # cleared by _end_progress), so a transient flash is fine here.
+        self.progress_label.setText(f"Failed: {name} — {message}")
 
     def _on_batch_finished(self) -> None:
         if self._download_worker is not None:

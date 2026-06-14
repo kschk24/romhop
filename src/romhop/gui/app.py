@@ -13,7 +13,7 @@ def run() -> None:
     from PySide6.QtWidgets import QApplication
 
     from romhop.config import get_token, load_settings
-    from romhop.download import download_rom
+    from romhop.download import download_rom, friendly_download_error
     from romhop.gui import covers
     from romhop.gui.main_window import MainWindow
     from romhop.mapping_cache import MappingCache
@@ -41,13 +41,16 @@ def run() -> None:
         return covers.get_cover(rom, client)
 
     def download_action(rom, on_progress=None):
-        return download_rom(
-            rom, client,
-            roms_root=settings.roms_root,
-            cache=cache,
-            overrides=settings.platform_overrides,
-            on_progress=on_progress,
-        )
+        try:
+            return download_rom(
+                rom, client,
+                roms_root=settings.roms_root,
+                cache=cache,
+                overrides=settings.platform_overrides,
+                on_progress=on_progress,
+            )
+        except Exception as exc:  # surface a clear, actionable reason in the UI
+            raise RuntimeError(friendly_download_error(rom.name, rom.id, exc)) from exc
 
     def sync_watch_fn(stop_event):
         watch_and_push(

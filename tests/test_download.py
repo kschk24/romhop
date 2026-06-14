@@ -114,3 +114,36 @@ def test_download_rom_forwards_on_progress(tmp_path):
     download_rom(rom, ProgClient(), roms_root=tmp_path, cache=MappingCache(tmp_path / "c.json"),
                  overrides={}, on_progress=lambda d, t: seen.append((d, t)))
     assert seen == [(5, 10), (10, 10)]
+
+
+def test_friendly_download_error_maps_content_404_to_rescan_hint():
+    import httpx
+
+    from romhop.download import friendly_download_error
+
+    req = httpx.Request("GET", "http://romm/api/roms/1542/content/Animal.3ds")
+    resp = httpx.Response(404, request=req,
+                          json={"detail": "No files found for ROM 1542"})
+    exc = httpx.HTTPStatusError("404", request=req, response=resp)
+    msg = friendly_download_error("Animal Crossing", 1542, exc)
+    assert "Animal Crossing" in msg
+    assert "1542" in msg
+    assert "rescan" in msg.lower()
+
+
+def test_friendly_download_error_flags_auth_failure():
+    import httpx
+
+    from romhop.download import friendly_download_error
+
+    req = httpx.Request("GET", "http://romm/api/roms/1/content/x")
+    resp = httpx.Response(403, request=req)
+    exc = httpx.HTTPStatusError("403", request=req, response=resp)
+    msg = friendly_download_error("X", 1, exc)
+    assert "token" in msg.lower()
+
+
+def test_friendly_download_error_falls_back_to_str_for_unknown():
+    from romhop.download import friendly_download_error
+
+    assert friendly_download_error("X", 1, ValueError("boom")) == "boom"
