@@ -18,9 +18,12 @@ from PySide6.QtWidgets import (
 from romhop import config
 from romhop.config import Settings
 from romhop.gui import theme
-from romhop.gui.library_view import LibraryView
+from romhop.gui.filter_bar import FilterBar
+from romhop.gui.library_view import LibraryView, platforms_from_roms
 from romhop.gui.settings_view import SettingsView
 from romhop.gui.workers import DownloadWorker, SyncWorker
+from romhop.local_index import downloaded_rom_ids
+from romhop.platform_names import display_name
 
 
 def _human_speed(bytes_per_sec: float) -> str:
@@ -58,7 +61,8 @@ class MainWindow(QWidget):
 
     def __init__(self, settings: Settings, parent=None, *,
                  rom_provider=None, download_action=None,
-                 sync_watch_fn=None, persist_settings=None, cover_provider=None):
+                 sync_watch_fn=None, persist_settings=None, cover_provider=None,
+                 platform_label=None):
         super().__init__(parent)
         self._settings = settings
         self._rom_provider = rom_provider
@@ -85,7 +89,13 @@ class MainWindow(QWidget):
         top.addWidget(gear, 0)
 
         # Stacked content: library + settings.
-        self.library = LibraryView(cover_provider=cover_provider)
+        self.library = LibraryView(cover_provider=cover_provider,
+                                   platform_label=platform_label)
+        # Filter bar: platform, downloaded, sort. Wired to library setters.
+        self.filter_bar = FilterBar()
+        self.filter_bar.platform_changed.connect(self.library.set_platform_filter)
+        self.filter_bar.downloaded_changed.connect(self.library.set_downloaded_filter)
+        self.filter_bar.sort_changed.connect(self.library.set_sort)
         # Search is context-dependent: it filters whichever view is active.
         self.search.textChanged.connect(self._on_search_changed)
         self.settings_view = SettingsView(settings)
@@ -134,6 +144,7 @@ class MainWindow(QWidget):
 
         layout = QVBoxLayout(self)
         layout.addLayout(top)
+        layout.addWidget(self.filter_bar)
         layout.addWidget(self.stack, 1)
         layout.addWidget(self.bottom)
 
@@ -150,11 +161,13 @@ class MainWindow(QWidget):
         # Drop any stale edits from a previous visit before showing the form.
         self.settings_view.reset()
         self.settings_view.setFocus()
+        self.filter_bar.hide()
         self.stack.setCurrentIndex(1)
         # Apply the standing query to the rows now that settings is active.
         self.settings_view.filter(self.search.text())
 
     def show_library(self) -> None:
+        self.filter_bar.show()
         self.stack.setCurrentIndex(0)
         # Re-apply the standing query to the game list.
         self.library.filter(self.search.text())
@@ -240,7 +253,22 @@ class MainWindow(QWidget):
     def load_library(self) -> None:
         if self._rom_provider is None:
             return
-        self.library.set_roms(self._rom_provider())
+        roms = self._rom_provider()
+        self.library.set_roms(roms)
+        pairs = [(slug, self._platform_name_for(roms, slug))
+                 for slug in platforms_from_roms(roms)]
+        self.filter_bar.set_platforms(pairs)
+        self._refresh_downloaded(roms)
+
+    def _platform_name_for(self, roms, slug: str) -> str:
+        rom = next((r for r in roms if r.platform_slug == slug), None)
+        return display_name(rom) if rom is not None else slug
+
+    def _refresh_downloaded(self, roms=None) -> None:
+        roms = roms if roms is not None else getattr(self.library, "_roms", [])
+        ids = downloaded_rom_ids(roms, self._settings.roms_root,
+                                 self._settings.platform_overrides)
+        self.library.set_downloaded(ids)
 
     def download_selected(self) -> None:
         if self._download_action is None:
@@ -300,6 +328,7 @@ class MainWindow(QWidget):
         self._end_progress()
         self.download_btn.setText("Download")
         self.download_btn.setEnabled(True)
+        self._refresh_downloaded()
         self.downloads_finished.emit()
 
     def _end_progress(self) -> None:

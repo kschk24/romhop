@@ -247,3 +247,35 @@ def test_settings_save_reconciles_sync_toggle(qtbot, monkeypatch):
     win.settings_view.sync_check.setChecked(True)
     win.settings_view._on_save()
     assert win.sync_button.isChecked() is True
+
+
+def test_filter_bar_hidden_in_settings_shown_in_library(qtbot):
+    from romhop.gui.main_window import MainWindow
+    win = MainWindow(config.default_settings(), rom_provider=lambda: [])
+    qtbot.addWidget(win)
+    win.show()
+    qtbot.waitExposed(win)
+    assert win.filter_bar.isVisible()
+    win.show_settings()
+    assert not win.filter_bar.isVisible()
+    win.show_library()
+    assert win.filter_bar.isVisible()
+
+
+def test_load_library_populates_filter_platforms_and_downloaded(qtbot, monkeypatch, tmp_path):
+    from romhop.gui import main_window
+    from romhop.gui.main_window import MainWindow
+    from romhop.romm_client import Rom
+
+    rom = Rom(id=1, name="Sonic", platform_slug="genesis", fs_name="Sonic.md",
+              fs_name_no_ext="Sonic", file_names=["Sonic.md"], platform_name="Genesis")
+    monkeypatch.setattr(main_window, "downloaded_rom_ids", lambda roms, root, ov: {1})
+
+    settings = config.default_settings()
+    from dataclasses import replace
+    settings = replace(settings, roms_root=tmp_path)
+    win = MainWindow(settings, rom_provider=lambda: [rom])
+    qtbot.addWidget(win)
+    win.load_library()
+    assert win.filter_bar.platform_combo.itemText(1) == "Genesis"
+    assert win.library._downloaded_ids == {1}
