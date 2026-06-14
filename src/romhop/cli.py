@@ -18,7 +18,7 @@ from rich.progress import (
     TransferSpeedColumn,
 )
 
-from romhop import config
+from romhop import config, retroarch_cfg
 
 
 @contextmanager
@@ -45,8 +45,9 @@ def _download_progress(label: str):
 from romhop.download import download_rom
 from romhop.library import norm
 from romhop.local_index import index_local_library, match_to_roms
-from romhop.mapping_cache import MappingCache, seed_entry
+from romhop.mapping_cache import MappingCache, RomEntry, seed_entry
 from romhop.platform_map import esde_system_for_slug
+from romhop.pull import pull_games
 from romhop.romm_client import Rom, RommClient
 from romhop.sync import watch_and_push
 
@@ -260,6 +261,24 @@ def _select_match(name: str, matches: list[Rom]) -> Rom:
     raise typer.Exit(code=2)
 
 
+def _select_entries_by_name(entries: list[RomEntry], name: str) -> list[RomEntry]:
+    """Pick cached entries by game name: exact (case-insensitive) preferred,
+    else unique substring. Aborts (exit 2) on ambiguity, exit 1 on no match."""
+    matches = [e for e in entries if name.lower() in e.game_name.lower()]
+    if not matches:
+        typer.echo(f"No cached game matching '{name}'.", err=True)
+        raise typer.Exit(code=1)
+    exact = [e for e in matches if e.game_name.lower() == name.lower()]
+    if len(exact) == 1:
+        return exact
+    if len(matches) == 1:
+        return matches
+    typer.echo(f"{len(matches)} cached games match '{name}'. Be more specific:", err=True)
+    for e in matches:
+        typer.echo(f"  {e.game_name}", err=True)
+    raise typer.Exit(code=2)
+
+
 def _client() -> RommClient:
     settings = config.load_settings()
     token = config.get_token()
@@ -285,6 +304,33 @@ def login(url: str = typer.Option(..., "--url"),
     typer.echo(f"Saved RomM URL {url} and token.")
 
 
+def _retroarch_cfg_values(current) -> tuple[Path | None, Path | None, bool, bool]:
+    """Detect RetroArch's saves/states dirs AND per-core sort flags from retroarch.cfg.
+
+    Windows: prompt for the install folder (no reliable auto-location for a
+    portable install) and read its retroarch.cfg. Other OSes: auto-locate the
+    standard ~/.config/retroarch/retroarch.cfg. Dirs may be None when the cfg is
+    absent or the directory is unset/'default'; flags default to False.
+    """
+    if sys.platform.startswith("win"):
+        appdata = os.environ.get("APPDATA")
+        guess = Path(appdata) / "RetroArch" if appdata else None
+        folder = typer.prompt(
+            "RetroArch installation folder (where retroarch.cfg lives)",
+            default=str(guess) if guess and guess.exists() else None,
+        )
+        folder = Path(folder).expanduser()
+        saves, states = retroarch_cfg.save_dirs_from_install(folder)
+        sort_saves, sort_states = retroarch_cfg.parse_sort_flags(folder / "retroarch.cfg")
+        return (saves, states, sort_saves, sort_states)
+    cfg = retroarch_cfg.default_cfg_path()
+    if cfg is None:
+        return (None, None, False, False)
+    saves, states = retroarch_cfg.parse_save_dirs(cfg)
+    sort_saves, sort_states = retroarch_cfg.parse_sort_flags(cfg)
+    return (saves, states, sort_saves, sort_states)
+
+
 @app.command()
 def setup():
     """Interactive first-time setup: RomM URL + token and the local ROM/save paths."""
@@ -301,16 +347,23 @@ def setup():
         "Local ROMs folder (your ES-DE library root)",
         default=str(current.roms_root) if config.roms_root_configured(current) else None,
     )
-    # saves/states default to the standard per-OS RetroArch paths — usually correct,
-    # so only prompt for them if the user opts in.
-    typer.echo(f"RetroArch saves:  {current.saves_dir}")
-    typer.echo(f"RetroArch states: {current.states_dir}")
-    if typer.confirm("Change the saves/states folders?", default=False):
-        saves = typer.prompt("RetroArch saves folder", default=str(current.saves_dir))
-        states = typer.prompt("RetroArch states folder", default=str(current.states_dir))
+    # Detect the saves/states folders from retroarch.cfg. When both are found we
+    # show them and let the user override; if either is unknown we re-prompt.
+    det_saves, det_states, sort_saves, sort_states = _retroarch_cfg_values(current)
+    if det_saves is not None and det_states is not None:
+        typer.echo(f"RetroArch saves:  {det_saves}")
+        typer.echo(f"RetroArch states: {det_states}")
+        if typer.confirm("Change the saves/states folders?", default=False):
+            saves = typer.prompt("RetroArch saves folder", default=str(det_saves))
+            states = typer.prompt("RetroArch states folder", default=str(det_states))
+        else:
+            saves = str(det_saves)
+            states = str(det_states)
     else:
-        saves = str(current.saves_dir)
-        states = str(current.states_dir)
+        saves = typer.prompt("RetroArch saves folder",
+                             default=str(det_saves or current.saves_dir))
+        states = typer.prompt("RetroArch states folder",
+                              default=str(det_states or current.states_dir))
 
     if token.strip():
         config.set_token(token.strip())
@@ -322,6 +375,8 @@ def setup():
     current.roms_root = Path(roms).expanduser()
     current.saves_dir = Path(saves).expanduser()
     current.states_dir = Path(states).expanduser()
+    current.sort_saves_by_core = sort_saves
+    current.sort_states_by_core = sort_states
     config.save_settings(current)
     typer.echo(f"Setup complete. Settings saved to {config.settings_path()}")
     if typer.confirm("Scan your ROMs folder now to enable save sync for existing games?",
@@ -409,6 +464,49 @@ def sync():
             f"Set a core mapping: romhop config set-core '{p.parent.name}' <system>",
             err=True),
     )
+
+
+@app.command()
+def pull(name: str = typer.Argument(None, help="Game name (omit and use --all for everything)"),
+         all_games: bool = typer.Option(False, "-a", "--all", help="Pull every cached game."),
+         remote: bool = typer.Option(False, "--remote", help="On conflict, always take RomM's version (no prompt).")):
+    """Download saves/states from RomM into the local RetroArch layout."""
+    if not name and not all_games:
+        typer.echo("Name a game or pass --all.", err=True)
+        raise typer.Exit(code=2)
+    settings = config.load_settings()
+    client = _client()
+    cache = MappingCache(_cache_path())
+    entries = cache.entries()
+    if not entries:
+        typer.echo("No cached games. Run: romhop scan", err=True)
+        raise typer.Exit(code=1)
+    if all_games:
+        targets = entries
+    else:
+        targets = _select_entries_by_name(entries, name)
+
+    def on_conflict(item, local_path, local_mtime):
+        typer.echo(f"{item.file_name}: local {local_mtime:%Y-%m-%d %H:%M} "
+                   f"vs RomM {item.remote_updated}")
+        return typer.confirm("Take RomM's version? (n = keep local)", default=False)
+
+    try:
+        summary = pull_games(client, targets, settings, take_remote=remote,
+                             on_conflict=on_conflict,
+                             on_written=lambda p: typer.echo(f"Pulled {p.name}"),
+                             on_error=lambda p, exc: typer.echo(
+                                 f"Could not write {p}: {exc}", err=True))
+    except httpx.HTTPStatusError as exc:
+        _exit_http(exc)
+    except httpx.HTTPError as exc:
+        typer.echo(f"Could not reach RomM: {exc}", err=True)
+        raise typer.Exit(code=1)
+    line = (f"Pulled {summary['written']}, skipped {summary['skipped']} "
+            f"(up to date), kept {summary['kept']} local.")
+    if summary.get("failed"):
+        line += f" {summary['failed']} failed."
+    typer.echo(line)
 
 
 def _run_scan(settings, *, assume_yes: bool) -> None:

@@ -39,6 +39,10 @@ class MappingCache:
         return [e for e in self._entries
                 if any(norm(b) == key for b in e.candidate_basenames)]
 
+    def entries(self) -> list[RomEntry]:
+        """All cached entries (copy of the internal list)."""
+        return list(self._entries)
+
     def find_by_basename(self, basename: str, system: str | None = None) -> RomEntry | None:
         """Resolve a save basename to one entry, or None if absent or ambiguous.
 

@@ -224,6 +224,8 @@ def test_setup_writes_settings_and_token(monkeypatch):
     monkeypatch.setattr(cli.config, "set_token", lambda t: stored.setdefault("t", t))
     monkeypatch.setattr(cli.config, "save_settings", lambda s: saved.setdefault("s", s))
     monkeypatch.setattr(cli, "_run_scan", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_retroarch_cfg_values",
+                        lambda current: (current.saves_dir, current.states_dir, False, False))
 
     # url, token, roms, then "N" to keep the saves/states defaults, "N" to skip scan
     result = runner.invoke(
@@ -246,6 +248,8 @@ def test_setup_changes_saves_states_when_confirmed(monkeypatch):
     monkeypatch.setattr(cli.config, "set_token", lambda t: None)
     monkeypatch.setattr(cli.config, "save_settings", lambda s: saved.setdefault("s", s))
     monkeypatch.setattr(cli, "_run_scan", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_retroarch_cfg_values",
+                        lambda current: (current.saves_dir, current.states_dir, False, False))
 
     # url, token, roms, "y" to change, then custom saves + states, "N" to skip scan
     result = runner.invoke(
@@ -267,6 +271,8 @@ def test_setup_keeps_existing_token_when_blank(monkeypatch):
     monkeypatch.setattr(cli.config, "set_token", lambda t: set_calls.append(t))
     monkeypatch.setattr(cli.config, "save_settings", lambda s: None)
     monkeypatch.setattr(cli, "_run_scan", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_retroarch_cfg_values",
+                        lambda current: (current.saves_dir, current.states_dir, False, False))
 
     # accept url default, blank token (keep existing), new roms, "N" keep saves/states, "N" skip scan
     result = runner.invoke(cli.app, ["setup"], input="\n\n/tmp/new\nN\nN\n")
@@ -354,6 +360,8 @@ def test_setup_offers_scan_at_end(monkeypatch, tmp_path):
     monkeypatch.setattr(cli.config, "save_settings", lambda s: None)
     ran = {"scan": False}
     monkeypatch.setattr(cli, "_run_scan", lambda s, *, assume_yes: ran.__setitem__("scan", assume_yes))
+    monkeypatch.setattr(cli, "_retroarch_cfg_values",
+                        lambda current: (current.saves_dir, current.states_dir, False, False))
 
     # url, token, roms, "N" keep saves/states, then "y" to scan now
     result = runner.invoke(
@@ -372,6 +380,8 @@ def test_setup_skips_scan_when_declined(monkeypatch, tmp_path):
     monkeypatch.setattr(cli.config, "save_settings", lambda s: None)
     ran = {"scan": 0}
     monkeypatch.setattr(cli, "_run_scan", lambda s, *, assume_yes: ran.__setitem__("scan", ran["scan"] + 1))
+    monkeypatch.setattr(cli, "_retroarch_cfg_values",
+                        lambda current: (current.saves_dir, current.states_dir, False, False))
 
     result = runner.invoke(
         cli.app, ["setup"],
@@ -401,3 +411,156 @@ def test_download_skips_when_already_local(monkeypatch, tmp_path):
     assert "Already local" in result.output
     from romhop.mapping_cache import MappingCache
     assert MappingCache(tmp_path / "cache.json").find_by_basename("Sonic (USA)").rom_id == 7
+
+
+def test_setup_uses_detected_cfg_dirs(monkeypatch):
+    settings = cli.config.default_settings()
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "get_token", lambda: None)
+    monkeypatch.setattr(cli.config, "set_token", lambda t: None)
+    saved = {}
+    monkeypatch.setattr(cli.config, "save_settings", lambda s: saved.setdefault("s", s))
+    monkeypatch.setattr(cli, "_run_scan", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_retroarch_cfg_values",
+                        lambda current: (Path("/tmp/sv"), Path("/tmp/st"), False, False))
+
+    # url, token, roms, "N" keep detected saves/states, "N" skip scan
+    result = runner.invoke(cli.app, ["setup"],
+                           input="http://romm.test\nrmm_x\n/tmp/MyROMs\nN\nN\n")
+    assert result.exit_code == 0, result.output
+    assert saved["s"].saves_dir == Path("/tmp/sv")
+    assert saved["s"].states_dir == Path("/tmp/st")
+
+
+def test_setup_reprompts_when_cfg_unset(monkeypatch):
+    settings = cli.config.default_settings()
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "get_token", lambda: None)
+    monkeypatch.setattr(cli.config, "set_token", lambda t: None)
+    saved = {}
+    monkeypatch.setattr(cli.config, "save_settings", lambda s: saved.setdefault("s", s))
+    monkeypatch.setattr(cli, "_run_scan", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_retroarch_cfg_values", lambda current: (None, None, False, False))
+
+    # url, token, roms, saves (re-prompt), states (re-prompt), "N" skip scan
+    result = runner.invoke(
+        cli.app, ["setup"],
+        input="http://romm.test\nrmm_x\n/tmp/MyROMs\n/tmp/sv\n/tmp/st\nN\n")
+    assert result.exit_code == 0, result.output
+    assert saved["s"].saves_dir == Path("/tmp/sv")
+    assert saved["s"].states_dir == Path("/tmp/st")
+
+
+def test_setup_windows_prompts_install_folder(monkeypatch):
+    settings = cli.config.default_settings()
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "get_token", lambda: None)
+    monkeypatch.setattr(cli.config, "set_token", lambda t: None)
+    saved = {}
+    monkeypatch.setattr(cli.config, "save_settings", lambda s: saved.setdefault("s", s))
+    monkeypatch.setattr(cli, "_run_scan", lambda *a, **k: None)
+    # Force the Windows branch and a known cfg result regardless of the folder typed.
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.delenv("APPDATA", raising=False)
+    monkeypatch.setattr(cli.retroarch_cfg, "save_dirs_from_install",
+                        lambda folder: (Path("D:/RA/saves"), Path("D:/RA/states")))
+
+    # url, token, roms, install-folder, "N" keep detected, "N" skip scan
+    result = runner.invoke(
+        cli.app, ["setup"],
+        input="http://romm.test\nrmm_x\n/tmp/MyROMs\nD:/Programme/RetroArch\nN\nN\n")
+    assert result.exit_code == 0, result.output
+    assert saved["s"].saves_dir == Path("D:/RA/saves")
+    assert saved["s"].states_dir == Path("D:/RA/states")
+
+
+def test_setup_stores_sort_flags(monkeypatch):
+    settings = cli.config.default_settings()
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "get_token", lambda: None)
+    monkeypatch.setattr(cli.config, "set_token", lambda t: None)
+    saved = {}
+    monkeypatch.setattr(cli.config, "save_settings", lambda s: saved.setdefault("s", s))
+    monkeypatch.setattr(cli, "_run_scan", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_retroarch_cfg_values",
+                        lambda current: (Path("/tmp/sv"), Path("/tmp/st"), True, True))
+
+    result = runner.invoke(cli.app, ["setup"],
+                           input="http://romm.test\nrmm_x\n/tmp/MyROMs\nN\nN\n")
+    assert result.exit_code == 0, result.output
+    assert saved["s"].sort_saves_by_core is True
+    assert saved["s"].sort_states_by_core is True
+
+
+def test_pull_requires_name_or_all(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    _fake_client(monkeypatch, [])
+    monkeypatch.setattr(cli, "_cache_path", lambda: tmp_path / "cache.json")
+    from romhop.mapping_cache import MappingCache, RomEntry
+    c = MappingCache(tmp_path / "cache.json")
+    c.add(RomEntry(rom_id=1, system="genesis", game_name="Sonic", candidate_basenames={"Sonic"}))
+    c.save()
+    result = runner.invoke(cli.app, ["pull"])
+    assert result.exit_code == 2
+    assert "name a game" in result.output.lower() or "--all" in result.output.lower()
+
+
+def test_pull_empty_cache_exits_1(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    _fake_client(monkeypatch, [])
+    monkeypatch.setattr(cli, "_cache_path", lambda: tmp_path / "cache.json")
+    result = runner.invoke(cli.app, ["pull", "--all"])
+    assert result.exit_code == 1
+    assert "scan" in result.output.lower()
+
+
+def test_pull_all_invokes_pull_games(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    _fake_client(monkeypatch, [])
+    monkeypatch.setattr(cli, "_cache_path", lambda: tmp_path / "cache.json")
+    from romhop.mapping_cache import MappingCache, RomEntry
+    c = MappingCache(tmp_path / "cache.json")
+    c.add(RomEntry(rom_id=1, system="genesis", game_name="Sonic", candidate_basenames={"Sonic"}))
+    c.save()
+    captured = {}
+    def fake_pull(client, entries, settings, *, take_remote, on_conflict, on_written, on_error):
+        captured["ids"] = [e.rom_id for e in entries]
+        captured["take_remote"] = take_remote
+        return {"written": 0, "skipped": 0, "kept": 0}
+    monkeypatch.setattr(cli, "pull_games", fake_pull)
+    result = runner.invoke(cli.app, ["pull", "--all", "--remote"])
+    assert result.exit_code == 0, result.output
+    assert captured["ids"] == [1]
+    assert captured["take_remote"] is True
+
+
+def test_pull_name_selects_one(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    _fake_client(monkeypatch, [])
+    monkeypatch.setattr(cli, "_cache_path", lambda: tmp_path / "cache.json")
+    from romhop.mapping_cache import MappingCache, RomEntry
+    c = MappingCache(tmp_path / "cache.json")
+    c.add(RomEntry(rom_id=1, system="genesis", game_name="Sonic", candidate_basenames={"Sonic"}))
+    c.add(RomEntry(rom_id=2, system="snes", game_name="Mario", candidate_basenames={"Mario"}))
+    c.save()
+    captured = {}
+    def fake_pull(client, entries, settings, *, take_remote, on_conflict, on_written, on_error):
+        captured["ids"] = [e.rom_id for e in entries]
+        return {"written": 0, "skipped": 0, "kept": 0}
+    monkeypatch.setattr(cli, "pull_games", fake_pull)
+    result = runner.invoke(cli.app, ["pull", "Sonic"])
+    assert result.exit_code == 0, result.output
+    assert captured["ids"] == [1]
+
+
+def test_pull_name_no_match_exits_1(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    _fake_client(monkeypatch, [])
+    monkeypatch.setattr(cli, "_cache_path", lambda: tmp_path / "cache.json")
+    from romhop.mapping_cache import MappingCache, RomEntry
+    c = MappingCache(tmp_path / "cache.json")
+    c.add(RomEntry(rom_id=1, system="genesis", game_name="Sonic", candidate_basenames={"Sonic"}))
+    c.save()
+    result = runner.invoke(cli.app, ["pull", "Zelda"])
+    assert result.exit_code == 1
+    assert "no cached game" in result.output.lower()

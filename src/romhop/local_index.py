@@ -4,7 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from romhop.library import NOLOAD_SENTINEL, candidate_basenames, norm
+from romhop.library import candidate_basenames, norm
 from romhop.platform_map import esde_system_for_slug
 from romhop.romm_client import Rom
 
@@ -39,7 +39,7 @@ def index_local_library(roms_root: Path, overrides: dict[str, str]) -> list[Loca
             subfolder_names.add(sub.name)
             file_names = sorted(
                 f.name for f in sub.iterdir()
-                if f.is_file() and f.name != NOLOAD_SENTINEL
+                if f.is_file() and f.suffix.lower() != ".txt"
             )
             games.append(LocalGame(
                 system=system,
@@ -49,6 +49,10 @@ def index_local_library(roms_root: Path, overrides: dict[str, str]) -> list[Loca
             ))
         # Flat files + orphan .m3u files directly in <system>/.
         for f in sorted(p for p in system_dir.iterdir() if p.is_file()):
+            # A .txt is never a rom or a save (ES-DE systeminfo.txt, noload.txt,
+            # readme/promo sidecars) — skip it everywhere.
+            if f.suffix.lower() == ".txt":
+                continue
             if f.suffix.lower() == ".m3u":
                 # Pairs with a subfolder we already emitted; only emit if orphaned.
                 if f.stem not in subfolder_names:

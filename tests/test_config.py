@@ -83,3 +83,22 @@ def test_settings_theme_defaults_and_roundtrips(tmp_path):
     config.save_settings(s, path)
     loaded = config.load_settings(path)
     assert loaded.theme == "neon"
+
+
+def test_sort_flags_round_trip(tmp_path):
+    from romhop import config
+    s = config.default_settings()
+    s.sort_saves_by_core = True
+    s.sort_states_by_core = True
+    p = tmp_path / "settings.json"
+    config.save_settings(s, p)
+    loaded = config.load_settings(p)
+    assert loaded.sort_saves_by_core is True
+    assert loaded.sort_states_by_core is True
+
+
+def test_sort_flags_default_false(tmp_path):
+    from romhop import config
+    s = config.default_settings()
+    assert s.sort_saves_by_core is False
+    assert s.sort_states_by_core is False

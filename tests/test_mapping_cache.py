@@ -58,3 +58,12 @@ def test_find_by_basename_disambiguates_by_system(tmp_path):
     assert cache.find_by_basename("Sonic", system="snes").rom_id == 2
     # ambiguous without a system hint
     assert cache.find_by_basename("Sonic") is None
+
+
+def test_entries_returns_all(tmp_path):
+    cache = MappingCache(tmp_path / "c.json")
+    cache.add(RomEntry(rom_id=1, system="genesis", game_name="Sonic",
+                       candidate_basenames={"Sonic"}))
+    cache.add(RomEntry(rom_id=2, system="snes", game_name="Mario",
+                       candidate_basenames={"Mario"}))
+    assert {e.rom_id for e in cache.entries()} == {1, 2}

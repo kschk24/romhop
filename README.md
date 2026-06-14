@@ -42,9 +42,11 @@ romhop login --url https://romm.example --token rmm_xxx
 romhop config set roms_root ~/Games/Emulation
 ```
 
-The RetroArch saves/states folders default to the standard per-OS RetroArch
-paths, which are usually correct. The ROMs root has no universal default and
-must be set.
+`setup` reads your RetroArch `retroarch.cfg` to fill in the saves/states folders:
+on Linux/macOS it auto-locates `~/.config/retroarch/retroarch.cfg`; on Windows it
+asks for your RetroArch installation folder (where `retroarch.cfg` lives, e.g. a
+portable `D:\RetroArch`). If the cfg doesn't specify them, it prompts. The ROMs
+root has no universal default and must be set.
 
 As its last step, `setup` offers to scan your ROMs folder (see below) so games
 already on disk become save-syncable immediately.
@@ -65,6 +67,20 @@ Watch RetroArch saves/states and push changes to RomM until interrupted:
 ```
 romhop sync
 ```
+
+Restore saves/states from RomM into your local RetroArch layout:
+
+```
+romhop pull "Sonic"          # one game
+romhop pull --all            # every game in the mapping cache
+romhop pull --all --remote   # bulk restore, always take RomM's version
+```
+
+`pull` writes a save only when it's new or you choose it: an unchanged save is
+skipped, and a differing local save prompts you (showing both dates) to keep
+local or take RomM's — unless `--remote` is set. New saves are placed by your
+RetroArch sort setting (per-core subfolder or flat), read from `retroarch.cfg`
+during `setup`. Needs the RomM token to have `assets.read` scope.
 
 ## GUI
 

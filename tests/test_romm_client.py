@@ -158,3 +158,23 @@ def test_list_roms_captures_url_cover():
     client = RommClient(httpx.Client(base_url="http://romm.test", transport=httpx.MockTransport(handler)))
     roms = client.list_roms()
     assert roms[0].url_cover == "/assets/covers/1.png"
+
+
+def test_list_states_queries_rom_id():
+    seen = {}
+    def handler(request):
+        seen["path"] = request.url.path
+        seen["rom_id"] = request.url.params.get("rom_id")
+        return httpx.Response(200, json=[{"id": 3, "file_name": "Sonic.state1",
+                                          "emulator": "genesis", "updated_at": "2026-06-01T10:00:00"}])
+    states = _client(handler).list_states(18)
+    assert seen["path"] == "/api/states"
+    assert seen["rom_id"] == "18"
+    assert states[0]["file_name"] == "Sonic.state1"
+
+
+def test_download_state_content_returns_bytes():
+    def handler(request):
+        assert request.url.path == "/api/states/3/content"
+        return httpx.Response(200, content=b"STATEBYTES")
+    assert _client(handler).download_state_content(3) == b"STATEBYTES"
