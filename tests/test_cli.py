@@ -564,3 +564,31 @@ def test_pull_name_no_match_exits_1(monkeypatch, tmp_path):
     result = runner.invoke(cli.app, ["pull", "Zelda"])
     assert result.exit_code == 1
     assert "no cached game" in result.output.lower()
+
+
+def test_download_ambiguous_lists_platform(monkeypatch, tmp_path):
+    settings = cli.config.default_settings()
+    settings.roms_root = tmp_path
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "roms_root_configured", lambda s: True)
+
+    class FakeClient:
+        def list_roms(self, search_term=None):
+            return [
+                Rom(id=1, name="Super Mario Land", platform_slug="gb",
+                    fs_name="a", fs_name_no_ext="a", file_names=[],
+                    platform_name="Game Boy"),
+                Rom(id=2, name="Super Mario Land 2: 6 Golden Coins",
+                    platform_slug="gb", fs_name="b", fs_name_no_ext="b",
+                    file_names=[], platform_name="Game Boy"),
+            ]
+
+    monkeypatch.setattr(cli, "_client", lambda: FakeClient())
+    monkeypatch.setattr(cli, "_cache_path", lambda: tmp_path / "map.json")
+    monkeypatch.setattr(cli, "_platform_names_path", lambda: tmp_path / "names.json")
+
+    result = runner.invoke(cli.app, ["download", "Super Mario"])
+    combined = result.output + result.stderr
+    assert result.exit_code == 2
+    assert "Super Mario Land - Game Boy" in combined
+    assert "Super Mario Land 2: 6 Golden Coins - Game Boy" in combined

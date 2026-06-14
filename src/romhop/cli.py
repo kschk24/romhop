@@ -19,6 +19,7 @@ from rich.progress import (
 )
 
 from romhop import config, retroarch_cfg
+from romhop.platform_names import PlatformNames, display_name
 
 
 @contextmanager
@@ -256,8 +257,9 @@ def _select_match(name: str, matches: list[Rom]) -> Rom:
     if len(exact) == 1:
         return exact[0]
     typer.echo(f"{len(matches)} games match '{name}'. Be more specific (or use the exact name):", err=True)
+    names = PlatformNames(_platform_names_path())
     for r in matches:
-        typer.echo(f"  {r.name}", err=True)
+        typer.echo(f"  {r.name} - {display_name(r, names)}", err=True)
     raise typer.Exit(code=2)
 
 
@@ -291,6 +293,11 @@ def _client() -> RommClient:
 def _cache_path() -> Path:
     import platformdirs
     return Path(platformdirs.user_data_dir("romhop")) / "mapping_cache.json"
+
+
+def _platform_names_path() -> Path:
+    import platformdirs
+    return Path(platformdirs.user_data_dir("romhop")) / "platform_names.json"
 
 
 @app.command()
@@ -414,6 +421,7 @@ def download(name: str = typer.Argument(..., help="Game name (substring match)")
     except httpx.HTTPError as exc:
         typer.echo(f"Could not reach RomM: {exc}", err=True)
         raise typer.Exit(code=1)
+    PlatformNames(_platform_names_path()).update_from_roms(roms)
     matches = [r for r in roms if name.lower() in r.name.lower()]
     if not matches:
         typer.echo(f"No game matching '{name}'.", err=True)
@@ -520,6 +528,7 @@ def _run_scan(settings, *, assume_yes: bool) -> None:
     except httpx.HTTPError as exc:
         typer.echo(f"Could not reach RomM: {exc}", err=True)
         raise typer.Exit(code=1)
+    PlatformNames(_platform_names_path()).update_from_roms(roms)
 
     locals_ = index_local_library(settings.roms_root, settings.platform_overrides)
     result = match_to_roms(locals_, roms, settings.platform_overrides)
