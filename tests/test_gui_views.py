@@ -248,3 +248,18 @@ def test_downloaded_filter_hides_missing(qtbot):
     view.set_downloaded({a.id})
     view.set_downloaded_filter("downloaded")
     assert {rom.name for _, rom in view._checks.values()} == {"Sonic"}
+
+
+def test_set_roms_clears_stale_downloaded_ids(qtbot):
+    from romhop.gui.library_view import LibraryView
+    view = LibraryView()
+    qtbot.addWidget(view)
+    a = _rom("Sonic", "genesis")
+    view.set_roms([a])
+    view.set_downloaded({a.id})
+    assert a.id in view._ribbons
+    # Reload with a different library; the old downloaded id must not persist.
+    b = _rom("Mario", "nes")
+    view.set_roms([b])
+    assert view._downloaded_ids == set()
+    assert view._ribbons == {}

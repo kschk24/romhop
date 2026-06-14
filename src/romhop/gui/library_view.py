@@ -108,6 +108,7 @@ class LibraryView(QWidget):
         self._roms = roms
         # Fresh library: drop any selection that referred to the old rom set.
         self._selected_ids.clear()
+        self._downloaded_ids = set()
         self._platform_filter = None
         self._downloaded_mode = "all"
         self._sort = "asc"
