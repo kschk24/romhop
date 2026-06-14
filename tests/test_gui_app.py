@@ -23,6 +23,28 @@ def test_main_window_toggles_to_settings(qtbot):
     assert win.current_view_name() == "library"
 
 
+def test_gear_toggles_back_out_of_settings(qtbot):
+    from romhop.gui.main_window import MainWindow
+
+    win = MainWindow(settings=config.default_settings())
+    qtbot.addWidget(win)
+    win.toggle_settings()
+    assert win.current_view_name() == "settings"
+    # Gear pressed again returns to the library (no save required).
+    win.toggle_settings()
+    assert win.current_view_name() == "library"
+
+
+def test_cancelling_settings_returns_to_library(qtbot):
+    from romhop.gui.main_window import MainWindow
+
+    win = MainWindow(settings=config.default_settings())
+    qtbot.addWidget(win)
+    win.show_settings()
+    win.settings_view.cancelled.emit()
+    assert win.current_view_name() == "library"
+
+
 def test_load_library_populates_view(qtbot):
     from romhop.gui.main_window import MainWindow
     from romhop.romm_client import Rom

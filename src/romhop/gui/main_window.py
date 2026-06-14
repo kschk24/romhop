@@ -41,7 +41,7 @@ class MainWindow(QWidget):
         self.search = QLineEdit()
         self.search.setPlaceholderText("Search…")
         gear = QPushButton("⚙")
-        gear.clicked.connect(self.show_settings)
+        gear.clicked.connect(self.toggle_settings)
         top = QHBoxLayout()
         top.addWidget(self.search, 1)
         top.addWidget(gear, 0)
@@ -51,6 +51,7 @@ class MainWindow(QWidget):
         self.search.textChanged.connect(self.library.filter)
         self.settings_view = SettingsView(settings)
         self.settings_view.saved.connect(self.show_library)
+        self.settings_view.cancelled.connect(self.show_library)
         self.stack = QStackedWidget()
         self.stack.addWidget(self.library)      # index 0
         self.stack.addWidget(self.settings_view)  # index 1
@@ -78,10 +79,21 @@ class MainWindow(QWidget):
 
     # --- view switching (named for testability) ---
     def show_settings(self) -> None:
+        # Drop any stale edits from a previous visit before showing the form.
+        self.settings_view.reset()
+        self.settings_view.setFocus()
         self.stack.setCurrentIndex(1)
 
     def show_library(self) -> None:
         self.stack.setCurrentIndex(0)
+
+    def toggle_settings(self) -> None:
+        # Gear acts as a toggle: into settings, or back out (discarding edits).
+        if self.current_view_name() == "settings":
+            self.settings_view.reset()
+            self.show_library()
+        else:
+            self.show_settings()
 
     def current_view_name(self) -> str:
         return "library" if self.stack.currentIndex() == 0 else "settings"

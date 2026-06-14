@@ -3,9 +3,10 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFormLayout,
+    QHBoxLayout,
     QLineEdit,
     QPushButton,
     QVBoxLayout,
@@ -50,6 +51,7 @@ class SettingsView(QWidget):
     """Form over the editable config keys. Saves via config.save_settings."""
 
     saved = Signal()
+    cancelled = Signal()
 
     def __init__(self, settings: Settings, parent=None):
         super().__init__(parent)
@@ -63,12 +65,35 @@ class SettingsView(QWidget):
             self._edits[field] = edit
             form.addRow(field, edit)
 
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self._on_cancel)
         save_btn = QPushButton("Save")
         save_btn.clicked.connect(self._on_save)
 
+        buttons = QHBoxLayout()
+        buttons.addWidget(cancel_btn)
+        buttons.addWidget(save_btn)
+
         layout = QVBoxLayout(self)
         layout.addLayout(form)
-        layout.addWidget(save_btn)
+        layout.addLayout(buttons)
+
+    def reset(self) -> None:
+        """Repopulate fields from the saved settings, discarding edits."""
+        rows = settings_to_rows(self._settings)
+        for field, edit in self._edits.items():
+            edit.setText(rows[field])
+
+    def keyPressEvent(self, event) -> None:
+        # Esc backs out of settings without saving.
+        if event.key() == Qt.Key.Key_Escape:
+            self._on_cancel()
+            return
+        super().keyPressEvent(event)
+
+    def _on_cancel(self) -> None:
+        self.reset()
+        self.cancelled.emit()
 
     def _on_save(self) -> None:
         # TODO(validation): float()/Path() in apply_rows can raise on bad input;

@@ -33,3 +33,42 @@ def test_settings_view_builds_with_all_fields(qtbot):
     view = SettingsView(s)
     qtbot.addWidget(view)
     assert set(view._edits.keys()) == set(EDITABLE_FIELDS)
+
+
+def test_settings_view_cancel_discards_edits_and_emits(qtbot):
+    from romhop.gui.settings_view import SettingsView
+    s = config.default_settings()
+    s.romm_url = "https://original"
+    view = SettingsView(s)
+    qtbot.addWidget(view)
+    # User types a change but then cancels.
+    view._edits["romm_url"].setText("https://edited")
+    with qtbot.waitSignal(view.cancelled, timeout=1000):
+        view._on_cancel()
+    # Edited text is reverted to the original (changes discarded).
+    assert view._edits["romm_url"].text() == "https://original"
+
+
+def test_settings_view_reset_repopulates_from_settings(qtbot):
+    from romhop.gui.settings_view import SettingsView
+    s = config.default_settings()
+    s.romm_url = "https://original"
+    view = SettingsView(s)
+    qtbot.addWidget(view)
+    view._edits["romm_url"].setText("https://stale")
+    view.reset()
+    assert view._edits["romm_url"].text() == "https://original"
+
+
+def test_settings_view_escape_key_cancels(qtbot):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeyEvent
+    from PySide6.QtWidgets import QApplication
+    from romhop.gui.settings_view import SettingsView
+    s = config.default_settings()
+    view = SettingsView(s)
+    qtbot.addWidget(view)
+    with qtbot.waitSignal(view.cancelled, timeout=1000):
+        ev = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Escape,
+                       Qt.KeyboardModifier.NoModifier)
+        QApplication.sendEvent(view, ev)
