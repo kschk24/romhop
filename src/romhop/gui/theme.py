@@ -29,6 +29,13 @@ def render_qss(base_qss: str, tokens: dict[str, str]) -> str:
 
     Theme tokens override defaults; any token the theme omits uses its default,
     guaranteeing no raw placeholder survives.
+
+    TODO: token values are substituted verbatim. A value containing `}` or a
+    newline could close the current QSS rule and inject arbitrary styling
+    (UI spoofing only, no code execution). Acceptable while themes are local
+    drop-ins the user installs themselves; sanitize values before this becomes
+    an installable-from-untrusted-source path (same trust boundary as the
+    Zip Slip TODO in install_theme).
     """
     merged = {**DEFAULT_TOKENS, **tokens}
     out = base_qss
