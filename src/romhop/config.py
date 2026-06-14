@@ -20,6 +20,8 @@ class Settings:
     states_dir: Path
     platform_overrides: dict[str, str] = field(default_factory=dict)
     core_overrides: dict[str, str] = field(default_factory=dict)
+    sort_saves_by_core: bool = False
+    sort_states_by_core: bool = False
     sync_delay_seconds: float = 8.0
 
 
@@ -84,6 +86,8 @@ def load_settings(path: Path | None = None) -> Settings:
         states_dir=Path(data["states_dir"]),
         platform_overrides=data.get("platform_overrides", {}),
         core_overrides=data.get("core_overrides", {}),
+        sort_saves_by_core=data.get("sort_saves_by_core", False),
+        sort_states_by_core=data.get("sort_states_by_core", False),
         sync_delay_seconds=data.get("sync_delay_seconds", 8.0),
     )
 
