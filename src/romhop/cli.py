@@ -285,13 +285,13 @@ def login(url: str = typer.Option(..., "--url"),
     typer.echo(f"Saved RomM URL {url} and token.")
 
 
-def _retroarch_save_dirs(current) -> tuple[Path | None, Path | None]:
-    """Detect RetroArch's saves/states dirs from retroarch.cfg.
+def _retroarch_cfg_values(current) -> tuple[Path | None, Path | None, bool, bool]:
+    """Detect RetroArch's saves/states dirs AND per-core sort flags from retroarch.cfg.
 
     Windows: prompt for the install folder (no reliable auto-location for a
     portable install) and read its retroarch.cfg. Other OSes: auto-locate the
-    standard ~/.config/retroarch/retroarch.cfg. Either path may be None when the
-    cfg is absent or the directory is unset/'default'.
+    standard ~/.config/retroarch/retroarch.cfg. Dirs may be None when the cfg is
+    absent or the directory is unset/'default'; flags default to False.
     """
     if sys.platform.startswith("win"):
         appdata = os.environ.get("APPDATA")
@@ -300,9 +300,16 @@ def _retroarch_save_dirs(current) -> tuple[Path | None, Path | None]:
             "RetroArch installation folder (where retroarch.cfg lives)",
             default=str(guess) if guess and guess.exists() else None,
         )
-        return retroarch_cfg.save_dirs_from_install(Path(folder).expanduser())
+        folder = Path(folder).expanduser()
+        saves, states = retroarch_cfg.save_dirs_from_install(folder)
+        sort_saves, sort_states = retroarch_cfg.parse_sort_flags(folder / "retroarch.cfg")
+        return (saves, states, sort_saves, sort_states)
     cfg = retroarch_cfg.default_cfg_path()
-    return retroarch_cfg.parse_save_dirs(cfg) if cfg else (None, None)
+    if cfg is None:
+        return (None, None, False, False)
+    saves, states = retroarch_cfg.parse_save_dirs(cfg)
+    sort_saves, sort_states = retroarch_cfg.parse_sort_flags(cfg)
+    return (saves, states, sort_saves, sort_states)
 
 
 @app.command()
@@ -323,7 +330,7 @@ def setup():
     )
     # Detect the saves/states folders from retroarch.cfg. When both are found we
     # show them and let the user override; if either is unknown we re-prompt.
-    det_saves, det_states = _retroarch_save_dirs(current)
+    det_saves, det_states, sort_saves, sort_states = _retroarch_cfg_values(current)
     if det_saves is not None and det_states is not None:
         typer.echo(f"RetroArch saves:  {det_saves}")
         typer.echo(f"RetroArch states: {det_states}")
@@ -349,6 +356,8 @@ def setup():
     current.roms_root = Path(roms).expanduser()
     current.saves_dir = Path(saves).expanduser()
     current.states_dir = Path(states).expanduser()
+    current.sort_saves_by_core = sort_saves
+    current.sort_states_by_core = sort_states
     config.save_settings(current)
     typer.echo(f"Setup complete. Settings saved to {config.settings_path()}")
     if typer.confirm("Scan your ROMs folder now to enable save sync for existing games?",

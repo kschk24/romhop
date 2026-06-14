@@ -224,8 +224,8 @@ def test_setup_writes_settings_and_token(monkeypatch):
     monkeypatch.setattr(cli.config, "set_token", lambda t: stored.setdefault("t", t))
     monkeypatch.setattr(cli.config, "save_settings", lambda s: saved.setdefault("s", s))
     monkeypatch.setattr(cli, "_run_scan", lambda *a, **k: None)
-    monkeypatch.setattr(cli, "_retroarch_save_dirs",
-                        lambda current: (current.saves_dir, current.states_dir))
+    monkeypatch.setattr(cli, "_retroarch_cfg_values",
+                        lambda current: (current.saves_dir, current.states_dir, False, False))
 
     # url, token, roms, then "N" to keep the saves/states defaults, "N" to skip scan
     result = runner.invoke(
@@ -248,8 +248,8 @@ def test_setup_changes_saves_states_when_confirmed(monkeypatch):
     monkeypatch.setattr(cli.config, "set_token", lambda t: None)
     monkeypatch.setattr(cli.config, "save_settings", lambda s: saved.setdefault("s", s))
     monkeypatch.setattr(cli, "_run_scan", lambda *a, **k: None)
-    monkeypatch.setattr(cli, "_retroarch_save_dirs",
-                        lambda current: (current.saves_dir, current.states_dir))
+    monkeypatch.setattr(cli, "_retroarch_cfg_values",
+                        lambda current: (current.saves_dir, current.states_dir, False, False))
 
     # url, token, roms, "y" to change, then custom saves + states, "N" to skip scan
     result = runner.invoke(
@@ -271,8 +271,8 @@ def test_setup_keeps_existing_token_when_blank(monkeypatch):
     monkeypatch.setattr(cli.config, "set_token", lambda t: set_calls.append(t))
     monkeypatch.setattr(cli.config, "save_settings", lambda s: None)
     monkeypatch.setattr(cli, "_run_scan", lambda *a, **k: None)
-    monkeypatch.setattr(cli, "_retroarch_save_dirs",
-                        lambda current: (current.saves_dir, current.states_dir))
+    monkeypatch.setattr(cli, "_retroarch_cfg_values",
+                        lambda current: (current.saves_dir, current.states_dir, False, False))
 
     # accept url default, blank token (keep existing), new roms, "N" keep saves/states, "N" skip scan
     result = runner.invoke(cli.app, ["setup"], input="\n\n/tmp/new\nN\nN\n")
@@ -360,8 +360,8 @@ def test_setup_offers_scan_at_end(monkeypatch, tmp_path):
     monkeypatch.setattr(cli.config, "save_settings", lambda s: None)
     ran = {"scan": False}
     monkeypatch.setattr(cli, "_run_scan", lambda s, *, assume_yes: ran.__setitem__("scan", assume_yes))
-    monkeypatch.setattr(cli, "_retroarch_save_dirs",
-                        lambda current: (current.saves_dir, current.states_dir))
+    monkeypatch.setattr(cli, "_retroarch_cfg_values",
+                        lambda current: (current.saves_dir, current.states_dir, False, False))
 
     # url, token, roms, "N" keep saves/states, then "y" to scan now
     result = runner.invoke(
@@ -380,8 +380,8 @@ def test_setup_skips_scan_when_declined(monkeypatch, tmp_path):
     monkeypatch.setattr(cli.config, "save_settings", lambda s: None)
     ran = {"scan": 0}
     monkeypatch.setattr(cli, "_run_scan", lambda s, *, assume_yes: ran.__setitem__("scan", ran["scan"] + 1))
-    monkeypatch.setattr(cli, "_retroarch_save_dirs",
-                        lambda current: (current.saves_dir, current.states_dir))
+    monkeypatch.setattr(cli, "_retroarch_cfg_values",
+                        lambda current: (current.saves_dir, current.states_dir, False, False))
 
     result = runner.invoke(
         cli.app, ["setup"],
@@ -421,8 +421,8 @@ def test_setup_uses_detected_cfg_dirs(monkeypatch):
     saved = {}
     monkeypatch.setattr(cli.config, "save_settings", lambda s: saved.setdefault("s", s))
     monkeypatch.setattr(cli, "_run_scan", lambda *a, **k: None)
-    monkeypatch.setattr(cli, "_retroarch_save_dirs",
-                        lambda current: (Path("/tmp/sv"), Path("/tmp/st")))
+    monkeypatch.setattr(cli, "_retroarch_cfg_values",
+                        lambda current: (Path("/tmp/sv"), Path("/tmp/st"), False, False))
 
     # url, token, roms, "N" keep detected saves/states, "N" skip scan
     result = runner.invoke(cli.app, ["setup"],
@@ -440,7 +440,7 @@ def test_setup_reprompts_when_cfg_unset(monkeypatch):
     saved = {}
     monkeypatch.setattr(cli.config, "save_settings", lambda s: saved.setdefault("s", s))
     monkeypatch.setattr(cli, "_run_scan", lambda *a, **k: None)
-    monkeypatch.setattr(cli, "_retroarch_save_dirs", lambda current: (None, None))
+    monkeypatch.setattr(cli, "_retroarch_cfg_values", lambda current: (None, None, False, False))
 
     # url, token, roms, saves (re-prompt), states (re-prompt), "N" skip scan
     result = runner.invoke(
@@ -472,3 +472,21 @@ def test_setup_windows_prompts_install_folder(monkeypatch):
     assert result.exit_code == 0, result.output
     assert saved["s"].saves_dir == Path("D:/RA/saves")
     assert saved["s"].states_dir == Path("D:/RA/states")
+
+
+def test_setup_stores_sort_flags(monkeypatch):
+    settings = cli.config.default_settings()
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli.config, "get_token", lambda: None)
+    monkeypatch.setattr(cli.config, "set_token", lambda t: None)
+    saved = {}
+    monkeypatch.setattr(cli.config, "save_settings", lambda s: saved.setdefault("s", s))
+    monkeypatch.setattr(cli, "_run_scan", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_retroarch_cfg_values",
+                        lambda current: (Path("/tmp/sv"), Path("/tmp/st"), True, True))
+
+    result = runner.invoke(cli.app, ["setup"],
+                           input="http://romm.test\nrmm_x\n/tmp/MyROMs\nN\nN\n")
+    assert result.exit_code == 0, result.output
+    assert saved["s"].sort_saves_by_core is True
+    assert saved["s"].sort_states_by_core is True
