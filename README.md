@@ -66,6 +66,22 @@ Watch RetroArch saves/states and push changes to RomM until interrupted:
 romhop sync
 ```
 
+## GUI
+
+A desktop GUI (PySide6) is available as an optional extra:
+
+```
+pip install 'romhop[gui]'
+romhop gui
+```
+
+It browses your RomM library, downloads games (single or multi-select), edits
+settings, and shows sync status — all in one window. The look is themeable: drop
+a `.romhop-theme` package (a zip of `manifest.json` + `tokens.json`, with
+optional `assets/` and `theme.qss`) into the romhop config dir under `themes/`,
+then set `theme` in your settings. A broken or partial theme falls back to the
+default, so it can never brick the UI.
+
 ## Scan existing games
 
 Match games already in your ROMs folder to your RomM library and seed the
