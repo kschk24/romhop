@@ -71,6 +71,8 @@ class SettingsView(QWidget):
         layout.addWidget(save_btn)
 
     def _on_save(self) -> None:
+        # TODO(validation): float()/Path() in apply_rows can raise on bad input;
+        # wrap in try/except and surface errors in the UI when validation lands.
         rows = {field: edit.text() for field, edit in self._edits.items()}
         self._settings = apply_rows(self._settings, rows)
         config.save_settings(self._settings)

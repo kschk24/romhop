@@ -23,6 +23,8 @@ def test_apply_rows_updates_settings():
     assert updated.romm_url == "https://x"
     assert str(updated.roms_root) == "/games"
     assert updated.sync_delay_seconds == 12.0
+    assert updated.theme == s.theme
+    assert updated.platform_overrides == s.platform_overrides
 
 
 def test_settings_view_builds_with_all_fields(qtbot):
