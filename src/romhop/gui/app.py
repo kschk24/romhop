@@ -25,8 +25,17 @@ def run() -> None:
     cache_path = Path(platformdirs.user_data_dir("romhop")) / "mapping_cache.json"
     cache = MappingCache(cache_path)
 
+    from romhop.platform_names import PlatformNames, display_name
+
+    names = PlatformNames(Path(platformdirs.user_data_dir("romhop")) / "platform_names.json")
+
+    def platform_label(rom):
+        return display_name(rom, names)
+
     def rom_provider():
-        return client.list_roms()
+        roms = client.list_roms()
+        names.update_from_roms(roms)
+        return roms
 
     def cover_provider(rom):
         return covers.get_cover(rom, client)
@@ -55,6 +64,7 @@ def run() -> None:
         download_action=download_action,
         sync_watch_fn=sync_watch_fn,
         cover_provider=cover_provider,
+        platform_label=platform_label,
     )
     window.resize(900, 600)
     # An unconfigured or unreachable RomM must not crash startup: open the
