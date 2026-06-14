@@ -45,8 +45,9 @@ def _download_progress(label: str):
 from romhop.download import download_rom
 from romhop.library import norm
 from romhop.local_index import index_local_library, match_to_roms
-from romhop.mapping_cache import MappingCache, seed_entry
+from romhop.mapping_cache import MappingCache, RomEntry, seed_entry
 from romhop.platform_map import esde_system_for_slug
+from romhop.pull import pull_games
 from romhop.romm_client import Rom, RommClient
 from romhop.sync import watch_and_push
 
@@ -260,6 +261,24 @@ def _select_match(name: str, matches: list[Rom]) -> Rom:
     raise typer.Exit(code=2)
 
 
+def _select_entries_by_name(entries: list[RomEntry], name: str) -> list[RomEntry]:
+    """Pick cached entries by game name: exact (case-insensitive) preferred,
+    else unique substring. Aborts (exit 2) on ambiguity, exit 1 on no match."""
+    matches = [e for e in entries if name.lower() in e.game_name.lower()]
+    if not matches:
+        typer.echo(f"No cached game matching '{name}'.", err=True)
+        raise typer.Exit(code=1)
+    exact = [e for e in matches if e.game_name.lower() == name.lower()]
+    if len(exact) == 1:
+        return exact
+    if len(matches) == 1:
+        return matches
+    typer.echo(f"{len(matches)} cached games match '{name}'. Be more specific:", err=True)
+    for e in matches:
+        typer.echo(f"  {e.game_name}", err=True)
+    raise typer.Exit(code=2)
+
+
 def _client() -> RommClient:
     settings = config.load_settings()
     token = config.get_token()
@@ -445,6 +464,44 @@ def sync():
             f"Set a core mapping: romhop config set-core '{p.parent.name}' <system>",
             err=True),
     )
+
+
+@app.command()
+def pull(name: str = typer.Argument(None, help="Game name (omit and use --all for everything)"),
+         all_games: bool = typer.Option(False, "-a", "--all", help="Pull every cached game."),
+         remote: bool = typer.Option(False, "--remote", help="On conflict, always take RomM's version (no prompt).")):
+    """Download saves/states from RomM into the local RetroArch layout."""
+    if not name and not all_games:
+        typer.echo("Name a game or pass --all.", err=True)
+        raise typer.Exit(code=2)
+    settings = config.load_settings()
+    client = _client()
+    cache = MappingCache(_cache_path())
+    entries = cache.entries()
+    if not entries:
+        typer.echo("No cached games. Run: romhop scan", err=True)
+        raise typer.Exit(code=1)
+    if all_games:
+        targets = entries
+    else:
+        targets = _select_entries_by_name(entries, name)
+
+    def on_conflict(item, local_path, local_mtime):
+        typer.echo(f"{item.file_name}: local {local_mtime:%Y-%m-%d %H:%M} "
+                   f"vs RomM {item.remote_updated}")
+        return typer.confirm("Take RomM's version? (n = keep local)", default=False)
+
+    try:
+        summary = pull_games(client, targets, settings, take_remote=remote,
+                             on_conflict=on_conflict,
+                             on_written=lambda p: typer.echo(f"Pulled {p.name}"))
+    except httpx.HTTPStatusError as exc:
+        _exit_http(exc)
+    except httpx.HTTPError as exc:
+        typer.echo(f"Could not reach RomM: {exc}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo(f"Pulled {summary['written']}, skipped {summary['skipped']} "
+               f"(up to date), kept {summary['kept']} local.")
 
 
 def _run_scan(settings, *, assume_yes: bool) -> None:

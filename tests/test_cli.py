@@ -490,3 +490,77 @@ def test_setup_stores_sort_flags(monkeypatch):
     assert result.exit_code == 0, result.output
     assert saved["s"].sort_saves_by_core is True
     assert saved["s"].sort_states_by_core is True
+
+
+def test_pull_requires_name_or_all(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    _fake_client(monkeypatch, [])
+    monkeypatch.setattr(cli, "_cache_path", lambda: tmp_path / "cache.json")
+    from romhop.mapping_cache import MappingCache, RomEntry
+    c = MappingCache(tmp_path / "cache.json")
+    c.add(RomEntry(rom_id=1, system="genesis", game_name="Sonic", candidate_basenames={"Sonic"}))
+    c.save()
+    result = runner.invoke(cli.app, ["pull"])
+    assert result.exit_code == 2
+    assert "name a game" in result.output.lower() or "--all" in result.output.lower()
+
+
+def test_pull_empty_cache_exits_1(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    _fake_client(monkeypatch, [])
+    monkeypatch.setattr(cli, "_cache_path", lambda: tmp_path / "cache.json")
+    result = runner.invoke(cli.app, ["pull", "--all"])
+    assert result.exit_code == 1
+    assert "scan" in result.output.lower()
+
+
+def test_pull_all_invokes_pull_games(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    _fake_client(monkeypatch, [])
+    monkeypatch.setattr(cli, "_cache_path", lambda: tmp_path / "cache.json")
+    from romhop.mapping_cache import MappingCache, RomEntry
+    c = MappingCache(tmp_path / "cache.json")
+    c.add(RomEntry(rom_id=1, system="genesis", game_name="Sonic", candidate_basenames={"Sonic"}))
+    c.save()
+    captured = {}
+    def fake_pull(client, entries, settings, *, take_remote, on_conflict, on_written):
+        captured["ids"] = [e.rom_id for e in entries]
+        captured["take_remote"] = take_remote
+        return {"written": 0, "skipped": 0, "kept": 0}
+    monkeypatch.setattr(cli, "pull_games", fake_pull)
+    result = runner.invoke(cli.app, ["pull", "--all", "--remote"])
+    assert result.exit_code == 0, result.output
+    assert captured["ids"] == [1]
+    assert captured["take_remote"] is True
+
+
+def test_pull_name_selects_one(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    _fake_client(monkeypatch, [])
+    monkeypatch.setattr(cli, "_cache_path", lambda: tmp_path / "cache.json")
+    from romhop.mapping_cache import MappingCache, RomEntry
+    c = MappingCache(tmp_path / "cache.json")
+    c.add(RomEntry(rom_id=1, system="genesis", game_name="Sonic", candidate_basenames={"Sonic"}))
+    c.add(RomEntry(rom_id=2, system="snes", game_name="Mario", candidate_basenames={"Mario"}))
+    c.save()
+    captured = {}
+    def fake_pull(client, entries, settings, *, take_remote, on_conflict, on_written):
+        captured["ids"] = [e.rom_id for e in entries]
+        return {"written": 0, "skipped": 0, "kept": 0}
+    monkeypatch.setattr(cli, "pull_games", fake_pull)
+    result = runner.invoke(cli.app, ["pull", "Sonic"])
+    assert result.exit_code == 0, result.output
+    assert captured["ids"] == [1]
+
+
+def test_pull_name_no_match_exits_1(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    _fake_client(monkeypatch, [])
+    monkeypatch.setattr(cli, "_cache_path", lambda: tmp_path / "cache.json")
+    from romhop.mapping_cache import MappingCache, RomEntry
+    c = MappingCache(tmp_path / "cache.json")
+    c.add(RomEntry(rom_id=1, system="genesis", game_name="Sonic", candidate_basenames={"Sonic"}))
+    c.save()
+    result = runner.invoke(cli.app, ["pull", "Zelda"])
+    assert result.exit_code == 1
+    assert "no cached game" in result.output.lower()
