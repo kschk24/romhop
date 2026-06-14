@@ -2,6 +2,8 @@ import json
 import zipfile
 from pathlib import Path
 
+import pytest
+
 from romhop.gui import theme
 
 
@@ -67,3 +69,49 @@ def test_install_theme_extracts_zip(tmp_path, monkeypatch):
     name = theme.install_theme(src)
     assert name == "neon"
     assert (dest / "neon" / "tokens.json").exists()
+
+
+def test_install_theme_replaces_existing(tmp_path, monkeypatch):
+    dest = tmp_path / "themes"
+    monkeypatch.setattr(theme, "themes_dir", lambda: dest)
+
+    def make_zip(accent):
+        src = tmp_path / f"neon-{accent.strip('#')}.romhop-theme"
+        with zipfile.ZipFile(src, "w") as zf:
+            zf.writestr("manifest.json", json.dumps({"name": "neon"}))
+            zf.writestr("tokens.json", json.dumps({"accent": accent}))
+        return src
+
+    theme.install_theme(make_zip("#111111"))
+    theme.install_theme(make_zip("#222222"))
+    data = json.loads((dest / "neon" / "tokens.json").read_text())
+    assert data["accent"] == "#222222"
+
+
+def test_install_theme_rejects_unsafe_name(tmp_path, monkeypatch):
+    dest = tmp_path / "themes"
+    monkeypatch.setattr(theme, "themes_dir", lambda: dest)
+    src = tmp_path / "evil.romhop-theme"
+    with zipfile.ZipFile(src, "w") as zf:
+        zf.writestr("manifest.json", json.dumps({"name": "../../evil"}))
+        zf.writestr("tokens.json", json.dumps({}))
+    with pytest.raises(ValueError):
+        theme.install_theme(src)
+
+
+def test_load_active_theme_resolves_user_theme(tmp_path, monkeypatch):
+    dest = tmp_path / "themes"
+    (dest / "midnight").mkdir(parents=True)
+    (dest / "midnight" / "manifest.json").write_text(json.dumps({"name": "midnight"}))
+    (dest / "midnight" / "tokens.json").write_text(json.dumps({"bg": "#000000"}))
+    monkeypatch.setattr(theme, "themes_dir", lambda: dest)
+    loaded = theme.load_active_theme("midnight")
+    assert loaded.name == "midnight"
+    assert "#000000" in loaded.qss
+
+
+def test_load_active_theme_default_uses_bundled(tmp_path, monkeypatch):
+    monkeypatch.setattr(theme, "themes_dir", lambda: tmp_path / "themes")
+    loaded = theme.load_active_theme("default")
+    assert loaded.name == "default"
+    assert "{{" not in loaded.qss

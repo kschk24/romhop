@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import zipfile
 from dataclasses import dataclass
@@ -81,7 +82,10 @@ def load_theme_dir(path: Path) -> LoadedTheme:
     """Load a theme directory, falling back to the default if it is broken."""
     try:
         return _render_dir(path)
-    except Exception:
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            "Theme %s failed to load, falling back to default: %s", path, exc
+        )
         return _render_dir(bundled_default_dir())
 
 
@@ -99,9 +103,13 @@ def install_theme(zip_path: Path) -> str:
     with zipfile.ZipFile(zip_path) as zf:
         with zf.open("manifest.json") as fh:
             name = json.loads(fh.read())["name"]
+        if not name or "/" in name or "\\" in name or name.startswith("."):
+            raise ValueError(f"Invalid theme name: {name!r}")
         dest = themes_dir() / name
         if dest.exists():
             shutil.rmtree(dest)
         dest.mkdir(parents=True)
+        # TODO: validate zip entries for path traversal (Zip Slip) before
+        # extractall if themes ever get installed from untrusted/remote sources.
         zf.extractall(dest)
     return name
