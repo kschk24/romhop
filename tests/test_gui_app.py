@@ -218,6 +218,25 @@ def test_sync_button_dot_reflects_running_state(qtbot):
     qtbot.waitUntil(lambda: win.sync_state() == "off", timeout=2000)
 
 
+def test_sync_enabled_on_startup_starts_worker(qtbot):
+    from dataclasses import replace
+    from romhop.gui.main_window import MainWindow
+
+    def watch_fn(stop_event):
+        stop_event.wait(timeout=2)
+
+    # Persisted sync_enabled=True: the dot must go green without any user toggle.
+    win = MainWindow(
+        settings=replace(config.default_settings(), sync_enabled=True),
+        sync_watch_fn=watch_fn,
+        persist_settings=lambda s: None,
+    )
+    qtbot.addWidget(win)
+
+    assert win.sync_button.isChecked() is True
+    qtbot.waitUntil(lambda: win.sync_state() == "running", timeout=2000)
+
+
 def test_bottom_toggle_propagates_to_settings_menu(qtbot):
     from romhop.gui.main_window import MainWindow
 

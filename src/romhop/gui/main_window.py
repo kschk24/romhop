@@ -139,6 +139,11 @@ class MainWindow(QWidget):
         bottom_row.addWidget(self.sync_button)
         # Paint the dot grey for the initial idle state.
         self.set_sync_status(self._sync_state)
+        # setChecked above fired no signal (it ran pre-connect), so a persisted
+        # sync_enabled=True would leave the worker stopped and the dot grey
+        # despite the toggle reading on. Kick off the worker now to match it.
+        if settings.sync_enabled:
+            self._reconcile_sync(True)
 
         self.library.selection_changed.connect(self._on_selection)
         self.download_btn.clicked.connect(self.download_selected)
