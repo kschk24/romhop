@@ -47,16 +47,17 @@ def resolve_target(item: PullItem, saves_dir: Path, states_dir: Path,
 
 
 def pull_games(client, entries, settings, *, take_remote: bool = False,
-               on_conflict=None, on_written=None) -> dict:
+               on_conflict=None, on_written=None, on_error=None) -> dict:
     """Download saves+states for each entry and write them locally.
 
     For each remote file: write when no local file exists; skip when bytes are
     identical; on a differing local file take remote if `take_remote` or the
     `on_conflict(item, local_path, local_mtime)` callback returns True, else keep
-    local. `on_written(path)` is called for each file written. Returns a summary
-    dict with counts: written / skipped / kept.
+    local. `on_written(path)` is called for each file written; `on_error(path,
+    exc)` for each file that fails to write (the run continues). Returns a summary
+    dict with counts: written / skipped / kept / failed.
     """
-    summary = {"written": 0, "skipped": 0, "kept": 0}
+    summary = {"written": 0, "skipped": 0, "kept": 0, "failed": 0}
     fetchers = (
         ("save", client.list_saves, client.download_save_content),
         ("state", client.list_states, client.download_state_content),
@@ -84,8 +85,15 @@ def pull_games(client, entries, settings, *, take_remote: bool = False,
                         if on_conflict is None or not on_conflict(item, target, local_mtime):
                             summary["kept"] += 1
                             continue
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(data)
+                try:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(data)
+                except OSError as exc:
+                    # One unwritable file shouldn't abort the whole run.
+                    summary["failed"] += 1
+                    if on_error is not None:
+                        on_error(target, exc)
+                    continue
                 summary["written"] += 1
                 if on_written is not None:
                     on_written(target)

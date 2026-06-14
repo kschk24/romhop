@@ -114,6 +114,22 @@ def test_pull_calls_on_written(tmp_path):
     assert written == [tmp_path / "saves" / "Sonic.srm"]
 
 
+def test_pull_write_failure_continues_and_counts(tmp_path):
+    # saves_dir is a FILE, so creating the save's parent dir fails -> OSError.
+    saves = tmp_path / "saves"
+    saves.write_bytes(b"not a dir")
+    client = FakeClient(
+        saves={1: [{"id": 9, "file_name": "Sonic.srm", "emulator": "genesis",
+                    "updated_at": "2026-06-01T10:00:00"}]},
+        blobs={("save", 9): b"REMOTE"})
+    settings = _Settings(saves, tmp_path / "states")
+    errors = []
+    summary = pull_games(client, [_entry()], settings,
+                         on_error=lambda p, exc: errors.append(p))
+    assert summary["failed"] == 1 and summary["written"] == 0
+    assert len(errors) == 1
+
+
 def _item(kind="save", file_name="Sonic.srm", emulator="genesis"):
     return PullItem(kind=kind, rom_id=1, file_name=file_name, emulator=emulator,
                     remote_updated="2026-06-01T10:00:00", data=b"X")

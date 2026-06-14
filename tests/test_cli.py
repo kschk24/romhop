@@ -523,7 +523,7 @@ def test_pull_all_invokes_pull_games(monkeypatch, tmp_path):
     c.add(RomEntry(rom_id=1, system="genesis", game_name="Sonic", candidate_basenames={"Sonic"}))
     c.save()
     captured = {}
-    def fake_pull(client, entries, settings, *, take_remote, on_conflict, on_written):
+    def fake_pull(client, entries, settings, *, take_remote, on_conflict, on_written, on_error):
         captured["ids"] = [e.rom_id for e in entries]
         captured["take_remote"] = take_remote
         return {"written": 0, "skipped": 0, "kept": 0}
@@ -544,7 +544,7 @@ def test_pull_name_selects_one(monkeypatch, tmp_path):
     c.add(RomEntry(rom_id=2, system="snes", game_name="Mario", candidate_basenames={"Mario"}))
     c.save()
     captured = {}
-    def fake_pull(client, entries, settings, *, take_remote, on_conflict, on_written):
+    def fake_pull(client, entries, settings, *, take_remote, on_conflict, on_written, on_error):
         captured["ids"] = [e.rom_id for e in entries]
         return {"written": 0, "skipped": 0, "kept": 0}
     monkeypatch.setattr(cli, "pull_games", fake_pull)

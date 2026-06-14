@@ -494,14 +494,19 @@ def pull(name: str = typer.Argument(None, help="Game name (omit and use --all fo
     try:
         summary = pull_games(client, targets, settings, take_remote=remote,
                              on_conflict=on_conflict,
-                             on_written=lambda p: typer.echo(f"Pulled {p.name}"))
+                             on_written=lambda p: typer.echo(f"Pulled {p.name}"),
+                             on_error=lambda p, exc: typer.echo(
+                                 f"Could not write {p}: {exc}", err=True))
     except httpx.HTTPStatusError as exc:
         _exit_http(exc)
     except httpx.HTTPError as exc:
         typer.echo(f"Could not reach RomM: {exc}", err=True)
         raise typer.Exit(code=1)
-    typer.echo(f"Pulled {summary['written']}, skipped {summary['skipped']} "
-               f"(up to date), kept {summary['kept']} local.")
+    line = (f"Pulled {summary['written']}, skipped {summary['skipped']} "
+            f"(up to date), kept {summary['kept']} local.")
+    if summary.get("failed"):
+        line += f" {summary['failed']} failed."
+    typer.echo(line)
 
 
 def _run_scan(settings, *, assume_yes: bool) -> None:
