@@ -88,20 +88,32 @@ def test_download_worker_continues_past_item_error(qtbot):
     assert done == ["B"]  # batch keeps going after one failure
 
 
-def test_cover_loader_emits_only_for_roms_with_covers(qtbot):
+def test_cover_loader_emits_only_for_roms_with_covers(qtbot, tmp_path):
+    from PySide6.QtGui import QImage, QPixmap
+
+    # Write a real PNG for rom 1 so QImage can decode it.
+    img_path = tmp_path / "cover_1.png"
+    src = QPixmap(8, 8)
+    src.fill()
+    assert src.save(str(img_path), "PNG")
+
     roms = [_rom(1, "A"), _rom(2, "B")]
 
-    # Provider returns a path for rom 1 only (rom 2 has no cover).
+    # Provider returns a real path for rom 1 only; rom 2 has no cover.
     def provider(rom):
-        return f"/covers/{rom.id}.png" if rom.id == 1 else None
+        return img_path if rom.id == 1 else None
 
     w = workers.CoverLoader(roms, provider)
     ready = []
-    w.cover_ready.connect(lambda rid, path: ready.append((rid, path)))
+    w.cover_ready.connect(lambda rid, img: ready.append((rid, img)))
     with qtbot.waitSignal(w.finished, timeout=2000):
         w.start()
 
-    assert ready == [(1, "/covers/1.png")]
+    assert len(ready) == 1
+    rid, img = ready[0]
+    assert rid == 1
+    assert isinstance(img, QImage)
+    assert not img.isNull()
 
 
 def test_sync_worker_watches_then_stops(qtbot):

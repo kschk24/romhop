@@ -4,7 +4,8 @@ import threading
 import time
 from typing import Callable, Sequence
 
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QThread, Qt, Signal
+from PySide6.QtGui import QImage
 
 
 class CallableWorker(QThread):
@@ -91,21 +92,27 @@ class DownloadWorker(QThread):
 
 
 class CoverLoader(QThread):
-    """Fetches cover-art paths off the UI thread.
+    """Fetches and decodes cover art off the UI thread.
 
     ``cover_provider(rom)`` returns a cached image path (or None). For each rom
-    that resolves to a path, emits ``cover_ready(rom_id, path)`` so the grid can
-    drop the pixmap into the matching tile. Misses and per-rom errors are skipped
-    silently — the tile keeps its placeholder.
+    that resolves to a path, decodes the file into a ``QImage`` (optionally
+    scaled to ``cover_size``), and emits ``cover_ready(rom_id, image)`` so the
+    grid can convert to QPixmap and drop it into the matching tile on the UI
+    thread. Misses and per-rom errors are skipped silently — the tile keeps its
+    placeholder.
+
+    QImage operations are safe off the GUI thread; only QPixmap must stay on it.
     """
 
-    cover_ready = Signal(int, str)
+    cover_ready = Signal(int, "QImage")
 
     def __init__(self, roms: Sequence, cover_provider: Callable[[object], object],
+                 cover_size: tuple[int, int] | None = None,
                  parent=None):
         super().__init__(parent)
         self._roms = list(roms)
         self._cover_provider = cover_provider
+        self._cover_size = cover_size
 
     def run(self) -> None:
         for rom in self._roms:
@@ -115,8 +122,15 @@ class CoverLoader(QThread):
                 path = self._cover_provider(rom)
             except Exception:  # a bad cover must not sink the rest of the batch
                 continue
-            if path:
-                self.cover_ready.emit(rom.id, str(path))
+            if not path:
+                continue
+            image = QImage(str(path))
+            if image.isNull():
+                continue
+            if self._cover_size is not None:
+                w, h = self._cover_size
+                image = image.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.cover_ready.emit(rom.id, image)
 
 
 class SyncWorker(QThread):

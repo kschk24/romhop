@@ -144,30 +144,36 @@ def test_cells_have_cover_label_placeholder(qtbot):
 
 
 def test_apply_cover_sets_pixmap(qtbot, tmp_path):
-    from PySide6.QtGui import QPixmap
+    from PySide6.QtGui import QImage, QPixmap
     from romhop.gui.library_view import LibraryView
     view = LibraryView()
     qtbot.addWidget(view)
     view.set_roms([_rom("Sonic", "genesis")])
     rom_id = next(iter(view._cover_labels))
 
-    # Write a real image to disk, then apply it to that cell.
+    # Build a real QImage (as the loader now emits).
     src = QPixmap(8, 8)
     src.fill()
-    path = tmp_path / "cover.png"
-    assert src.save(str(path), "PNG")
-    view._apply_cover(rom_id, str(path))
+    image = src.toImage()
+    view._apply_cover(rom_id, image)
 
     assert not view._cover_labels[rom_id].pixmap().isNull()
+    assert rom_id in view._pixmap_cache
 
 
 def test_apply_cover_ignores_unknown_rom(qtbot):
+    from PySide6.QtGui import QImage, QPixmap
     from romhop.gui.library_view import LibraryView
     view = LibraryView()
     qtbot.addWidget(view)
     view.set_roms([_rom("Sonic", "genesis")])
-    # Stale emit for a rom not on screen must be a no-op (no crash).
-    view._apply_cover(999999, "/nonexistent.png")
+    # Stale emit for a rom not on screen: pass a real QImage, must be a no-op.
+    src = QPixmap(4, 4)
+    src.fill()
+    image = src.toImage()
+    unknown_id = 999999
+    view._apply_cover(unknown_id, image)
+    assert unknown_id not in view._pixmap_cache
 
 
 def test_unchecking_removes_from_global_selection(qtbot):
@@ -263,3 +269,53 @@ def test_set_roms_clears_stale_downloaded_ids(qtbot):
     view.set_roms([b])
     assert view._downloaded_ids == set()
     assert view._ribbons == {}
+
+
+def test_cover_pixmap_cache_reused_across_platform_switch(qtbot, tmp_path):
+    """Cache hit on platform switch: provider not called again, pixmap instant."""
+    from PySide6.QtGui import QPixmap
+    from romhop.gui.library_view import LibraryView
+
+    # Write a real PNG so QImage decode succeeds inside CoverLoader.
+    img_a = tmp_path / "rom_a.png"
+    img_b = tmp_path / "rom_b.png"
+    for p in (img_a, img_b):
+        px = QPixmap(8, 8)
+        px.fill()
+        assert px.save(str(p), "PNG")
+
+    rom_a = _rom("Sonic", "genesis")
+    rom_b = _rom("Mario", "nes")
+
+    call_counts: dict[int, int] = {}
+
+    def provider(rom):
+        call_counts[rom.id] = call_counts.get(rom.id, 0) + 1
+        if rom.id == rom_a.id:
+            return img_a
+        if rom.id == rom_b.id:
+            return img_b
+        return None
+
+    view = LibraryView(cover_provider=provider)
+    qtbot.addWidget(view)
+    view.set_roms([rom_a, rom_b])
+
+    # Filter to platform A and wait until rom_a is in the pixmap cache.
+    view.set_platform_filter("genesis")
+    qtbot.waitUntil(lambda: rom_a.id in view._pixmap_cache, timeout=3000)
+
+    count_a_after_first = call_counts.get(rom_a.id, 0)
+    assert count_a_after_first >= 1  # provider was called at least once
+
+    # Switch to platform B then back to A.
+    view.set_platform_filter("nes")
+    view.set_platform_filter("genesis")
+
+    # rom_a's label must show its pixmap immediately (cache hit, no new decode).
+    label = view._cover_labels.get(rom_a.id)
+    assert label is not None
+    assert not label.pixmap().isNull()
+
+    # Provider must NOT have been called again for rom_a.
+    assert call_counts.get(rom_a.id, 0) == count_a_after_first

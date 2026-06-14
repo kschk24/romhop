@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QGridLayout,
@@ -72,6 +72,7 @@ class LibraryView(QWidget):
             lambda rom: rom.platform_name or rom.platform_slug
         )
         self._cover_labels: dict[int, QLabel] = {}
+        self._pixmap_cache: dict[int, QPixmap] = {}
         self._pills: dict[int, QLabel] = {}
         self._ribbons: dict[int, QLabel] = {}
         self._cover_loader = None
@@ -106,8 +107,9 @@ class LibraryView(QWidget):
 
     def set_roms(self, roms: list[Rom]) -> None:
         self._roms = roms
-        # Fresh library: drop any selection that referred to the old rom set.
+        # Fresh library: drop any selection and caches that referred to the old rom set.
         self._selected_ids.clear()
+        self._pixmap_cache.clear()
         self._downloaded_ids = set()
         self._platform_filter = None
         self._downloaded_mode = "all"
@@ -191,13 +193,27 @@ class LibraryView(QWidget):
         self._emit_selection()
 
     def _start_cover_load(self, roms: list[Rom]) -> None:
-        if self._cover_provider is None or not roms:
+        # Split into cache hits (pixmap already decoded) and misses.
+        cached = [r for r in roms if r.id in self._pixmap_cache]
+        misses = [r for r in roms if r.id not in self._pixmap_cache]
+
+        # Apply cached pixmaps synchronously — zero decode cost.
+        for rom in cached:
+            label = self._cover_labels.get(rom.id)
+            if label is not None:
+                label.setPixmap(self._pixmap_cache[rom.id])
+
+        # Always cancel any stale loader (may be running from a previous filter).
+        self._stop_cover_load()
+
+        if not misses or self._cover_provider is None:
             return
+
         # A previous load may still be running (covers fetch from disk/network).
         # Ask it to stop, but keep it referenced in _cover_loaders until it
         # actually finishes — dropping a running QThread crashes the app.
-        self._stop_cover_load()
-        loader = CoverLoader(roms, self._cover_provider)
+        loader = CoverLoader(misses, self._cover_provider,
+                             cover_size=(CELL_WIDTH - 8, COVER_HEIGHT))
         loader.cover_ready.connect(self._apply_cover)
         loader.finished.connect(lambda ldr=loader: self._cover_loaders.discard(ldr))
         self._cover_loaders.add(loader)
@@ -211,18 +227,16 @@ class LibraryView(QWidget):
             self._cover_loader.requestInterruption()
             self._cover_loader = None
 
-    def _apply_cover(self, rom_id: int, path: str) -> None:
+    def _apply_cover(self, rom_id: int, image: QImage) -> None:
         # A loader from a previous platform may emit for a tile that's gone.
         label = self._cover_labels.get(rom_id)
-        if label is None or not path:
+        if label is None:
             return
-        pixmap = QPixmap(path)
-        if pixmap.isNull():
+        pm = QPixmap.fromImage(image)
+        if pm.isNull():
             return
-        label.setPixmap(pixmap.scaled(
-            label.width(), label.height(),
-            Qt.KeepAspectRatio, Qt.SmoothTransformation,
-        ))
+        self._pixmap_cache[rom_id] = pm
+        label.setPixmap(pm)
 
     def _on_toggle(self, rom_id: int, checked: bool) -> None:
         # Update the global set, then report the new cross-platform selection.
