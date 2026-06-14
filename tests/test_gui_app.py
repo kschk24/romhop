@@ -91,7 +91,8 @@ def test_load_library_populates_view(qtbot):
     win = MainWindow(settings=config.default_settings(), rom_provider=lambda: roms)
     qtbot.addWidget(win)
     win.load_library()
-    assert win.library.current_platform() == "genesis"
+    # Library should have populated with the Sonic rom (flat grid; no sidebar).
+    assert any(rom.platform_slug == "genesis" for _, rom in win.library._checks.values())
 
 
 def test_download_selected_invokes_action(qtbot):

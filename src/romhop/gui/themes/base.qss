@@ -19,3 +19,19 @@ QPushButton:hover {
 QLabel#StatusDim {
     color: {{text_dim}};
 }
+#PlatformPill {
+    background: rgba(0, 0, 0, 0.6);
+    color: #ffffff;
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 8px;
+}
+#DownloadedRibbon {
+    background: #2e9e4f;
+    color: #ffffff;
+    font-size: 9px;
+    padding: 2px 0;
+}
+#Cover[downloaded="true"] {
+    background: rgba(0, 0, 0, 0.45);
+}

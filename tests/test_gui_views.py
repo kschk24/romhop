@@ -12,29 +12,87 @@ def test_platforms_from_roms_sorted_unique():
     assert library_view.platforms_from_roms(roms) == ["nes", "snes"]
 
 
-def test_filter_games_by_platform_and_query():
-    roms = [_rom("Sonic", "genesis"), _rom("Streets of Rage", "genesis"),
-            _rom("Mario", "nes")]
-    out = library_view.filter_games(roms, platform="genesis", query="so")
-    assert [r.name for r in out] == ["Sonic"]
+# --- filter_games tests (Step 1 replacements) ---
+
+def test_filter_games_all_platforms_sorted_asc():
+    roms = [_rom("Sonic", "genesis"), _rom("Mario", "nes"), _rom("Zelda", "nes")]
+    out = library_view.filter_games(roms, platform=None, query="")
+    assert [r.name for r in out] == ["Mario", "Sonic", "Zelda"]
 
 
-def test_filter_games_empty_query_returns_whole_platform():
+def test_filter_games_platform_scopes():
     roms = [_rom("Sonic", "genesis"), _rom("Mario", "nes")]
     out = library_view.filter_games(roms, platform="genesis", query="")
     assert [r.name for r in out] == ["Sonic"]
 
 
-def test_library_view_populates_and_selects(qtbot):
+def test_filter_games_query_combines_with_platform():
+    roms = [_rom("Sonic", "genesis"), _rom("Streets of Rage", "genesis")]
+    out = library_view.filter_games(roms, platform="genesis", query="so")
+    assert [r.name for r in out] == ["Sonic"]
+
+
+def test_filter_games_sort_desc():
+    roms = [_rom("Mario", "nes"), _rom("Zelda", "nes")]
+    out = library_view.filter_games(roms, platform=None, query="", sort="desc")
+    assert [r.name for r in out] == ["Zelda", "Mario"]
+
+
+def test_filter_games_downloaded_modes():
+    a, b = _rom("Sonic", "genesis"), _rom("Mario", "nes")
+    ids = {a.id}
+    only_dl = library_view.filter_games([a, b], platform=None, query="",
+                                        downloaded_ids=ids, downloaded_mode="downloaded")
+    assert [r.name for r in only_dl] == ["Sonic"]
+    only_missing = library_view.filter_games([a, b], platform=None, query="",
+                                             downloaded_ids=ids, downloaded_mode="missing")
+    assert [r.name for r in only_missing] == ["Mario"]
+
+
+# --- LibraryView widget tests (Step 3 replacements) ---
+
+def test_library_view_populates_all_platforms(qtbot):
     from romhop.gui.library_view import LibraryView
     view = LibraryView()
     qtbot.addWidget(view)
     view.set_roms([_rom("Sonic", "genesis"), _rom("Mario", "nes")])
-    assert view.current_platform() == "genesis"
-    # Check the one genesis game and confirm it reports as selected.
-    check, rom = next(iter(view._checks.values()))
+    assert {rom.name for _, rom in view._checks.values()} == {"Sonic", "Mario"}
+    check, rom = next((c, r) for c, r in view._checks.values() if r.name == "Sonic")
     check.setChecked(True)
     assert view.selected_roms()[0].name == "Sonic"
+
+
+def test_platform_filter_scopes_grid(qtbot):
+    from romhop.gui.library_view import LibraryView
+    view = LibraryView()
+    qtbot.addWidget(view)
+    view.set_roms([_rom("Sonic", "genesis"), _rom("Mario", "nes")])
+    view.set_platform_filter("genesis")
+    assert {rom.name for _, rom in view._checks.values()} == {"Sonic"}
+
+
+def test_selection_survives_platform_filter(qtbot):
+    from romhop.gui.library_view import LibraryView
+    view = LibraryView()
+    qtbot.addWidget(view)
+    view.set_roms([_rom("Sonic", "genesis"), _rom("Mario", "nes")])
+    check, _ = next((c, r) for c, r in view._checks.values() if r.name == "Sonic")
+    check.setChecked(True)
+    view.set_platform_filter("nes")
+    check2, _ = next((c, r) for c, r in view._checks.values() if r.name == "Mario")
+    check2.setChecked(True)
+    assert sorted(r.name for r in view.selected_roms()) == ["Mario", "Sonic"]
+
+
+def test_tiles_have_fixed_size_regardless_of_game_count(qtbot):
+    from romhop.gui.library_view import CELL_HEIGHT, CELL_WIDTH, LibraryView
+    view = LibraryView()
+    qtbot.addWidget(view)
+    view.set_roms([_rom(f"G{i}", "nds") for i in range(30)] + [_rom("Solo", "threeds")])
+    assert view._cells
+    for c in view._cells:
+        assert c.minimumHeight() == CELL_HEIGHT and c.maximumHeight() == CELL_HEIGHT
+        assert c.minimumWidth() == CELL_WIDTH and c.maximumWidth() == CELL_WIDTH
 
 
 def test_columns_for_width_scales_and_floors_at_one():
@@ -72,54 +130,6 @@ def test_library_view_selection_survives_filter(qtbot):
     # Narrow the view to just "Sonic"; its checked state must persist.
     view.filter("Sonic")
     assert [r.name for r in view.selected_roms()] == ["Sonic"]
-
-
-def test_selection_persists_across_platform_switch(qtbot):
-    from romhop.gui.library_view import LibraryView
-    view = LibraryView()
-    qtbot.addWidget(view)
-    view.set_roms([_rom("Sonic", "genesis"), _rom("Mario", "nes")])
-    assert view.current_platform() == "genesis"
-
-    # Check Sonic on the genesis tab.
-    check, _ = next(iter(view._checks.values()))
-    check.setChecked(True)
-
-    # Switch to the nes tab and check Mario.
-    view.sidebar.setCurrentRow(1)
-    assert view.current_platform() == "nes"
-    check2, _ = next(iter(view._checks.values()))
-    check2.setChecked(True)
-
-    # Global selection spans BOTH platforms regardless of active tab.
-    assert sorted(r.name for r in view.selected_roms()) == ["Mario", "Sonic"]
-
-    # Returning to genesis must restore Sonic's checkmark (not wiped).
-    view.sidebar.setCurrentRow(0)
-    assert view.current_platform() == "genesis"
-    check_back, _ = next(iter(view._checks.values()))
-    assert check_back.isChecked()
-
-
-def test_tiles_have_fixed_size_regardless_of_game_count(qtbot):
-    from romhop.gui.library_view import CELL_HEIGHT, CELL_WIDTH, LibraryView
-    view = LibraryView()
-    qtbot.addWidget(view)
-    # One platform with a single game, one with many. Tile dimensions must match.
-    roms = [_rom("Solo", "threeds")] + [_rom(f"G{i}", "nds") for i in range(30)]
-    view.set_roms(roms)
-
-    def all_cells_fixed():
-        assert view._cells
-        for c in view._cells:
-            assert c.minimumHeight() == CELL_HEIGHT
-            assert c.maximumHeight() == CELL_HEIGHT
-            assert c.minimumWidth() == CELL_WIDTH
-            assert c.maximumWidth() == CELL_WIDTH
-
-    all_cells_fixed()                  # platform on row 0
-    view.sidebar.setCurrentRow(1)      # switch to the other platform
-    all_cells_fixed()                  # same fixed dimensions, different count
 
 
 def test_cells_have_cover_label_placeholder(qtbot):
@@ -205,3 +215,36 @@ def test_switching_platform_does_not_drop_running_cover_loader(qtbot):
     release.set()
     qtbot.waitUntil(lambda: first not in view._cover_loaders, timeout=2000)
     assert not first.isRunning()
+
+
+# --- Indicator tests (Step 6) ---
+
+def test_tile_shows_platform_pill(qtbot):
+    from romhop.gui.library_view import LibraryView
+    view = LibraryView(platform_label=lambda rom: "Game Boy")
+    qtbot.addWidget(view)
+    view.set_roms([_rom("Tetris", "gb")])
+    pill = next(iter(view._pills.values()))
+    assert pill.text() == "Game Boy"
+
+
+def test_downloaded_tile_gets_ribbon_others_do_not(qtbot):
+    from romhop.gui.library_view import LibraryView
+    view = LibraryView()
+    qtbot.addWidget(view)
+    a, b = _rom("Sonic", "genesis"), _rom("Mario", "nes")
+    view.set_roms([a, b])
+    view.set_downloaded({a.id})
+    assert a.id in view._ribbons
+    assert b.id not in view._ribbons
+
+
+def test_downloaded_filter_hides_missing(qtbot):
+    from romhop.gui.library_view import LibraryView
+    view = LibraryView()
+    qtbot.addWidget(view)
+    a, b = _rom("Sonic", "genesis"), _rom("Mario", "nes")
+    view.set_roms([a, b])
+    view.set_downloaded({a.id})
+    view.set_downloaded_filter("downloaded")
+    assert {rom.name for _, rom in view._checks.values()} == {"Sonic"}

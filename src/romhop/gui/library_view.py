@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QScrollArea,
     QVBoxLayout,
     QWidget,
@@ -38,25 +37,43 @@ def platforms_from_roms(roms: list[Rom]) -> list[str]:
     return sorted({r.platform_slug for r in roms})
 
 
-def filter_games(roms: list[Rom], platform: str, query: str) -> list[Rom]:
+def filter_games(roms: list[Rom], platform: str | None, query: str,
+                 downloaded_ids: set[int] | None = None,
+                 downloaded_mode: str = "all", sort: str = "asc") -> list[Rom]:
+    """Filter the whole rom set by platform (None = all), text query, and
+    downloaded status, then sort by name. `downloaded_mode` is all/downloaded/missing."""
+    ids = downloaded_ids or set()
     q = query.strip().lower()
-    out = [r for r in roms if r.platform_slug == platform]
+    out = list(roms)
+    if platform is not None:
+        out = [r for r in out if r.platform_slug == platform]
     if q:
         out = [r for r in out if q in r.name.lower()]
-    return sorted(out, key=lambda r: r.name.lower())
+    if downloaded_mode == "downloaded":
+        out = [r for r in out if r.id in ids]
+    elif downloaded_mode == "missing":
+        out = [r for r in out if r.id not in ids]
+    out.sort(key=lambda r: r.name.lower(), reverse=(sort == "desc"))
+    return out
 
 
 class LibraryView(QWidget):
-    """Platform sidebar + game grid with checkbox multi-select."""
+    """Flat game grid with checkbox multi-select and filter controls."""
 
     selection_changed = Signal(list)  # emits list[Rom] currently checked
 
-    def __init__(self, parent=None, *, cover_provider=None):
+    def __init__(self, parent=None, *, cover_provider=None, platform_label=None):
         super().__init__(parent)
         # cover_provider(rom) -> Path | None (cached cover image); fetched off
         # the UI thread by a CoverLoader and rendered into each tile.
         self._cover_provider = cover_provider
+        # platform_label(rom) -> str displayed in the platform pill on each tile.
+        self._platform_label = platform_label or (
+            lambda rom: rom.platform_name or rom.platform_slug
+        )
         self._cover_labels: dict[int, QLabel] = {}
+        self._pills: dict[int, QLabel] = {}
+        self._ribbons: dict[int, QLabel] = {}
         self._cover_loader = None
         # Every loader started but not yet finished. Holding a strong reference
         # here keeps the QThread alive until run() returns, even after a newer
@@ -64,18 +81,19 @@ class LibraryView(QWidget):
         self._cover_loaders: set = set()
         self._roms: list[Rom] = []
         self._checks: dict[int, tuple[QCheckBox, Rom]] = {}
-        # Global selection: rom ids checked across ALL platforms. The per-tab
-        # _checks dict is rebuilt on every platform switch, so selection state
-        # must live here to survive switching tabs and to drive a download set
+        # Global selection: rom ids checked across ALL filter states. The per-filter
+        # _checks dict is rebuilt on every filter change, so selection state
+        # must live here to survive filter changes and to drive a download set
         # that spans platforms.
         self._selected_ids: set[int] = set()
         self._cells: list[QWidget] = []
         self._cols = 0
         self._query = ""
-
-        self.sidebar = QListWidget()
-        self.sidebar.setObjectName("Sidebar")
-        self.sidebar.currentTextChanged.connect(self._on_platform)
+        # Filter state
+        self._platform_filter: str | None = None
+        self._downloaded_mode = "all"
+        self._sort = "asc"
+        self._downloaded_ids: set[int] = set()
 
         self._grid_host = QWidget()
         self._grid = QGridLayout(self._grid_host)
@@ -84,31 +102,38 @@ class LibraryView(QWidget):
         self._scroll.setWidget(self._grid_host)
 
         row = QHBoxLayout(self)
-        row.addWidget(self.sidebar, 0)
         row.addWidget(self._scroll, 1)
 
     def set_roms(self, roms: list[Rom]) -> None:
         self._roms = roms
         # Fresh library: drop any selection that referred to the old rom set.
         self._selected_ids.clear()
-        self.sidebar.clear()
-        self.sidebar.addItems(platforms_from_roms(roms))
-        if self.sidebar.count():
-            self.sidebar.setCurrentRow(0)
-
-    def current_platform(self) -> str:
-        item = self.sidebar.currentItem()
-        return item.text() if item else ""
-
-    def _on_platform(self, platform: str) -> None:
-        # Keep the active search query when switching platforms.
-        self._populate(platform, self._query)
+        self._platform_filter = None
+        self._downloaded_mode = "all"
+        self._sort = "asc"
+        self._populate()
 
     def filter(self, query: str) -> None:
         self._query = query
-        self._populate(self.current_platform(), query)
+        self._populate()
 
-    def _populate(self, platform: str, query: str) -> None:
+    def set_platform_filter(self, slug: str | None) -> None:
+        self._platform_filter = slug
+        self._populate()
+
+    def set_downloaded_filter(self, mode: str) -> None:
+        self._downloaded_mode = mode
+        self._populate()
+
+    def set_sort(self, order: str) -> None:
+        self._sort = order
+        self._populate()
+
+    def set_downloaded(self, ids: set[int]) -> None:
+        self._downloaded_ids = set(ids)
+        self._populate()
+
+    def _populate(self) -> None:
         while self._grid.count():
             item = self._grid.takeAt(0)
             if item.widget() is not None:
@@ -116,8 +141,11 @@ class LibraryView(QWidget):
             del item
         self._checks.clear()
         self._cover_labels = {}
+        self._pills = {}
+        self._ribbons = {}
         self._cells = []
-        games = filter_games(self._roms, platform, query)
+        games = filter_games(self._roms, self._platform_filter, self._query,
+                             self._downloaded_ids, self._downloaded_mode, self._sort)
         for rom in games:
             cell = QWidget()
             # Fixed size: tiles look identical across platforms; overflow scrolls
@@ -131,6 +159,20 @@ class LibraryView(QWidget):
             cover.setObjectName("Cover")
             cover.setFixedSize(CELL_WIDTH - 8, COVER_HEIGHT)
             cover.setAlignment(Qt.AlignCenter)
+            # Platform pill overlaid on the cover image (bottom-left corner).
+            pill = QLabel(self._platform_label(rom), cover)
+            pill.setObjectName("PlatformPill")
+            pill.move(4, COVER_HEIGHT - 20)
+            self._pills[rom.id] = pill
+            # Downloaded indicator: dim cover + green ribbon across the top.
+            if rom.id in self._downloaded_ids:
+                cover.setProperty("downloaded", True)
+                ribbon = QLabel("DOWNLOADED", cover)
+                ribbon.setObjectName("DownloadedRibbon")
+                ribbon.setFixedWidth(CELL_WIDTH - 8)
+                ribbon.setAlignment(Qt.AlignCenter)
+                ribbon.move(0, 0)
+                self._ribbons[rom.id] = ribbon
             check = QCheckBox(rom.name)
             # Reflect the global selection, set before connecting so this
             # programmatic state doesn't fire a spurious toggle.
@@ -217,7 +259,7 @@ class LibraryView(QWidget):
         self._relayout()
 
     def selected_roms(self) -> list[Rom]:
-        # Global selection across all platforms, not just the visible tab.
+        # Global selection across all filter states, not just the visible tiles.
         return [rom for rom in self._roms if rom.id in self._selected_ids]
 
     def _emit_selection(self) -> None:
