@@ -119,3 +119,23 @@ def match_to_roms(local_games: list[LocalGame], roms: list[Rom],
             result.collisions.append(Collision(basename=basename, rom_ids=sorted(ids)))
 
     return result
+
+
+def downloaded_rom_ids(roms: list[Rom], roms_root: Path,
+                       overrides: dict[str, str]) -> set[int]:
+    """Ids of roms already present in the local ES-DE tree.
+
+    Walks the library once and matches each rom by its platform-scoped,
+    normalized filename keys — the same match `download`/`scan` use, generalized
+    to the whole rom set.
+    """
+    by_system: dict[str, set[str]] = defaultdict(set)
+    for game in index_local_library(roms_root, overrides):
+        by_system[game.system].add(game.match_key)
+    ids: set[int] = set()
+    for rom in roms:
+        system = esde_system_for_slug(rom.platform_slug, overrides)
+        keys = by_system.get(system, set())
+        if norm(rom.fs_name) in keys or norm(rom.fs_name_no_ext) in keys:
+            ids.add(rom.id)
+    return ids

@@ -150,3 +150,27 @@ def test_collision_reported_across_systems():
     result = match_to_roms([l1, l2], [r1, r2], overrides={})
     assert {rid for c in result.collisions for rid in c.rom_ids} == {1, 2}
     assert any(c.basename == "sonic" for c in result.collisions)
+
+
+def test_downloaded_rom_ids_marks_on_disk_games(tmp_path):
+    from romhop.local_index import downloaded_rom_ids
+    from romhop.romm_client import Rom
+
+    (tmp_path / "genesis").mkdir()
+    (tmp_path / "genesis" / "Sonic.md").write_bytes(b"x")
+
+    roms = [
+        Rom(id=1, name="Sonic", platform_slug="genesis",
+            fs_name="Sonic.md", fs_name_no_ext="Sonic", file_names=["Sonic.md"]),
+        Rom(id=2, name="Mario", platform_slug="nes",
+            fs_name="Mario.nes", fs_name_no_ext="Mario", file_names=["Mario.nes"]),
+    ]
+    assert downloaded_rom_ids(roms, tmp_path, {}) == {1}
+
+
+def test_downloaded_rom_ids_empty_when_root_missing(tmp_path):
+    from romhop.local_index import downloaded_rom_ids
+    from romhop.romm_client import Rom
+    roms = [Rom(id=1, name="Sonic", platform_slug="genesis",
+                fs_name="Sonic.md", fs_name_no_ext="Sonic", file_names=["Sonic.md"])]
+    assert downloaded_rom_ids(roms, tmp_path / "nope", {}) == set()
