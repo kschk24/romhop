@@ -279,3 +279,26 @@ def test_load_library_populates_filter_platforms_and_downloaded(qtbot, monkeypat
     win.load_library()
     assert win.filter_bar.platform_combo.itemText(1) == "Genesis"
     assert win.library._downloaded_ids == {1}
+
+
+def test_filter_dropdown_uses_names_cache_when_platform_name_absent(qtbot, monkeypatch, tmp_path):
+    from romhop.config import default_settings
+    from dataclasses import replace
+    from romhop.gui import main_window
+    from romhop.gui.main_window import MainWindow
+    from romhop.platform_names import PlatformNames
+    from romhop.romm_client import Rom
+
+    names = PlatformNames(tmp_path / "names.json")
+    names.update_from_roms([Rom(id=9, name="x", platform_slug="gb", fs_name="x",
+                                fs_name_no_ext="x", file_names=[], platform_name="Game Boy")])
+    # A rom WITHOUT platform_name; the dropdown must fall back to the cache, not the slug.
+    rom = Rom(id=1, name="Tetris", platform_slug="gb", fs_name="Tetris.gb",
+              fs_name_no_ext="Tetris", file_names=["Tetris.gb"], platform_name=None)
+    monkeypatch.setattr(main_window, "downloaded_rom_ids", lambda r, root, ov: set())
+
+    settings = replace(default_settings(), roms_root=tmp_path)
+    win = MainWindow(settings, rom_provider=lambda: [rom], platform_names=names)
+    qtbot.addWidget(win)
+    win.load_library()
+    assert win.filter_bar.platform_combo.itemText(1) == "Game Boy"

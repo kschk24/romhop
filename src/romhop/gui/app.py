@@ -65,6 +65,7 @@ def run() -> None:
         sync_watch_fn=sync_watch_fn,
         cover_provider=cover_provider,
         platform_label=platform_label,
+        platform_names=names,
     )
     window.resize(900, 600)
     # An unconfigured or unreachable RomM must not crash startup: open the

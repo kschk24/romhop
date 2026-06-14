@@ -62,13 +62,14 @@ class MainWindow(QWidget):
     def __init__(self, settings: Settings, parent=None, *,
                  rom_provider=None, download_action=None,
                  sync_watch_fn=None, persist_settings=None, cover_provider=None,
-                 platform_label=None):
+                 platform_label=None, platform_names=None):
         super().__init__(parent)
         self._settings = settings
         self._rom_provider = rom_provider
         self._download_action = download_action
         self._cover_provider = cover_provider
         self._sync_watch_fn = sync_watch_fn
+        self._platform_names = platform_names
         self._persist_settings = persist_settings or config.save_settings
         self._download_worker = None
         self._sync_worker = None
@@ -262,7 +263,7 @@ class MainWindow(QWidget):
 
     def _platform_name_for(self, roms, slug: str) -> str:
         rom = next((r for r in roms if r.platform_slug == slug), None)
-        return display_name(rom) if rom is not None else slug
+        return display_name(rom, self._platform_names) if rom is not None else slug
 
     def _refresh_downloaded(self, roms=None) -> None:
         roms = roms if roms is not None else getattr(self.library, "_roms", [])
