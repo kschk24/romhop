@@ -136,3 +136,24 @@ def test_sync_worker_watches_then_stops(qtbot):
         w.stop()
     assert states[0] == "watching"
     assert states[-1] == "idle"
+
+
+def test_download_worker_progress_survives_files_over_int32(qtbot):
+    # Bravely Default is ~4 GiB; byte counts exceed a signed 32-bit int. The
+    # item_progress signal must carry them intact (not raise / wrap).
+    big = 4294967295  # 2**32 - 1
+    roms = [_rom(1, "Bravely Default")]
+
+    def action(rom, on_progress):
+        on_progress(big // 2, big)
+        on_progress(big, big)
+        return rom.name
+
+    w = workers.DownloadWorker(roms, action)
+    progressed = []
+    w.item_progress.connect(lambda d, t, s: progressed.append((d, t)))
+    with qtbot.waitSignal(w.finished, timeout=2000):
+        w.start()
+
+    seen = {(d, t) for d, t in progressed}
+    assert (big, big) in seen  # full size emitted without overflow

@@ -313,10 +313,14 @@ class MainWindow(QWidget):
         self.progress_bar.setValue(0)
         self.progress_label.setText(f"{name} ({self._progress_pos})")
 
+    # QProgressBar's range is a signed 32-bit int, so raw byte counts overflow on
+    # large roms (~4 GiB 3DS titles). Track progress on a fixed permille scale.
+    _PROGRESS_SCALE = 1000
+
     def _on_item_progress(self, downloaded: int, total: int, speed: float) -> None:
         if total > 0:
-            self.progress_bar.setMaximum(total)
-            self.progress_bar.setValue(downloaded)
+            self.progress_bar.setMaximum(self._PROGRESS_SCALE)
+            self.progress_bar.setValue(int(downloaded * self._PROGRESS_SCALE / total))
         else:
             self.progress_bar.setMaximum(0)  # unknown size → indeterminate
         rate = _human_speed(speed)

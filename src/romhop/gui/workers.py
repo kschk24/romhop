@@ -49,7 +49,9 @@ class DownloadWorker(QThread):
     """
 
     item_started = Signal(int, int, str)
-    item_progress = Signal(int, int, float)
+    # qlonglong (64-bit): byte counts for large roms (e.g. ~4 GiB 3DS titles)
+    # exceed a signed 32-bit int, which a plain `int` signal silently clamps.
+    item_progress = Signal("qlonglong", "qlonglong", float)
     item_error = Signal(str, str)
 
     # Don't emit more often than this between non-terminal updates (seconds).

@@ -132,8 +132,10 @@ def test_progress_slots_update_bottom_bar(qtbot):
     assert "Sonic" in win.progress_label.text()
 
     win._on_item_progress(50, 100, 2048.0)
-    assert win.progress_bar.maximum() == 100
-    assert win.progress_bar.value() == 50
+    # Progress is tracked on a fixed permille scale (byte counts overflow the
+    # bar's 32-bit range on large roms), so 50/100 reads as 500/1000.
+    assert win.progress_bar.maximum() == 1000
+    assert win.progress_bar.value() == 500
 
     win._end_progress()
     assert win.progress_bar.isHidden()
@@ -340,3 +342,21 @@ def test_item_error_surfaces_in_download_area_not_sync(qtbot):
     # ...and must NOT hijack the sync indicator.
     assert win.sync_status_text() == sync_before
     assert "error" not in win.sync_status_text().lower()
+
+
+def test_progress_bar_handles_files_larger_than_int32(qtbot):
+    from romhop.gui.main_window import MainWindow
+
+    win = MainWindow(settings=config.default_settings())
+    qtbot.addWidget(win)
+    win._begin_progress()
+    win._on_item_started(1, 1, "Bravely Default")
+
+    big = 4294967295  # 2**32 - 1, beyond QProgressBar's 32-bit range
+    # Must not raise OverflowError (the bug: setMaximum(big) on a ~4GB file).
+    win._on_item_progress(big // 2, big, 1024.0)
+
+    assert win.progress_bar.maximum() > 0
+    # Value stays a valid fraction within the bar's range.
+    assert 0 <= win.progress_bar.value() <= win.progress_bar.maximum()
+    assert abs(win.progress_bar.value() / win.progress_bar.maximum() - 0.5) < 0.05
