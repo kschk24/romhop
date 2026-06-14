@@ -174,3 +174,18 @@ def test_downloaded_rom_ids_empty_when_root_missing(tmp_path):
     roms = [Rom(id=1, name="Sonic", platform_slug="genesis",
                 fs_name="Sonic.md", fs_name_no_ext="Sonic", file_names=["Sonic.md"])]
     assert downloaded_rom_ids(roms, tmp_path / "nope", {}) == set()
+
+
+def test_downloaded_rom_ids_matches_multi_disc_subfolder(tmp_path):
+    from romhop.local_index import downloaded_rom_ids
+    from romhop.romm_client import Rom
+
+    game_dir = tmp_path / "psx" / "Final Fantasy VII"
+    game_dir.mkdir(parents=True)
+    (game_dir / "disc1.bin").write_bytes(b"x")
+    (game_dir / "disc2.bin").write_bytes(b"x")
+
+    rom = Rom(id=7, name="Final Fantasy VII", platform_slug="psx",
+              fs_name="Final Fantasy VII.m3u", fs_name_no_ext="Final Fantasy VII",
+              file_names=["disc1.bin", "disc2.bin"])
+    assert downloaded_rom_ids([rom], tmp_path, {}) == {7}
