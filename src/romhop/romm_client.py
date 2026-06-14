@@ -92,3 +92,13 @@ class RommClient:
         resp = self._http.get(f"/api/saves/{save_id}/content")
         resp.raise_for_status()
         return resp.content
+
+    def list_states(self, rom_id: int) -> list[dict]:
+        resp = self._http.get("/api/states", params={"rom_id": rom_id})
+        resp.raise_for_status()
+        return resp.json()
+
+    def download_state_content(self, state_id: int) -> bytes:
+        resp = self._http.get(f"/api/states/{state_id}/content")
+        resp.raise_for_status()
+        return resp.content
