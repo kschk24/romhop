@@ -1,6 +1,117 @@
+from dataclasses import dataclass
 from pathlib import Path
 
-from romhop.pull import PullItem, resolve_target
+from romhop.pull import PullItem, resolve_target, pull_games
+from romhop.mapping_cache import RomEntry
+
+
+@dataclass
+class _Settings:
+    saves_dir: Path
+    states_dir: Path
+    sort_saves_by_core: bool = False
+    sort_states_by_core: bool = False
+
+
+class FakeClient:
+    def __init__(self, saves=None, states=None, blobs=None):
+        self._saves = saves or {}
+        self._states = states or {}
+        self._blobs = blobs or {}
+    def list_saves(self, rom_id): return self._saves.get(rom_id, [])
+    def list_states(self, rom_id): return self._states.get(rom_id, [])
+    def download_save_content(self, sid): return self._blobs[("save", sid)]
+    def download_state_content(self, sid): return self._blobs[("state", sid)]
+
+
+def _entry(rom_id=1):
+    return RomEntry(rom_id=rom_id, system="genesis", game_name="Sonic",
+                    candidate_basenames={"Sonic"})
+
+
+def test_pull_writes_new_save(tmp_path):
+    client = FakeClient(
+        saves={1: [{"id": 9, "file_name": "Sonic.srm", "emulator": "genesis",
+                    "updated_at": "2026-06-01T10:00:00"}]},
+        blobs={("save", 9): b"REMOTE"})
+    settings = _Settings(tmp_path / "saves", tmp_path / "states")
+    summary = pull_games(client, [_entry()], settings)
+    assert (tmp_path / "saves" / "Sonic.srm").read_bytes() == b"REMOTE"
+    assert summary["written"] == 1
+
+
+def test_pull_skips_identical(tmp_path):
+    (tmp_path / "saves").mkdir()
+    (tmp_path / "saves" / "Sonic.srm").write_bytes(b"SAME")
+    client = FakeClient(
+        saves={1: [{"id": 9, "file_name": "Sonic.srm", "emulator": "genesis",
+                    "updated_at": "2026-06-01T10:00:00"}]},
+        blobs={("save", 9): b"SAME"})
+    settings = _Settings(tmp_path / "saves", tmp_path / "states")
+    summary = pull_games(client, [_entry()], settings)
+    assert summary["skipped"] == 1 and summary["written"] == 0
+
+
+def test_pull_conflict_take_remote_via_flag(tmp_path):
+    (tmp_path / "saves").mkdir()
+    (tmp_path / "saves" / "Sonic.srm").write_bytes(b"LOCAL")
+    client = FakeClient(
+        saves={1: [{"id": 9, "file_name": "Sonic.srm", "emulator": "genesis",
+                    "updated_at": "2026-06-01T10:00:00"}]},
+        blobs={("save", 9): b"REMOTE"})
+    settings = _Settings(tmp_path / "saves", tmp_path / "states")
+    summary = pull_games(client, [_entry()], settings, take_remote=True)
+    assert (tmp_path / "saves" / "Sonic.srm").read_bytes() == b"REMOTE"
+    assert summary["written"] == 1
+
+
+def test_pull_conflict_keep_local_via_callback(tmp_path):
+    (tmp_path / "saves").mkdir()
+    (tmp_path / "saves" / "Sonic.srm").write_bytes(b"LOCAL")
+    client = FakeClient(
+        saves={1: [{"id": 9, "file_name": "Sonic.srm", "emulator": "genesis",
+                    "updated_at": "2026-06-01T10:00:00"}]},
+        blobs={("save", 9): b"REMOTE"})
+    settings = _Settings(tmp_path / "saves", tmp_path / "states")
+    summary = pull_games(client, [_entry()], settings,
+                         on_conflict=lambda item, path, mtime: False)  # keep local
+    assert (tmp_path / "saves" / "Sonic.srm").read_bytes() == b"LOCAL"
+    assert summary["kept"] == 1 and summary["written"] == 0
+
+
+def test_pull_fetches_states_too(tmp_path):
+    client = FakeClient(
+        states={1: [{"id": 4, "file_name": "Sonic.state1", "emulator": "genesis",
+                     "updated_at": "2026-06-01T10:00:00"}]},
+        blobs={("state", 4): b"ST"})
+    settings = _Settings(tmp_path / "saves", tmp_path / "states")
+    pull_games(client, [_entry()], settings)
+    assert (tmp_path / "states" / "Sonic.state1").read_bytes() == b"ST"
+
+
+def test_pull_conflict_take_remote_via_callback(tmp_path):
+    (tmp_path / "saves").mkdir()
+    (tmp_path / "saves" / "Sonic.srm").write_bytes(b"LOCAL")
+    client = FakeClient(
+        saves={1: [{"id": 9, "file_name": "Sonic.srm", "emulator": "genesis",
+                    "updated_at": "2026-06-01T10:00:00"}]},
+        blobs={("save", 9): b"REMOTE"})
+    settings = _Settings(tmp_path / "saves", tmp_path / "states")
+    summary = pull_games(client, [_entry()], settings,
+                         on_conflict=lambda item, path, mtime: True)  # take remote
+    assert (tmp_path / "saves" / "Sonic.srm").read_bytes() == b"REMOTE"
+    assert summary["written"] == 1
+
+
+def test_pull_calls_on_written(tmp_path):
+    written = []
+    client = FakeClient(
+        saves={1: [{"id": 9, "file_name": "Sonic.srm", "emulator": "genesis",
+                    "updated_at": "2026-06-01T10:00:00"}]},
+        blobs={("save", 9): b"REMOTE"})
+    settings = _Settings(tmp_path / "saves", tmp_path / "states")
+    pull_games(client, [_entry()], settings, on_written=written.append)
+    assert written == [tmp_path / "saves" / "Sonic.srm"]
 
 
 def _item(kind="save", file_name="Sonic.srm", emulator="genesis"):
