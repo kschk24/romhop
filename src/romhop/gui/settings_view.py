@@ -95,6 +95,13 @@ class SettingsView(QWidget):
     def sync_enabled(self) -> bool:
         return self._settings.sync_enabled
 
+    def set_sync_enabled(self, enabled: bool) -> None:
+        """Mirror an external sync-toggle change (e.g. the bottom-bar button)
+        into the saved settings and the checkbox, so the menu never disagrees
+        with the rest of the UI."""
+        self._settings = replace(self._settings, sync_enabled=enabled)
+        self.sync_check.setChecked(enabled)
+
     def current_settings(self) -> Settings:
         """The last-saved Settings (drives the host's in-memory copy)."""
         return self._settings

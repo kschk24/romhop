@@ -183,24 +183,54 @@ def test_sync_toggle_starts_and_stops_worker(qtbot):
 
     # Toggle on -> worker runs, indicator shows "watching", setting persisted.
     with qtbot.waitSignal(win._sync_status_changed, timeout=2000):
-        win.sync_toggle.setChecked(True)
+        win.sync_button.setChecked(True)
     qtbot.waitUntil(lambda: "watching" in win.sync_status_text().lower(), timeout=2000)
     assert persisted[-1] is True
 
     # Toggle off -> worker stops, indicator returns to idle.
-    win.sync_toggle.setChecked(False)
+    win.sync_button.setChecked(False)
     qtbot.waitUntil(lambda: "idle" in win.sync_status_text().lower(), timeout=2000)
     assert persisted[-1] is False
 
 
-def test_sync_indicator_click_opens_sync_settings(qtbot):
+def test_sync_button_dot_reflects_running_state(qtbot):
     from romhop.gui.main_window import MainWindow
 
-    win = MainWindow(settings=config.default_settings())
+    def watch_fn(stop_event):
+        stop_event.wait(timeout=2)
+
+    win = MainWindow(
+        settings=config.default_settings(),
+        sync_watch_fn=watch_fn,
+        persist_settings=lambda s: None,
+    )
     qtbot.addWidget(win)
-    assert win.current_view_name() == "library"
-    win._sync_label.click()
-    assert win.current_view_name() == "settings"
+
+    # At rest the dot is grey ("off").
+    assert win.sync_state() == "off"
+    # Running -> green dot.
+    with qtbot.waitSignal(win._sync_status_changed, timeout=2000):
+        win.sync_button.setChecked(True)
+    qtbot.waitUntil(lambda: win.sync_state() == "running", timeout=2000)
+    # Stopped -> back to grey.
+    win.sync_button.setChecked(False)
+    qtbot.waitUntil(lambda: win.sync_state() == "off", timeout=2000)
+
+
+def test_bottom_toggle_propagates_to_settings_menu(qtbot):
+    from romhop.gui.main_window import MainWindow
+
+    win = MainWindow(settings=config.default_settings(),
+                     persist_settings=lambda s: None)
+    qtbot.addWidget(win)
+    # Both controls start in agreement (off).
+    assert win.sync_button.isChecked() is False
+    assert win.settings_view.sync_check.isChecked() is False
+
+    # Flipping the bottom button must be reflected in the settings menu.
+    win.sync_button.setChecked(True)
+    win.show_settings()
+    assert win.settings_view.sync_check.isChecked() is True
 
 
 def test_settings_save_reconciles_sync_toggle(qtbot, monkeypatch):
@@ -210,9 +240,9 @@ def test_settings_save_reconciles_sync_toggle(qtbot, monkeypatch):
     win = MainWindow(settings=config.default_settings(),
                      persist_settings=lambda s: None)
     qtbot.addWidget(win)
-    assert win.sync_toggle.isChecked() is False
+    assert win.sync_button.isChecked() is False
 
-    # Enabling sync via the settings section + Save flips the bottom toggle.
+    # Enabling sync via the settings section + Save flips the bottom button.
     win.settings_view.sync_check.setChecked(True)
     win.settings_view._on_save()
-    assert win.sync_toggle.isChecked() is True
+    assert win.sync_button.isChecked() is True

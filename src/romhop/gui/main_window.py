@@ -4,7 +4,6 @@ from PySide6.QtCore import Signal
 from dataclasses import replace
 
 from PySide6.QtWidgets import (
-    QCheckBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -33,6 +32,21 @@ def _human_speed(bytes_per_sec: float) -> str:
             return f"{value:.0f} {unit}" if unit == "B/s" else f"{value:.1f} {unit}"
         value /= 1024
     return f"{value:.1f} GB/s"
+
+
+def _sync_state_class(state: str) -> str:
+    """Map a fine-grained sync status string to the coarse class that drives
+    the indicator dot's colour: ``off`` (grey), ``running`` (green), ``error``
+    (red)."""
+    if state.startswith("error"):
+        return "error"
+    if state == "watching":
+        return "running"
+    return "off"
+
+
+# Dot colours per coarse class. Grey at rest, green while watching, red on error.
+_SYNC_DOT_COLORS = {"off": "#8b949e", "running": "#3fb950", "error": "#f85149"}
 
 
 class MainWindow(QWidget):
@@ -96,23 +110,24 @@ class MainWindow(QWidget):
         self.progress_label = QLabel("")
         self.progress_label.setObjectName("StatusDim")
         self.progress_label.hide()
-        # Quick sync on/off toggle, sitting next to the status indicator.
-        self.sync_toggle = QCheckBox("Sync")
-        self.sync_toggle.setChecked(settings.sync_enabled)  # before connect: no fire
-        self.sync_toggle.toggled.connect(self._on_sync_toggled)
-        # Indicator doubles as a clickable shortcut into the sync settings.
-        self._sync_label = QPushButton("Sync: idle")
-        self._sync_label.setObjectName("StatusDim")
-        self._sync_label.setFlat(True)
-        self._sync_label.clicked.connect(self._open_sync_settings)
+        # Single sync control: one button toggles sync on/off and its leading
+        # dot reports the live worker state (grey idle → green watching → red
+        # error). No separate indicator, no jump-to-settings shortcut.
+        self._sync_state = "idle"
+        self.sync_button = QPushButton("●  Sync")
+        self.sync_button.setObjectName("SyncButton")
+        self.sync_button.setCheckable(True)
+        self.sync_button.setChecked(settings.sync_enabled)  # before connect: no fire
+        self.sync_button.toggled.connect(self._on_sync_toggled)
         bottom_row = QHBoxLayout(self.bottom)
         bottom_row.addWidget(self._sel_label)
         bottom_row.addWidget(self.download_btn)
         bottom_row.addWidget(self.progress_bar)
         bottom_row.addWidget(self.progress_label)
         bottom_row.addStretch(1)
-        bottom_row.addWidget(self.sync_toggle)
-        bottom_row.addWidget(self._sync_label)
+        bottom_row.addWidget(self.sync_button)
+        # Paint the dot grey for the initial idle state.
+        self.set_sync_status(self._sync_state)
 
         self.library.selection_changed.connect(self._on_selection)
         self.download_btn.clicked.connect(self.download_selected)
@@ -157,17 +172,28 @@ class MainWindow(QWidget):
 
     # --- bottom bar state ---
     def sync_status_text(self) -> str:
-        return self._sync_label.text()
+        return f"Sync: {self._sync_state}"
+
+    def sync_state(self) -> str:
+        """Coarse class behind the indicator dot: off / running / error."""
+        return _sync_state_class(self._sync_state)
 
     def set_sync_status(self, state: str) -> None:
-        self._sync_label.setText(f"Sync: {state}")
+        # Record the fine-grained text, then recolour the button's dot from its
+        # coarse class. Tooltip carries the detail (e.g. an error message).
+        self._sync_state = state
+        color = _SYNC_DOT_COLORS[_sync_state_class(state)]
+        self.sync_button.setStyleSheet(f"#SyncButton {{ color: {color}; }}")
+        self.sync_button.setToolTip(f"Sync: {state}")
         self._sync_status_changed.emit(state)
 
     # --- sync controls ---
     def _on_sync_toggled(self, enabled: bool) -> None:
-        # Bottom-bar toggle: persist the intent (survives restart), reconcile.
+        # Bottom-bar toggle: persist the intent (survives restart), keep the
+        # settings menu in lockstep so the two never disagree, then reconcile.
         self._settings = replace(self._settings, sync_enabled=enabled)
         self._persist_settings(self._settings)
+        self.settings_view.set_sync_enabled(enabled)
         self._reconcile_sync(enabled)
 
     def _reconcile_sync(self, enabled: bool) -> None:
@@ -195,20 +221,15 @@ class MainWindow(QWidget):
             self._sync_worker.deleteLater()
             self._sync_worker = None
 
-    def _open_sync_settings(self) -> None:
-        # Clicking the indicator jumps straight to the sync settings section.
-        self.show_settings()
-        self.settings_view.focus_sync()
-
     def _on_settings_saved(self) -> None:
         # Settings already persisted itself; adopt its Settings so our in-memory
-        # copy doesn't go stale, then mirror the sync checkbox onto the bottom
-        # toggle WITHOUT re-persisting (block the toggle's signal) and reconcile.
+        # copy doesn't go stale, then mirror the sync flag onto the bottom
+        # button WITHOUT re-persisting (block its signal) and reconcile.
         self._settings = self.settings_view.current_settings()
         enabled = self._settings.sync_enabled
-        self.sync_toggle.blockSignals(True)
-        self.sync_toggle.setChecked(enabled)
-        self.sync_toggle.blockSignals(False)
+        self.sync_button.blockSignals(True)
+        self.sync_button.setChecked(enabled)
+        self.sync_button.blockSignals(False)
         self._reconcile_sync(enabled)
         self.show_library()
 
