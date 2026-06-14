@@ -15,6 +15,7 @@ class Rom:
     fs_name_no_ext: str
     file_names: list[str]
     has_multiple_files: bool = False
+    url_cover: str | None = None
 
 
 class RommClient:
@@ -49,11 +50,18 @@ class RommClient:
                     fs_name_no_ext=item["fs_name_no_ext"],
                     file_names=[f["file_name"] for f in (item.get("files") or [])],
                     has_multiple_files=bool(item.get("has_multiple_files", False)),
+                    url_cover=item.get("url_cover"),
                 ))
             offset += limit
             if not items or total is None or offset >= total:
                 break
         return roms
+
+    def download_cover(self, url_cover: str) -> bytes:
+        """Fetch raw cover-image bytes for a relative cover URL."""
+        resp = self._http.get(url_cover)
+        resp.raise_for_status()
+        return resp.content
 
     def download_rom_content(self, rom_id: int, out_name: str, on_progress=None) -> bytes:
         # quote out_name fully (safe="") so a slash can't break the path structure

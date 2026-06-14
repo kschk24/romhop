@@ -141,3 +141,20 @@ def test_download_rom_content_reports_progress():
     assert calls, "on_progress was never called"
     assert calls[-1][0] == 1000          # cumulative bytes == total
     assert calls[-1][1] == 1000          # Content-Length reported as total
+
+
+def test_list_roms_captures_url_cover():
+    import httpx
+    from romhop.romm_client import RommClient
+
+    def handler(request):
+        return httpx.Response(200, json={"items": [{
+            "id": 1, "name": "Sonic", "platform_slug": "genesis",
+            "fs_name": "Sonic.md", "fs_name_no_ext": "Sonic",
+            "files": [{"file_name": "Sonic.md"}],
+            "url_cover": "/assets/covers/1.png",
+        }], "total": 1, "limit": 500, "offset": 0})
+
+    client = RommClient(httpx.Client(base_url="http://romm.test", transport=httpx.MockTransport(handler)))
+    roms = client.list_roms()
+    assert roms[0].url_cover == "/assets/covers/1.png"
