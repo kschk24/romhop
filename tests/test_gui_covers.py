@@ -42,3 +42,17 @@ def test_get_cover_returns_none_when_no_url(tmp_path, monkeypatch):
 def test_get_cover_returns_none_on_fetch_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(covers, "cache_dir", lambda: tmp_path)
     assert covers.get_cover(_rom(), FakeClient(fail=True)) is None
+
+
+def test_get_cover_refetches_empty_cache(tmp_path, monkeypatch):
+    # A zero-byte cached file (truncated prior write) must not be served;
+    # get_cover should re-fetch and overwrite it with real bytes.
+    monkeypatch.setattr(covers, "cache_dir", lambda: tmp_path)
+    rom = _rom()
+    dest = tmp_path / f"{rom.id}.img"
+    dest.write_bytes(b"")
+    client = FakeClient()
+    p = covers.get_cover(rom, client)
+    assert p is not None
+    assert Path(p).stat().st_size > 0
+    assert client.calls == 1

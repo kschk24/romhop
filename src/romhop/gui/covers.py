@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import platformdirs
@@ -22,11 +23,16 @@ def get_cover(rom: Rom, client) -> Path | None:
     if not rom.url_cover:
         return None
     dest = cache_dir() / f"{rom.id}.img"
-    if dest.exists():
+    # Require a non-empty file: a zero-byte blob from a truncated prior write
+    # would otherwise be served forever and fail to load as an image.
+    if dest.exists() and dest.stat().st_size > 0:
         return dest
     try:
         data = client.download_cover(rom.url_cover)
-    except Exception:
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            "Cover fetch failed for rom %s: %s", rom.id, exc
+        )
         return None
     dest.write_bytes(data)
     return dest
