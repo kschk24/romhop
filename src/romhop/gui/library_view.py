@@ -58,6 +58,10 @@ class LibraryView(QWidget):
         self._cover_provider = cover_provider
         self._cover_labels: dict[int, QLabel] = {}
         self._cover_loader = None
+        # Every loader started but not yet finished. Holding a strong reference
+        # here keeps the QThread alive until run() returns, even after a newer
+        # load supersedes it — otherwise GC frees a running thread and Qt aborts.
+        self._cover_loaders: set = set()
         self._roms: list[Rom] = []
         self._checks: dict[int, tuple[QCheckBox, Rom]] = {}
         # Global selection: rom ids checked across ALL platforms. The per-tab
@@ -146,11 +150,23 @@ class LibraryView(QWidget):
     def _start_cover_load(self, roms: list[Rom]) -> None:
         if self._cover_provider is None or not roms:
             return
+        # A previous load may still be running (covers fetch from disk/network).
+        # Ask it to stop, but keep it referenced in _cover_loaders until it
+        # actually finishes — dropping a running QThread crashes the app.
+        self._stop_cover_load()
         loader = CoverLoader(roms, self._cover_provider)
         loader.cover_ready.connect(self._apply_cover)
-        # Hold a reference so the thread isn't garbage-collected mid-run.
+        loader.finished.connect(lambda ldr=loader: self._cover_loaders.discard(ldr))
+        self._cover_loaders.add(loader)
         self._cover_loader = loader
         loader.start()
+
+    def _stop_cover_load(self) -> None:
+        # Cooperative cancel: CoverLoader.run() checks isInterruptionRequested()
+        # between roms and returns early, firing finished -> discard.
+        if self._cover_loader is not None:
+            self._cover_loader.requestInterruption()
+            self._cover_loader = None
 
     def _apply_cover(self, rom_id: int, path: str) -> None:
         # A loader from a previous platform may emit for a tile that's gone.

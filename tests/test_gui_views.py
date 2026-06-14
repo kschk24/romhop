@@ -170,3 +170,38 @@ def test_unchecking_removes_from_global_selection(qtbot):
     assert len(view.selected_roms()) == 1
     check.setChecked(False)
     assert view.selected_roms() == []
+
+
+def test_switching_platform_does_not_drop_running_cover_loader(qtbot):
+    # Regression: set_roms overwrote the single _cover_loader slot, dropping the
+    # previous loader's last reference while its QThread was still running -> GC
+    # destroyed it -> "QThread: Destroyed while thread is still running" abort.
+    import threading
+    from romhop.gui.library_view import LibraryView
+
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_provider(rom):
+        started.set()
+        release.wait(2.0)        # block so the loader stays running
+        return None
+
+    view = LibraryView(cover_provider=slow_provider)
+    qtbot.addWidget(view)
+    view.set_roms([_rom("Sonic", "genesis"), _rom("Tails", "genesis")])
+    assert started.wait(2.0)     # first loader is running
+    first = view._cover_loader
+    assert first in view._cover_loaders
+
+    # Switch platform while the first loader is mid-run.
+    view.set_roms([_rom("Mario", "nes")])
+
+    # The old loader must be asked to stop AND kept referenced until it finishes,
+    # never silently dropped while running.
+    assert first.isInterruptionRequested()
+    assert first in view._cover_loaders
+
+    release.set()
+    qtbot.waitUntil(lambda: first not in view._cover_loaders, timeout=2000)
+    assert not first.isRunning()

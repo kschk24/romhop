@@ -109,6 +109,8 @@ class CoverLoader(QThread):
 
     def run(self) -> None:
         for rom in self._roms:
+            if self.isInterruptionRequested():  # superseded by a newer load
+                return
             try:
                 path = self._cover_provider(rom)
             except Exception:  # a bad cover must not sink the rest of the batch
