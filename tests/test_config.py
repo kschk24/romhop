@@ -63,3 +63,14 @@ def test_core_overrides_round_trips(tmp_path):
 def test_core_overrides_defaults_empty(tmp_path):
     from romhop import config
     assert config.default_settings().core_overrides == {}
+
+
+def test_settings_theme_defaults_and_roundtrips(tmp_path):
+    from romhop import config
+    s = config.default_settings()
+    assert s.theme == "default"
+    s.theme = "neon"
+    path = tmp_path / "settings.json"
+    config.save_settings(s, path)
+    loaded = config.load_settings(path)
+    assert loaded.theme == "neon"
