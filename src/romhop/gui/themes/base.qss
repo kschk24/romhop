@@ -1,0 +1,21 @@
+QWidget {
+    background-color: {{bg}};
+    color: {{text}};
+    font-family: {{font_family}};
+    font-size: {{font_size}};
+}
+QFrame#Sidebar, QFrame#BottomBar {
+    background-color: {{panel}};
+}
+QPushButton {
+    background-color: {{panel}};
+    border: 1px solid {{accent}};
+    border-radius: 4px;
+    padding: 4px 10px;
+}
+QPushButton:hover {
+    background-color: {{accent}};
+}
+QLabel#StatusDim {
+    color: {{text_dim}};
+}
