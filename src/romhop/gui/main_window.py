@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -15,14 +16,22 @@ from romhop.config import Settings
 from romhop.gui import theme
 from romhop.gui.library_view import LibraryView
 from romhop.gui.settings_view import SettingsView
+from romhop.gui.workers import CallableWorker
 
 
 class MainWindow(QWidget):
     """Layout A: top search row, library/settings stack, pinned bottom bar."""
 
-    def __init__(self, settings: Settings, parent=None):
+    downloads_finished = Signal()
+
+    def __init__(self, settings: Settings, parent=None, *,
+                 rom_provider=None, download_action=None):
         super().__init__(parent)
         self._settings = settings
+        self._rom_provider = rom_provider
+        self._download_action = download_action
+        self._workers: list = []
+        self._pending = 0
         self.setWindowTitle("romhop")
 
         loaded = theme.load_active_theme(settings.theme)
@@ -60,6 +69,7 @@ class MainWindow(QWidget):
         bottom_row.addWidget(self._sync_label)
 
         self.library.selection_changed.connect(self._on_selection)
+        self.download_btn.clicked.connect(self.download_selected)
 
         layout = QVBoxLayout(self)
         layout.addLayout(top)
@@ -85,3 +95,50 @@ class MainWindow(QWidget):
 
     def _on_selection(self, roms: list) -> None:
         self._sel_label.setText(f"{len(roms)} selected")
+
+    # --- library loading + downloads ---
+    def load_library(self) -> None:
+        if self._rom_provider is None:
+            return
+        self.library.set_roms(self._rom_provider())
+
+    def download_selected(self) -> None:
+        if self._download_action is None:
+            self.downloads_finished.emit()
+            return
+        selected = self.library.selected_roms()
+        self._pending = len(selected)
+        if self._pending == 0:
+            self.downloads_finished.emit()
+            return
+        # Disable while a batch runs so a second batch can't reset _pending
+        # underneath the in-flight workers.
+        self.download_btn.setEnabled(False)
+        for rom in selected:
+            worker = CallableWorker(lambda r=rom: self._download_action(r))
+            worker.done.connect(self._on_download_done)
+            worker.error.connect(self._on_download_error)
+            # finished fires after run() returns: safe point to drop the
+            # reference so the worker list doesn't grow unbounded.
+            worker.finished.connect(lambda w=worker: self._cleanup_worker(w))
+            self._workers.append(worker)
+            worker.start()
+
+    def _cleanup_worker(self, worker: CallableWorker) -> None:
+        if worker in self._workers:
+            self._workers.remove(worker)
+        worker.deleteLater()
+
+    def _on_download_done(self, _result) -> None:
+        self._finish_one()
+
+    def _on_download_error(self, message: str) -> None:
+        self.set_sync_status(f"error: {message}")
+        self._finish_one()
+
+    def _finish_one(self) -> None:
+        self._pending -= 1
+        if self._pending <= 0:
+            self._pending = 0
+            self.download_btn.setEnabled(True)
+            self.downloads_finished.emit()
