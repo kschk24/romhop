@@ -35,3 +35,16 @@ def test_library_view_populates_and_selects(qtbot):
     check, rom = next(iter(view._checks.values()))
     check.setChecked(True)
     assert view.selected_roms()[0].name == "Sonic"
+
+
+def test_library_view_selection_survives_filter(qtbot):
+    from romhop.gui.library_view import LibraryView
+    view = LibraryView()
+    qtbot.addWidget(view)
+    view.set_roms([_rom("Sonic", "genesis"), _rom("Streets of Rage", "genesis")])
+    for check, rom in list(view._checks.values()):
+        if rom.name == "Sonic":
+            check.setChecked(True)
+    # Narrow the view to just "Sonic"; its checked state must persist.
+    view.filter("Sonic")
+    assert [r.name for r in view.selected_roms()] == ["Sonic"]

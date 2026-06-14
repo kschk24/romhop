@@ -36,6 +36,7 @@ class LibraryView(QWidget):
         super().__init__(parent)
         self._roms: list[Rom] = []
         self._checks: dict[int, tuple[QCheckBox, Rom]] = {}
+        self._query = ""
 
         self.sidebar = QListWidget()
         self.sidebar.setObjectName("Sidebar")
@@ -63,27 +64,37 @@ class LibraryView(QWidget):
         return item.text() if item else ""
 
     def _on_platform(self, platform: str) -> None:
-        self._populate(platform, "")
+        # Keep the active search query when switching platforms.
+        self._populate(platform, self._query)
 
     def filter(self, query: str) -> None:
+        self._query = query
         self._populate(self.current_platform(), query)
 
     def _populate(self, platform: str, query: str) -> None:
+        # Preserve which roms are checked so multi-select survives filtering
+        # and platform switches (selection drives the download flow).
+        previously_checked = {
+            rom_id for rom_id, (check, _) in self._checks.items()
+            if check.isChecked()
+        }
         while self._grid.count():
-            w = self._grid.takeAt(0).widget()
-            if w is not None:
-                w.deleteLater()
+            item = self._grid.takeAt(0)
+            if item.widget() is not None:
+                item.widget().deleteLater()
+            del item
         self._checks.clear()
         games = filter_games(self._roms, platform, query)
         cols = 4
         for i, rom in enumerate(games):
             cell = QWidget()
             box = QVBoxLayout(cell)
-            cover = QLabel(rom.name)
-            cover.setAlignment(Qt.AlignCenter)
+            name_label = QLabel(rom.name)
+            name_label.setAlignment(Qt.AlignCenter)
             check = QCheckBox(rom.name)
+            check.setChecked(rom.id in previously_checked)
             check.toggled.connect(self._emit_selection)
-            box.addWidget(cover)
+            box.addWidget(name_label)
             box.addWidget(check)
             self._grid.addWidget(cell, i // cols, i % cols)
             self._checks[rom.id] = (check, rom)
