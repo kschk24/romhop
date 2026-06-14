@@ -462,5 +462,20 @@ def scan(yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmat
     _run_scan(settings, assume_yes=yes)
 
 
+@app.command()
+def gui() -> None:
+    """Launch the romhop desktop GUI (requires the [gui] extra: PySide6)."""
+    try:
+        from romhop.gui.app import run
+    except ImportError:
+        typer.secho(
+            "The GUI needs PySide6. Install it with:  pip install 'romhop[gui]'",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    run()
+
+
 if __name__ == "__main__":
     app()
