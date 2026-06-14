@@ -178,3 +178,24 @@ def test_download_state_content_returns_bytes():
         assert request.url.path == "/api/states/3/content"
         return httpx.Response(200, content=b"STATEBYTES")
     assert _client(handler).download_state_content(3) == b"STATEBYTES"
+
+
+def test_list_roms_captures_platform_name():
+    import httpx
+    from romhop.romm_client import RommClient
+
+    def handler(request):
+        return httpx.Response(200, json={
+            "items": [{
+                "id": 1, "name": "Sonic", "platform_slug": "genesis",
+                "platform_name": "Sega Genesis",
+                "fs_name": "Sonic.md", "fs_name_no_ext": "Sonic",
+                "files": [], "has_multiple_files": False, "url_cover": None,
+            }],
+            "total": 1, "limit": 500, "offset": 0,
+        })
+
+    client = RommClient(httpx.Client(transport=httpx.MockTransport(handler),
+                                     base_url="http://x"))
+    roms = client.list_roms()
+    assert roms[0].platform_name == "Sega Genesis"

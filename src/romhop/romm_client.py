@@ -16,6 +16,7 @@ class Rom:
     file_names: list[str]
     has_multiple_files: bool = False
     url_cover: str | None = None
+    platform_name: str | None = None
 
 
 class RommClient:
@@ -51,6 +52,7 @@ class RommClient:
                     file_names=[f["file_name"] for f in (item.get("files") or [])],
                     has_multiple_files=bool(item.get("has_multiple_files", False)),
                     url_cover=item.get("url_cover"),
+                    platform_name=item.get("platform_name"),
                 ))
             offset += limit
             if not items or total is None or offset >= total:
