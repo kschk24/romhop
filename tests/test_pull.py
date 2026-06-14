@@ -79,6 +79,25 @@ def test_pull_conflict_keep_local_via_callback(tmp_path):
     assert summary["kept"] == 1 and summary["written"] == 0
 
 
+def test_pull_routes_state_by_extension(tmp_path):
+    # RomM serves a .state under /api/saves (sync pushes states there). It must
+    # still be written to states_dir, while the .srm goes to saves_dir.
+    client = FakeClient(
+        saves={1: [
+            {"id": 4, "file_name": "Sonic.srm", "emulator": "mGBA",
+             "updated_at": "2026-06-01T10:00:00"},
+            {"id": 5, "file_name": "Sonic.state", "emulator": "mGBA",
+             "updated_at": "2026-06-01T10:00:00"},
+        ]},
+        blobs={("save", 4): b"SRM", ("save", 5): b"STATE"})
+    settings = _Settings(tmp_path / "saves", tmp_path / "states",
+                         sort_saves_by_core=True, sort_states_by_core=True)
+    pull_games(client, [_entry()], settings)
+    assert (tmp_path / "saves" / "mGBA" / "Sonic.srm").read_bytes() == b"SRM"
+    assert (tmp_path / "states" / "mGBA" / "Sonic.state").read_bytes() == b"STATE"
+    assert not (tmp_path / "saves" / "mGBA" / "Sonic.state").exists()
+
+
 def test_pull_fetches_states_too(tmp_path):
     client = FakeClient(
         states={1: [{"id": 4, "file_name": "Sonic.state1", "emulator": "genesis",
