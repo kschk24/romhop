@@ -14,9 +14,11 @@ def run() -> None:
 
     from romhop.config import get_token, load_settings
     from romhop.download import download_rom
+    from romhop.gui import covers
     from romhop.gui.main_window import MainWindow
     from romhop.mapping_cache import MappingCache
     from romhop.romm_client import RommClient
+    from romhop.sync import watch_and_push
 
     settings = load_settings()
     client = RommClient(base_url=settings.romm_url, token=get_token() or "")
@@ -26,12 +28,24 @@ def run() -> None:
     def rom_provider():
         return client.list_roms()
 
-    def download_action(rom):
+    def cover_provider(rom):
+        return covers.get_cover(rom, client)
+
+    def download_action(rom, on_progress=None):
         return download_rom(
             rom, client,
             roms_root=settings.roms_root,
             cache=cache,
             overrides=settings.platform_overrides,
+            on_progress=on_progress,
+        )
+
+    def sync_watch_fn(stop_event):
+        watch_and_push(
+            [settings.saves_dir, settings.states_dir], cache, client,
+            debounce_seconds=settings.sync_delay_seconds,
+            core_overrides=settings.core_overrides,
+            stop_event=stop_event,
         )
 
     app = QApplication(_sys.argv)
@@ -39,6 +53,8 @@ def run() -> None:
         settings=settings,
         rom_provider=rom_provider,
         download_action=download_action,
+        sync_watch_fn=sync_watch_fn,
+        cover_provider=cover_provider,
     )
     window.resize(900, 600)
     # An unconfigured or unreachable RomM must not crash startup: open the

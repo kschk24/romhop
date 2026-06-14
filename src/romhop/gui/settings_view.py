@@ -5,7 +5,9 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLineEdit,
     QPushButton,
@@ -58,12 +60,23 @@ class SettingsView(QWidget):
         self._settings = settings
         self._edits: dict[str, QLineEdit] = {}
 
-        form = QFormLayout()
+        self._form = QFormLayout()
+        form = self._form
         rows = settings_to_rows(settings)
         for field in EDITABLE_FIELDS:
             edit = QLineEdit(rows[field])
             self._edits[field] = edit
             form.addRow(field, edit)
+
+        # Sync section: an enable toggle grouped under its own heading so the
+        # bottom-bar indicator can navigate straight here. sync_delay_seconds
+        # stays in the form above; this is the on/off control.
+        self.sync_section = QGroupBox("Sync")
+        self.sync_section.setObjectName("SyncSection")
+        self.sync_check = QCheckBox("Enable save sync")
+        self.sync_check.setChecked(settings.sync_enabled)
+        sync_box = QVBoxLayout(self.sync_section)
+        sync_box.addWidget(self.sync_check)
 
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self._on_cancel)
@@ -76,13 +89,38 @@ class SettingsView(QWidget):
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
+        layout.addWidget(self.sync_section)
         layout.addLayout(buttons)
+
+    def sync_enabled(self) -> bool:
+        return self._settings.sync_enabled
+
+    def current_settings(self) -> Settings:
+        """The last-saved Settings (drives the host's in-memory copy)."""
+        return self._settings
+
+    def focus_sync(self) -> None:
+        """Surface the sync section (the clickable bottom-bar indicator lands
+        here)."""
+        self.sync_check.setFocus()
+
+    def filter(self, query: str) -> None:
+        """Show only rows whose field name matches the query (substring,
+        case-insensitive). Empty query shows every row."""
+        q = query.strip().lower()
+        for field, edit in self._edits.items():
+            visible = q in field.lower() if q else True
+            self._form.setRowVisible(edit, visible)
+
+    def is_field_visible(self, field: str) -> bool:
+        return self._form.isRowVisible(self._edits[field])
 
     def reset(self) -> None:
         """Repopulate fields from the saved settings, discarding edits."""
         rows = settings_to_rows(self._settings)
         for field, edit in self._edits.items():
             edit.setText(rows[field])
+        self.sync_check.setChecked(self._settings.sync_enabled)
 
     def keyPressEvent(self, event) -> None:
         # Esc backs out of settings without saving.
@@ -99,6 +137,9 @@ class SettingsView(QWidget):
         # TODO(validation): float()/Path() in apply_rows can raise on bad input;
         # wrap in try/except and surface errors in the UI when validation lands.
         rows = {field: edit.text() for field, edit in self._edits.items()}
-        self._settings = apply_rows(self._settings, rows)
+        self._settings = replace(
+            apply_rows(self._settings, rows),
+            sync_enabled=self.sync_check.isChecked(),
+        )
         config.save_settings(self._settings)
         self.saved.emit()

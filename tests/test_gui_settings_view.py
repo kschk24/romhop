@@ -60,6 +60,40 @@ def test_settings_view_reset_repopulates_from_settings(qtbot):
     assert view._edits["romm_url"].text() == "https://original"
 
 
+def test_settings_view_filter_hides_nonmatching_rows(qtbot):
+    from romhop.gui.settings_view import SettingsView
+    s = config.default_settings()
+    view = SettingsView(s)
+    qtbot.addWidget(view)
+    view.filter("rom")
+    # Fields whose name contains the query stay visible; others hide.
+    assert view.is_field_visible("romm_url")
+    assert view.is_field_visible("roms_root")
+    assert not view.is_field_visible("saves_dir")
+    assert not view.is_field_visible("sync_delay_seconds")
+
+
+def test_settings_view_filter_is_case_insensitive(qtbot):
+    from romhop.gui.settings_view import SettingsView
+    s = config.default_settings()
+    view = SettingsView(s)
+    qtbot.addWidget(view)
+    view.filter("SAVES")
+    assert view.is_field_visible("saves_dir")
+    assert not view.is_field_visible("romm_url")
+
+
+def test_settings_view_filter_empty_shows_all(qtbot):
+    from romhop.gui.settings_view import SettingsView, EDITABLE_FIELDS
+    s = config.default_settings()
+    view = SettingsView(s)
+    qtbot.addWidget(view)
+    view.filter("rom")
+    view.filter("")
+    for field in EDITABLE_FIELDS:
+        assert view.is_field_visible(field)
+
+
 def test_settings_view_escape_key_cancels(qtbot):
     from PySide6.QtCore import Qt
     from PySide6.QtGui import QKeyEvent
@@ -72,3 +106,46 @@ def test_settings_view_escape_key_cancels(qtbot):
         ev = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Escape,
                        Qt.KeyboardModifier.NoModifier)
         QApplication.sendEvent(view, ev)
+
+
+def test_settings_view_has_sync_section_reflecting_enabled(qtbot):
+    from romhop.gui.settings_view import SettingsView
+    s = config.default_settings()
+    s.sync_enabled = True
+    view = SettingsView(s)
+    qtbot.addWidget(view)
+    assert view.sync_check.isChecked() is True
+
+
+def test_settings_view_save_persists_sync_enabled(qtbot, monkeypatch):
+    from romhop.gui.settings_view import SettingsView
+    s = config.default_settings()
+    s.sync_enabled = False
+    view = SettingsView(s)
+    qtbot.addWidget(view)
+
+    saved = {}
+    monkeypatch.setattr(config, "save_settings", lambda st: saved.update(s=st))
+    view.sync_check.setChecked(True)
+    with qtbot.waitSignal(view.saved, timeout=1000):
+        view._on_save()
+    assert saved["s"].sync_enabled is True
+    assert view.sync_enabled() is True
+
+
+def test_settings_view_reset_restores_sync_checkbox(qtbot):
+    from romhop.gui.settings_view import SettingsView
+    s = config.default_settings()
+    s.sync_enabled = False
+    view = SettingsView(s)
+    qtbot.addWidget(view)
+    view.sync_check.setChecked(True)
+    view.reset()
+    assert view.sync_check.isChecked() is False
+
+
+def test_settings_view_focus_sync_is_callable(qtbot):
+    from romhop.gui.settings_view import SettingsView
+    view = SettingsView(config.default_settings())
+    qtbot.addWidget(view)
+    view.focus_sync()  # must not raise; points the user at the sync section

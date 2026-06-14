@@ -1,37 +1,61 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
+from dataclasses import replace
+
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QProgressBar,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from romhop import config
 from romhop.config import Settings
 from romhop.gui import theme
 from romhop.gui.library_view import LibraryView
 from romhop.gui.settings_view import SettingsView
-from romhop.gui.workers import CallableWorker
+from romhop.gui.workers import DownloadWorker, SyncWorker
+
+
+def _human_speed(bytes_per_sec: float) -> str:
+    """Render a bytes/sec figure as a compact human-readable rate."""
+    units = ["B/s", "KB/s", "MB/s", "GB/s"]
+    value = float(bytes_per_sec)
+    for unit in units:
+        if value < 1024 or unit == units[-1]:
+            return f"{value:.0f} {unit}" if unit == "B/s" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} GB/s"
 
 
 class MainWindow(QWidget):
     """Layout A: top search row, library/settings stack, pinned bottom bar."""
 
     downloads_finished = Signal()
+    # Fires whenever the sync indicator text changes; lets tests await state.
+    _sync_status_changed = Signal(str)
 
     def __init__(self, settings: Settings, parent=None, *,
-                 rom_provider=None, download_action=None):
+                 rom_provider=None, download_action=None,
+                 sync_watch_fn=None, persist_settings=None, cover_provider=None):
         super().__init__(parent)
         self._settings = settings
         self._rom_provider = rom_provider
         self._download_action = download_action
-        self._workers: list = []
-        self._pending = 0
+        self._cover_provider = cover_provider
+        self._sync_watch_fn = sync_watch_fn
+        self._persist_settings = persist_settings or config.save_settings
+        self._download_worker = None
+        self._sync_worker = None
+        self._progress_name = ""
+        self._progress_pos = ""
         self.setWindowTitle("romhop")
 
         loaded = theme.load_active_theme(settings.theme)
@@ -47,10 +71,11 @@ class MainWindow(QWidget):
         top.addWidget(gear, 0)
 
         # Stacked content: library + settings.
-        self.library = LibraryView()
-        self.search.textChanged.connect(self.library.filter)
+        self.library = LibraryView(cover_provider=cover_provider)
+        # Search is context-dependent: it filters whichever view is active.
+        self.search.textChanged.connect(self._on_search_changed)
         self.settings_view = SettingsView(settings)
-        self.settings_view.saved.connect(self.show_library)
+        self.settings_view.saved.connect(self._on_settings_saved)
         self.settings_view.cancelled.connect(self.show_library)
         self.stack = QStackedWidget()
         self.stack.addWidget(self.library)      # index 0
@@ -61,12 +86,32 @@ class MainWindow(QWidget):
         self.bottom.setObjectName("BottomBar")
         self._sel_label = QLabel("0 selected")
         self.download_btn = QPushButton("Download")
-        self._sync_label = QLabel("Sync: idle")
+        # Single shared progress bar: the current game in the batch. Hidden when
+        # idle so the bottom bar stays clean until a download is running.
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setObjectName("DownloadProgress")
+        self.progress_bar.setFixedWidth(180)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.hide()
+        self.progress_label = QLabel("")
+        self.progress_label.setObjectName("StatusDim")
+        self.progress_label.hide()
+        # Quick sync on/off toggle, sitting next to the status indicator.
+        self.sync_toggle = QCheckBox("Sync")
+        self.sync_toggle.setChecked(settings.sync_enabled)  # before connect: no fire
+        self.sync_toggle.toggled.connect(self._on_sync_toggled)
+        # Indicator doubles as a clickable shortcut into the sync settings.
+        self._sync_label = QPushButton("Sync: idle")
         self._sync_label.setObjectName("StatusDim")
+        self._sync_label.setFlat(True)
+        self._sync_label.clicked.connect(self._open_sync_settings)
         bottom_row = QHBoxLayout(self.bottom)
         bottom_row.addWidget(self._sel_label)
         bottom_row.addWidget(self.download_btn)
+        bottom_row.addWidget(self.progress_bar)
+        bottom_row.addWidget(self.progress_label)
         bottom_row.addStretch(1)
+        bottom_row.addWidget(self.sync_toggle)
         bottom_row.addWidget(self._sync_label)
 
         self.library.selection_changed.connect(self._on_selection)
@@ -77,15 +122,27 @@ class MainWindow(QWidget):
         layout.addWidget(self.stack, 1)
         layout.addWidget(self.bottom)
 
+    # --- search dispatch ---
+    def _on_search_changed(self, query: str) -> None:
+        # Route the query to whichever view is currently shown.
+        if self.current_view_name() == "settings":
+            self.settings_view.filter(query)
+        else:
+            self.library.filter(query)
+
     # --- view switching (named for testability) ---
     def show_settings(self) -> None:
         # Drop any stale edits from a previous visit before showing the form.
         self.settings_view.reset()
         self.settings_view.setFocus()
         self.stack.setCurrentIndex(1)
+        # Apply the standing query to the rows now that settings is active.
+        self.settings_view.filter(self.search.text())
 
     def show_library(self) -> None:
         self.stack.setCurrentIndex(0)
+        # Re-apply the standing query to the game list.
+        self.library.filter(self.search.text())
 
     def toggle_settings(self) -> None:
         # Gear acts as a toggle: into settings, or back out (discarding edits).
@@ -104,6 +161,56 @@ class MainWindow(QWidget):
 
     def set_sync_status(self, state: str) -> None:
         self._sync_label.setText(f"Sync: {state}")
+        self._sync_status_changed.emit(state)
+
+    # --- sync controls ---
+    def _on_sync_toggled(self, enabled: bool) -> None:
+        # Bottom-bar toggle: persist the intent (survives restart), reconcile.
+        self._settings = replace(self._settings, sync_enabled=enabled)
+        self._persist_settings(self._settings)
+        self._reconcile_sync(enabled)
+
+    def _reconcile_sync(self, enabled: bool) -> None:
+        if enabled:
+            self._start_sync()
+        else:
+            self._stop_sync()
+
+    def _start_sync(self) -> None:
+        if self._sync_watch_fn is None or self._sync_worker is not None:
+            return
+        worker = SyncWorker(self._sync_watch_fn)
+        worker.status.connect(self.set_sync_status)
+        worker.error.connect(lambda msg: self.set_sync_status(f"error: {msg}"))
+        worker.finished.connect(self._on_sync_finished)
+        self._sync_worker = worker
+        worker.start()
+
+    def _stop_sync(self) -> None:
+        if self._sync_worker is not None:
+            self._sync_worker.stop()
+
+    def _on_sync_finished(self) -> None:
+        if self._sync_worker is not None:
+            self._sync_worker.deleteLater()
+            self._sync_worker = None
+
+    def _open_sync_settings(self) -> None:
+        # Clicking the indicator jumps straight to the sync settings section.
+        self.show_settings()
+        self.settings_view.focus_sync()
+
+    def _on_settings_saved(self) -> None:
+        # Settings already persisted itself; adopt its Settings so our in-memory
+        # copy doesn't go stale, then mirror the sync checkbox onto the bottom
+        # toggle WITHOUT re-persisting (block the toggle's signal) and reconcile.
+        self._settings = self.settings_view.current_settings()
+        enabled = self._settings.sync_enabled
+        self.sync_toggle.blockSignals(True)
+        self.sync_toggle.setChecked(enabled)
+        self.sync_toggle.blockSignals(False)
+        self._reconcile_sync(enabled)
+        self.show_library()
 
     def _on_selection(self, roms: list) -> None:
         self._sel_label.setText(f"{len(roms)} selected")
@@ -119,38 +226,61 @@ class MainWindow(QWidget):
             self.downloads_finished.emit()
             return
         selected = self.library.selected_roms()
-        self._pending = len(selected)
-        if self._pending == 0:
+        if not selected:
             self.downloads_finished.emit()
             return
-        # Disable while a batch runs so a second batch can't reset _pending
-        # underneath the in-flight workers.
+        # Disable while a batch runs so a second batch can't start underneath
+        # the in-flight queue. One worker drains the queue sequentially.
         self.download_btn.setEnabled(False)
-        for rom in selected:
-            worker = CallableWorker(lambda r=rom: self._download_action(r))
-            worker.done.connect(self._on_download_done)
-            worker.error.connect(self._on_download_error)
-            # finished fires after run() returns: safe point to drop the
-            # reference so the worker list doesn't grow unbounded.
-            worker.finished.connect(lambda w=worker: self._cleanup_worker(w))
-            self._workers.append(worker)
-            worker.start()
+        self.download_btn.setText("Downloading…")
+        self._begin_progress()
+        worker = DownloadWorker(selected, self._download_action)
+        worker.item_started.connect(self._on_item_started)
+        worker.item_progress.connect(self._on_item_progress)
+        worker.item_error.connect(self._on_item_error)
+        worker.finished.connect(self._on_batch_finished)
+        self._download_worker = worker
+        worker.start()
 
-    def _cleanup_worker(self, worker: CallableWorker) -> None:
-        if worker in self._workers:
-            self._workers.remove(worker)
-        worker.deleteLater()
+    # --- download progress UI ---
+    def _begin_progress(self) -> None:
+        self.progress_bar.setMaximum(0)  # busy until the first byte count lands
+        self.progress_bar.setValue(0)
+        self.progress_bar.show()
+        self.progress_label.setText("")
+        self.progress_label.show()
 
-    def _on_download_done(self, _result) -> None:
-        self._finish_one()
+    def _on_item_started(self, index: int, count: int, name: str) -> None:
+        self._progress_name = name
+        self._progress_pos = f"{index}/{count}"
+        # New game in the batch: bar goes indeterminate until its total arrives.
+        self.progress_bar.setMaximum(0)
+        self.progress_bar.setValue(0)
+        self.progress_label.setText(f"{name} ({self._progress_pos})")
 
-    def _on_download_error(self, message: str) -> None:
-        self.set_sync_status(f"error: {message}")
-        self._finish_one()
+    def _on_item_progress(self, downloaded: int, total: int, speed: float) -> None:
+        if total > 0:
+            self.progress_bar.setMaximum(total)
+            self.progress_bar.setValue(downloaded)
+        else:
+            self.progress_bar.setMaximum(0)  # unknown size → indeterminate
+        rate = _human_speed(speed)
+        self.progress_label.setText(
+            f"{self._progress_name} ({self._progress_pos}) · {rate}"
+        )
 
-    def _finish_one(self) -> None:
-        self._pending -= 1
-        if self._pending <= 0:
-            self._pending = 0
-            self.download_btn.setEnabled(True)
-            self.downloads_finished.emit()
+    def _on_item_error(self, name: str, message: str) -> None:
+        self.set_sync_status(f"error: {name}: {message}")
+
+    def _on_batch_finished(self) -> None:
+        if self._download_worker is not None:
+            self._download_worker.deleteLater()
+            self._download_worker = None
+        self._end_progress()
+        self.download_btn.setText("Download")
+        self.download_btn.setEnabled(True)
+        self.downloads_finished.emit()
+
+    def _end_progress(self) -> None:
+        self.progress_bar.hide()
+        self.progress_label.hide()

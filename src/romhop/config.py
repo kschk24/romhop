@@ -21,6 +21,7 @@ class Settings:
     platform_overrides: dict[str, str] = field(default_factory=dict)
     core_overrides: dict[str, str] = field(default_factory=dict)
     sync_delay_seconds: float = 8.0
+    sync_enabled: bool = False
     theme: str = "default"
 
 
@@ -86,6 +87,7 @@ def load_settings(path: Path | None = None) -> Settings:
         platform_overrides=data.get("platform_overrides", {}),
         core_overrides=data.get("core_overrides", {}),
         sync_delay_seconds=data.get("sync_delay_seconds", 8.0),
+        sync_enabled=data.get("sync_enabled", False),
         theme=data.get("theme", "default"),
     )
 

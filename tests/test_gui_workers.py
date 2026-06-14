@@ -18,3 +18,109 @@ def test_callable_worker_emits_error(qtbot):
     with qtbot.waitSignal(w.error, timeout=2000) as blocker:
         w.start()
     assert "nope" in blocker.args[0]
+
+
+def _rom(rom_id, name):
+    from romhop.romm_client import Rom
+
+    return Rom(id=rom_id, name=name, platform_slug="genesis",
+               fs_name=f"{name}.md", fs_name_no_ext=name, file_names=[f"{name}.md"])
+
+
+def test_download_worker_runs_jobs_sequentially(qtbot):
+    roms = [_rom(1, "A"), _rom(2, "B")]
+    order = []
+
+    def action(rom, on_progress):
+        on_progress(100, 100)
+        order.append(rom.name)
+        return rom.name
+
+    w = workers.DownloadWorker(roms, action)
+    started = []
+    w.item_started.connect(lambda i, n, name: started.append((i, n, name)))
+    with qtbot.waitSignal(w.finished, timeout=2000):
+        w.start()
+
+    assert order == ["A", "B"]
+    assert started == [(1, 2, "A"), (2, 2, "B")]
+
+
+def test_download_worker_reports_progress_with_speed(qtbot):
+    roms = [_rom(1, "A")]
+
+    def action(rom, on_progress):
+        on_progress(50, 100)
+        on_progress(100, 100)
+        return rom.name
+
+    w = workers.DownloadWorker(roms, action)
+    progressed = []
+    w.item_progress.connect(lambda d, t, s: progressed.append((d, t, s)))
+    with qtbot.waitSignal(w.finished, timeout=2000):
+        w.start()
+
+    # First callback and the completion callback always surface.
+    seen = {(d, t) for d, t, _ in progressed}
+    assert (50, 100) in seen
+    assert (100, 100) in seen
+    # Speed is a non-negative bytes/sec figure derived in the worker.
+    assert all(s >= 0 for _, _, s in progressed)
+
+
+def test_download_worker_continues_past_item_error(qtbot):
+    roms = [_rom(1, "A"), _rom(2, "B")]
+    done = []
+
+    def action(rom, on_progress):
+        if rom.name == "A":
+            raise ValueError("boom A")
+        done.append(rom.name)
+        return rom.name
+
+    w = workers.DownloadWorker(roms, action)
+    errors = []
+    w.item_error.connect(lambda name, msg: errors.append((name, msg)))
+    with qtbot.waitSignal(w.finished, timeout=2000):
+        w.start()
+
+    assert errors and errors[0][0] == "A" and "boom A" in errors[0][1]
+    assert done == ["B"]  # batch keeps going after one failure
+
+
+def test_cover_loader_emits_only_for_roms_with_covers(qtbot):
+    roms = [_rom(1, "A"), _rom(2, "B")]
+
+    # Provider returns a path for rom 1 only (rom 2 has no cover).
+    def provider(rom):
+        return f"/covers/{rom.id}.png" if rom.id == 1 else None
+
+    w = workers.CoverLoader(roms, provider)
+    ready = []
+    w.cover_ready.connect(lambda rid, path: ready.append((rid, path)))
+    with qtbot.waitSignal(w.finished, timeout=2000):
+        w.start()
+
+    assert ready == [(1, "/covers/1.png")]
+
+
+def test_sync_worker_watches_then_stops(qtbot):
+    # watch_fn receives a threading.Event and blocks until it is set; stop()
+    # sets it so the worker can return (mirrors watch_and_push + stop_event).
+    started = []
+
+    def watch_fn(stop_event):
+        started.append(True)
+        stop_event.wait(timeout=2)
+
+    w = workers.SyncWorker(watch_fn)
+    states = []
+    w.status.connect(states.append)
+    with qtbot.waitSignal(w.status, timeout=2000):
+        w.start()  # first status emit == "watching"
+    assert started == [True]
+
+    with qtbot.waitSignal(w.finished, timeout=2000):
+        w.stop()
+    assert states[0] == "watching"
+    assert states[-1] == "idle"

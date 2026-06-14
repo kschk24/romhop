@@ -42,6 +42,15 @@ def test_save_and_load_roundtrip(tmp_path):
     assert loaded.sync_delay_seconds == 12.5
 
 
+def test_sync_enabled_defaults_false_and_roundtrips(tmp_path):
+    assert config.default_settings().sync_enabled is False
+    s = config.default_settings()
+    s.sync_enabled = True
+    path = tmp_path / "settings.json"
+    config.save_settings(s, path)
+    assert config.load_settings(path).sync_enabled is True
+
+
 def test_token_uses_keyring_not_file(tmp_path):
     config.set_token("rmm_secret")
     assert config.get_token() == "rmm_secret"

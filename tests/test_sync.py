@@ -108,3 +108,30 @@ def test_push_warns_and_skips_on_unresolved_collision(tmp_path):
     assert pushed is False
     assert client.uploads == []
     assert warned == [save]
+
+
+def test_watch_and_push_returns_when_stop_event_preset(tmp_path):
+    # A stop_event already set must make the watcher return promptly instead of
+    # blocking forever (this is what lets the GUI toggle sync off).
+    import threading
+
+    from romhop.sync import watch_and_push
+
+    saves = tmp_path / "saves"
+    states = tmp_path / "states"
+    saves.mkdir()
+    states.mkdir()
+    stop = threading.Event()
+    stop.set()
+
+    done = threading.Event()
+
+    def run():
+        watch_and_push([saves, states], _cache(tmp_path), object(),
+                       debounce_seconds=0.05, stop_event=stop)
+        done.set()
+
+    t = threading.Thread(target=run)
+    t.start()
+    t.join(timeout=5)
+    assert done.is_set(), "watch_and_push did not honor a preset stop_event"

@@ -61,17 +61,20 @@ def push_save_file(path: Path, cache: MappingCache, client,
 def watch_and_push(dirs: list[Path], cache: MappingCache, client,
                    on_event=None, debounce_seconds: float = 8.0,
                    core_overrides: dict[str, str] | None = None,
-                   on_ambiguous=None) -> None:
+                   on_ambiguous=None, stop_event=None) -> None:
     """Watch save/state dirs and push changed files. Blocks.
 
     `debounce_seconds` is user-configurable (Settings.sync_delay_seconds); watchfiles
     coalesces writes within this window so we upload once the file settles.
+    `stop_event` (a threading.Event) lets a caller cancel the watch — watchfiles
+    polls it and returns when set, which is how the GUI toggles sync off.
     """
     seen: dict[str, str] = {}
     existing = [str(d) for d in dirs if d.exists()]
     if not existing:
         return
-    for changes in watch(*existing, debounce=int(debounce_seconds * 1000)):
+    for changes in watch(*existing, debounce=int(debounce_seconds * 1000),
+                         stop_event=stop_event):
         for _change, raw_path in changes:
             path = Path(raw_path)
             if path.is_file() and push_save_file(
