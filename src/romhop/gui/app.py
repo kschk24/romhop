@@ -13,7 +13,7 @@ def run() -> None:
     from PySide6.QtWidgets import QApplication
 
     from romhop.config import get_token, load_settings
-    from romhop.download import download_rom, friendly_download_error
+    from romhop.download import download_rom, friendly_download_error, DownloadCancelled
     from romhop.gui import covers
     from romhop.gui.main_window import MainWindow
     from romhop.mapping_cache import MappingCache
@@ -40,7 +40,7 @@ def run() -> None:
     def cover_provider(rom):
         return covers.get_cover(rom, client)
 
-    def download_action(rom, on_progress=None):
+    def download_action(rom, on_progress=None, stop_event=None):
         try:
             return download_rom(
                 rom, client,
@@ -48,7 +48,11 @@ def run() -> None:
                 cache=cache,
                 overrides=settings.platform_overrides,
                 on_progress=on_progress,
+                stop_event=stop_event,
+                rate_limit_kbps=settings.download_rate_limit_kbps,
             )
+        except DownloadCancelled:
+            raise  # let the worker classify this as a cancel, not an error
         except Exception as exc:  # surface a clear, actionable reason in the UI
             raise RuntimeError(friendly_download_error(rom.name, rom.id, exc)) from exc
 
