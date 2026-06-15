@@ -75,10 +75,12 @@ class MainWindow(QWidget):
     def __init__(self, settings: Settings, parent=None, *,
                  rom_provider=None, download_action=None, scan_action=None,
                  sync_watch_fn=None, persist_settings=None, cover_provider=None,
-                 platform_label=None, platform_names=None, apply_token=None):
+                 platform_label=None, platform_names=None, apply_token=None,
+                 apply_settings=None):
         super().__init__(parent)
         self._settings = settings
         self._apply_token = apply_token
+        self._apply_settings = apply_settings
         self._rom_provider = rom_provider
         self._download_action = download_action
         self._cover_provider = cover_provider
@@ -242,6 +244,8 @@ class MainWindow(QWidget):
         # settings menu in lockstep so the two never disagree, then reconcile.
         self._settings = replace(self._settings, sync_enabled=enabled)
         self._persist_settings(self._settings)
+        if self._apply_settings is not None:
+            self._apply_settings(self._settings)
         self.settings_view.set_sync_enabled(enabled)
         self._reconcile_sync(enabled)
 
@@ -286,6 +290,11 @@ class MainWindow(QWidget):
         # copy doesn't go stale, then mirror the sync flag onto the bottom
         # button WITHOUT re-persisting (block its signal) and reconcile.
         self._settings = self.settings_view.current_settings()
+        # Push the fresh settings into the live backend closures (download_action,
+        # sync_watch_fn) so changes like the download limit or roms_root take
+        # effect immediately instead of only after a restart.
+        if self._apply_settings is not None:
+            self._apply_settings(self._settings)
         enabled = self._settings.sync_enabled
         self.sync_button.blockSignals(True)
         self.sync_button.setChecked(enabled)

@@ -20,27 +20,32 @@ ARCHIVE_EXTS = {".zip", ".7z"}
 class RateLimiter:
     """Paces a download to a max rate. ``kbps`` is KiB/s; 0 means unlimited.
 
-    Call ``tick(downloaded_total)`` after each chunk with the cumulative byte
-    count. If the transfer is ahead of the allowed schedule it sleeps the
-    difference. ``now``/``sleep`` are injectable for tests.
+    ``kbps`` may be an int or a zero-arg callable returning the current KiB/s,
+    so the cap can change mid-download (e.g. the GUI's live settings). Call
+    ``tick(downloaded_total)`` after each chunk with the cumulative byte count;
+    each segment is priced at the cap in effect when it arrived, so a limit
+    change throttles the in-flight transfer from the next chunk on. If a segment
+    arrived faster than the cap allows it sleeps the shortfall.
+    ``now``/``sleep`` are injectable for tests.
     """
 
-    def __init__(self, kbps: int, *, now=time.monotonic, sleep=time.sleep):
-        self._limit = kbps * 1024  # bytes/sec
+    def __init__(self, kbps, *, now=time.monotonic, sleep=time.sleep):
+        self._kbps = kbps if callable(kbps) else (lambda value=kbps: value)
         self._now = now
         self._sleep = sleep
-        # Anchor the schedule at construction (download start), so elapsed time
-        # is measured from the real beginning rather than the first chunk.
-        self._start = now()
+        self._last_total = 0
+        self._last_time = now()
 
     def tick(self, downloaded_total: int) -> None:
-        if self._limit <= 0:
-            return
-        target = downloaded_total / self._limit          # ideal elapsed seconds
-        elapsed = self._now() - self._start
-        behind = target - elapsed
-        if behind > 0:
-            self._sleep(behind)
+        delta = downloaded_total - self._last_total
+        limit = self._kbps() * 1024  # bytes/sec
+        if limit > 0 and delta > 0:
+            needed = delta / limit                  # seconds this segment should take
+            actual = self._now() - self._last_time
+            if needed > actual:
+                self._sleep(needed - actual)
+        self._last_total = downloaded_total
+        self._last_time = self._now()
 
 
 class DownloadCancelled(Exception):
@@ -96,7 +101,7 @@ def _is_multi_disc_head(rom: Rom, head: bytes) -> bool:
 
 def download_rom(rom: Rom, client, *, roms_root: Path, cache: MappingCache,
                  overrides: dict[str, str], is_multi_file: bool | None = None,
-                 on_progress=None, stop_event=None, rate_limit_kbps: int = 0) -> Path:
+                 on_progress=None, stop_event=None, rate_limit_kbps=0) -> Path:
     """Download a rom into the ES-DE layout and record a cache entry.
 
     Streams the rom to a ``.part`` temp file in the destination platform dir,

@@ -222,3 +222,17 @@ def test_rate_limiter_no_sleep_when_under_cap():
     t[0] = 10.0          # 10s elapse before the chunk lands
     rl.tick(100 * 1024)  # 100 KiB after 10s = 10 KiB/s, under 100 => no sleep
     assert slept == []
+
+
+def test_rate_limiter_picks_up_limit_change_mid_stream():
+    from romhop.download import RateLimiter
+    t = [0.0]
+    slept = []
+    limit = [0]  # start unlimited
+    # A callable cap lets the limit change mid-download (GUI live settings).
+    rl = RateLimiter(lambda: limit[0], now=lambda: t[0], sleep=slept.append)
+    rl.tick(1_000_000)               # unlimited segment: no throttle
+    assert slept == []
+    limit[0] = 100                   # user drops the cap to 100 KiB/s mid-stream
+    rl.tick(1_000_000 + 200 * 1024)  # 200 KiB at 100 KiB/s, ~0 elapsed => sleep ~2s
+    assert slept and abs(sum(slept) - 2.0) < 0.05

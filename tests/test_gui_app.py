@@ -270,6 +270,24 @@ def test_settings_save_reconciles_sync_toggle(qtbot, monkeypatch):
     assert win.sync_button.isChecked() is True
 
 
+def test_settings_save_pushes_live_settings_to_apply_callback(qtbot, monkeypatch):
+    from romhop.gui.main_window import MainWindow
+
+    monkeypatch.setattr(config, "save_settings", lambda s: None)
+    applied = []
+    win = MainWindow(settings=config.default_settings(),
+                     persist_settings=lambda s: None,
+                     apply_settings=lambda s: applied.append(s))
+    qtbot.addWidget(win)
+
+    # Change the download limit in the form and save: the live settings (the ones
+    # download_action reads) must be refreshed, not just the in-window copy.
+    label = "Download limit (KB/s, 0 = unlimited)"
+    win.settings_view._edits[label].setText("500")
+    win.settings_view._on_save()
+    assert applied and applied[-1].download_rate_limit_kbps == 500
+
+
 def test_token_save_applies_to_live_client_and_reloads(qtbot, monkeypatch):
     from romhop.gui.main_window import MainWindow
 

@@ -41,16 +41,28 @@ def run() -> None:
     def cover_provider(rom):
         return covers.get_cover(rom, client)
 
+    # Hold settings in a mutable box so the backend closures below always read
+    # the current values. MainWindow swaps in a new Settings on save and calls
+    # apply_settings, so changes (download limit, roms_root, sync dirs) take
+    # effect live rather than only after a restart.
+    live = {"settings": settings}
+
+    def apply_settings(new_settings):
+        live["settings"] = new_settings
+
     def download_action(rom, on_progress=None, stop_event=None):
+        s = live["settings"]
         try:
             return download_rom(
                 rom, client,
-                roms_root=settings.roms_root,
+                roms_root=s.roms_root,
                 cache=cache,
-                overrides=settings.platform_overrides,
+                overrides=s.platform_overrides,
                 on_progress=on_progress,
                 stop_event=stop_event,
-                rate_limit_kbps=settings.download_rate_limit_kbps,
+                # Callable cap: read live each chunk so a limit change re-throttles
+                # the in-flight download, not just the next rom in the batch.
+                rate_limit_kbps=lambda: live["settings"].download_rate_limit_kbps,
             )
         except DownloadCancelled:
             raise  # let the worker classify this as a cancel, not an error
@@ -58,10 +70,11 @@ def run() -> None:
             raise RuntimeError(friendly_download_error(rom.name, rom.id, exc)) from exc
 
     def sync_watch_fn(stop_event):
+        s = live["settings"]
         watch_and_push(
-            [settings.saves_dir, settings.states_dir], cache, client,
-            debounce_seconds=settings.sync_delay_seconds,
-            core_overrides=settings.core_overrides,
+            [s.saves_dir, s.states_dir], cache, client,
+            debounce_seconds=s.sync_delay_seconds,
+            core_overrides=s.core_overrides,
             stop_event=stop_event,
         )
 
@@ -79,6 +92,7 @@ def run() -> None:
         platform_names=names,
         scan_action=scan_action,
         apply_token=client.set_token,
+        apply_settings=apply_settings,
     )
     window.resize(900, 600)
     # An unconfigured or unreachable RomM must not crash startup: open the
