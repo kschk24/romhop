@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import sys
 from contextlib import contextmanager
@@ -221,7 +220,7 @@ app = typer.Typer(rich_markup_mode="markdown", help=_DESC)
 _PATH_KEYS = ("roms_root", "saves_dir", "states_dir")
 _STR_KEYS = ("romm_url",)
 _FLOAT_KEYS = ("sync_delay_seconds",)
-config_app = typer.Typer(help="View or change settings (stored in settings.json).")
+config_app = typer.Typer(help="View or change settings (stored in settings.ini).")
 app.add_typer(config_app, name="config")
 
 
@@ -233,8 +232,8 @@ def config_path():
 
 @config_app.command("show")
 def config_show():
-    """Print all current settings as JSON."""
-    typer.echo(json.dumps(config.to_dict(config.load_settings()), indent=2))
+    """Print all current settings in INI format."""
+    typer.echo(config._format_ini(config.load_settings()))
 
 
 @config_app.command("set")

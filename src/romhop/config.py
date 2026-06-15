@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json
+import configparser
 import sys
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import keyring
@@ -94,7 +94,7 @@ def coerce_value(type_: str, raw: str):
 
 
 def settings_path() -> Path:
-    return Path(platformdirs.user_config_dir("romhop")) / "settings.json"
+    return Path(platformdirs.user_config_dir("romhop")) / "settings.ini"
 
 
 # Sentinel for an unset ROMs root. There is no universal default ROM library
@@ -127,40 +127,72 @@ def roms_root_configured(settings: Settings) -> bool:
     return str(settings.roms_root) not in ("", ".")
 
 
-def to_dict(settings: Settings) -> dict:
-    """JSON-serialisable view of Settings (Path fields as strings)."""
-    data = asdict(settings)
-    # Path objects are not JSON-serialisable; convert explicitly.
-    for key in ("roms_root", "saves_dir", "states_dir"):
-        data[key] = str(data[key])
-    return data
+_OVERRIDE_SECTIONS = (
+    ("platform_overrides", "platform_overrides"),
+    ("core_overrides", "core_overrides"),
+)
+
+
+def _format_ini(settings: Settings) -> str:
+    """Render Settings as commented ini text (configparser can't write the
+    comments, so build the text by hand; configparser reads it back fine)."""
+    lines: list[str] = []
+    for category in CATEGORY_ORDER:
+        lines.append(f"[{category}]")
+        for spec in SCHEMA:
+            if spec.category != category:
+                continue
+            value = getattr(settings, spec.key)
+            if spec.type == "bool":
+                rendered = "true" if value else "false"
+            else:
+                rendered = str(value)
+            lines.append(f"# {spec.help}")
+            lines.append(f"{spec.key} = {rendered}")
+        lines.append("")  # blank line between sections
+    for attr, section in _OVERRIDE_SECTIONS:
+        lines.append(f"[{section}]")
+        for key, val in getattr(settings, attr).items():
+            lines.append(f"{key} = {val}")
+        lines.append("")
+    return "\n".join(lines)
 
 
 def save_settings(settings: Settings, path: Path | None = None) -> None:
     path = path or settings_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(to_dict(settings), indent=2))
+    path.write_text(_format_ini(settings))
+
+
+def _new_parser() -> configparser.ConfigParser:
+    cp = configparser.ConfigParser()
+    cp.optionxform = str  # preserve key case (override keys are arbitrary)
+    return cp
 
 
 def load_settings(path: Path | None = None) -> Settings:
     path = path or settings_path()
     if not path.exists():
         return default_settings()
-    data = json.loads(path.read_text())
-    return Settings(
-        romm_url=data["romm_url"],
-        roms_root=Path(data["roms_root"]),
-        saves_dir=Path(data["saves_dir"]),
-        states_dir=Path(data["states_dir"]),
-        platform_overrides=data.get("platform_overrides", {}),
-        core_overrides=data.get("core_overrides", {}),
-        sort_saves_by_core=data.get("sort_saves_by_core", False),
-        sort_states_by_core=data.get("sort_states_by_core", False),
-        sync_delay_seconds=data.get("sync_delay_seconds", 8.0),
-        sync_enabled=data.get("sync_enabled", False),
-        theme=data.get("theme", "default"),
-        download_rate_limit_kbps=data.get("download_rate_limit_kbps", 0),
-    )
+    cp = _new_parser()
+    try:
+        cp.read_string(path.read_text())
+    except (configparser.Error, OSError):
+        return default_settings()
+
+    settings = default_settings()
+    for spec in SCHEMA:
+        if not cp.has_option(spec.category, spec.key):
+            continue
+        raw = cp.get(spec.category, spec.key)
+        try:
+            setattr(settings, spec.key, coerce_value(spec.type, raw))
+        except ValueError:
+            pass  # malformed value -> keep the default already in place
+    for attr, section in _OVERRIDE_SECTIONS:
+        if cp.has_section(section):
+            setattr(settings, attr, dict(cp.items(section)))
+    return settings
 
 
 def set_token(token: str) -> None:

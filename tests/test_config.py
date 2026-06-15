@@ -31,7 +31,7 @@ def test_save_and_load_roundtrip(tmp_path):
         platform_overrides={"gba": "Game Boy Advance"},
         sync_delay_seconds=12.5,
     )
-    path = tmp_path / "settings.json"
+    path = tmp_path / "settings.ini"
     config.save_settings(s, path)
     loaded = config.load_settings(path)
     assert loaded.romm_url == "http://romm.example"
@@ -46,7 +46,7 @@ def test_sync_enabled_defaults_false_and_roundtrips(tmp_path):
     assert config.default_settings().sync_enabled is False
     s = config.default_settings()
     s.sync_enabled = True
-    path = tmp_path / "settings.json"
+    path = tmp_path / "settings.ini"
     config.save_settings(s, path)
     assert config.load_settings(path).sync_enabled is True
 
@@ -54,7 +54,7 @@ def test_sync_enabled_defaults_false_and_roundtrips(tmp_path):
 def test_token_uses_keyring_not_file(tmp_path):
     config.set_token("rmm_secret")
     assert config.get_token() == "rmm_secret"
-    path = tmp_path / "settings.json"
+    path = tmp_path / "settings.ini"
     config.save_settings(config.default_settings(), path)
     assert "rmm_secret" not in path.read_text()
 
@@ -63,7 +63,7 @@ def test_core_overrides_round_trips(tmp_path):
     from romhop import config
     s = config.default_settings()
     s.core_overrides = {"MyCore": "n64"}
-    p = tmp_path / "settings.json"
+    p = tmp_path / "settings.ini"
     config.save_settings(s, p)
     loaded = config.load_settings(p)
     assert loaded.core_overrides == {"MyCore": "n64"}
@@ -79,7 +79,7 @@ def test_settings_theme_defaults_and_roundtrips(tmp_path):
     s = config.default_settings()
     assert s.theme == "default"
     s.theme = "neon"
-    path = tmp_path / "settings.json"
+    path = tmp_path / "settings.ini"
     config.save_settings(s, path)
     loaded = config.load_settings(path)
     assert loaded.theme == "neon"
@@ -90,7 +90,7 @@ def test_sort_flags_round_trip(tmp_path):
     s = config.default_settings()
     s.sort_saves_by_core = True
     s.sort_states_by_core = True
-    p = tmp_path / "settings.json"
+    p = tmp_path / "settings.ini"
     config.save_settings(s, p)
     loaded = config.load_settings(p)
     assert loaded.sort_saves_by_core is True
@@ -109,7 +109,7 @@ def test_download_rate_limit_roundtrips_and_defaults_zero(tmp_path):
     s = config.default_settings()
     assert s.download_rate_limit_kbps == 0  # unlimited by default
     s.download_rate_limit_kbps = 512
-    p = tmp_path / "settings.json"
+    p = tmp_path / "settings.ini"
     config.save_settings(s, p)
     loaded = config.load_settings(p)
     assert loaded.download_rate_limit_kbps == 512
@@ -159,3 +159,72 @@ def test_coerce_value_raises_on_bad_number():
         config.coerce_value("int", "not-a-number")
     with pytest.raises(ValueError):
         config.coerce_value("float", "abc")
+
+
+def test_settings_path_is_ini():
+    from romhop import config
+    assert config.settings_path().name == "settings.ini"
+
+
+def test_save_writes_category_sections_and_help_comments(tmp_path):
+    from romhop import config
+    s = config.default_settings()
+    s.romm_url = "http://romm.example"
+    p = tmp_path / "settings.ini"
+    config.save_settings(s, p)
+    text = p.read_text()
+    assert "[connection]" in text
+    assert "[paths]" in text
+    assert "[behavior]" in text
+    assert "romm_url = http://romm.example" in text
+    # help text is emitted as a comment above its key
+    assert "# Base URL of your RomM server" in text
+
+
+def test_load_bad_number_falls_back_to_default(tmp_path):
+    from romhop import config
+    p = tmp_path / "settings.ini"
+    p.write_text(
+        "[behavior]\n"
+        "download_rate_limit_kbps = not-a-number\n"
+        "sync_delay_seconds = 3.5\n"
+    )
+    loaded = config.load_settings(p)
+    # bad int -> default (0); the valid float on the next line still applies
+    assert loaded.download_rate_limit_kbps == 0
+    assert loaded.sync_delay_seconds == 3.5
+
+
+def test_load_missing_key_keeps_default(tmp_path):
+    from romhop import config
+    p = tmp_path / "settings.ini"
+    p.write_text("[connection]\nromm_url = http://x\n")
+    loaded = config.load_settings(p)
+    assert loaded.romm_url == "http://x"
+    assert loaded.theme == "default"  # untouched key keeps its default
+
+
+def test_override_sections_preserve_case_and_round_trip(tmp_path):
+    from romhop import config
+    s = config.default_settings()
+    s.platform_overrides = {"gba": "Game Boy Advance"}
+    s.core_overrides = {"MyCore": "n64"}  # mixed case must survive
+    p = tmp_path / "settings.ini"
+    config.save_settings(s, p)
+    loaded = config.load_settings(p)
+    assert loaded.platform_overrides == {"gba": "Game Boy Advance"}
+    assert loaded.core_overrides == {"MyCore": "n64"}
+
+
+def test_corrupt_file_returns_defaults(tmp_path):
+    from romhop import config
+    p = tmp_path / "settings.ini"
+    p.write_text("this is not = valid [ini\n at all ]]]\n")
+    loaded = config.load_settings(p)
+    assert loaded.romm_url == config.default_settings().romm_url
+
+
+def test_missing_file_returns_defaults(tmp_path):
+    from romhop import config
+    loaded = config.load_settings(tmp_path / "nope.ini")
+    assert loaded.theme == "default"

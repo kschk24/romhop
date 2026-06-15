@@ -231,16 +231,15 @@ def test_config_set_bad_float_exits_2(monkeypatch):
     assert result.exit_code == 2
 
 
-def test_config_show_outputs_json(monkeypatch):
-    import json as _json
+def test_config_show_outputs_ini(monkeypatch):
     settings = cli.config.default_settings()
     settings.romm_url = "http://romm.test"
     monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
     result = runner.invoke(cli.app, ["config", "show"])
     assert result.exit_code == 0
-    parsed = _json.loads(result.output)
-    assert parsed["romm_url"] == "http://romm.test"
-    assert "roms_root" in parsed
+    assert "[connection]" in result.output
+    assert "romm_url = http://romm.test" in result.output
+    assert "roms_root" in result.output
 
 
 def test_config_set_platform_add_and_remove(monkeypatch):
