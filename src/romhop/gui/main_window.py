@@ -37,6 +37,17 @@ def _human_speed(bytes_per_sec: float) -> str:
     return f"{value:.1f} GB/s"
 
 
+def _human_size(num_bytes: int) -> str:
+    """Render a byte count as a compact human-readable size."""
+    units = ["B", "KB", "MB", "GB", "TB"]
+    value = float(num_bytes)
+    for unit in units:
+        if value < 1024 or unit == units[-1]:
+            return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} TB"
+
+
 def _sync_state_class(state: str) -> str:
     """Map a fine-grained sync status string to the coarse class that drives
     the indicator dot's colour: ``off`` (grey), ``running`` (green), ``error``
@@ -111,6 +122,10 @@ class MainWindow(QWidget):
         self.bottom.setObjectName("BottomBar")
         self._sel_label = QLabel("0 selected")
         self.download_btn = QPushButton("Download")
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setObjectName("CancelDownload")
+        self.cancel_btn.hide()
+        self.cancel_btn.clicked.connect(self._on_cancel_clicked)
         # Single shared progress bar: the current game in the batch. Hidden when
         # idle so the bottom bar stays clean until a download is running.
         self.progress_bar = QProgressBar()
@@ -133,6 +148,7 @@ class MainWindow(QWidget):
         bottom_row = QHBoxLayout(self.bottom)
         bottom_row.addWidget(self._sel_label)
         bottom_row.addWidget(self.download_btn)
+        bottom_row.addWidget(self.cancel_btn)
         bottom_row.addWidget(self.progress_bar)
         bottom_row.addWidget(self.progress_label)
         bottom_row.addStretch(1)
@@ -288,6 +304,9 @@ class MainWindow(QWidget):
         # the in-flight queue. One worker drains the queue sequentially.
         self.download_btn.setEnabled(False)
         self.download_btn.setText("Downloading…")
+        self.cancel_btn.show()
+        self.cancel_btn.setEnabled(True)
+        self.cancel_btn.setText("Cancel")
         self._begin_progress()
         worker = DownloadWorker(selected, self._download_action)
         worker.item_started.connect(self._on_item_started)
@@ -324,9 +343,15 @@ class MainWindow(QWidget):
         else:
             self.progress_bar.setMaximum(0)  # unknown size → indeterminate
         rate = _human_speed(speed)
-        self.progress_label.setText(
-            f"{self._progress_name} ({self._progress_pos}) · {rate}"
-        )
+        if total > 0:
+            size = f"{_human_size(downloaded)} / {_human_size(total)}"
+            self.progress_label.setText(
+                f"{self._progress_name} ({self._progress_pos}) · {size} · {rate}"
+            )
+        else:
+            self.progress_label.setText(
+                f"{self._progress_name} ({self._progress_pos}) · {_human_size(downloaded)} · {rate}"
+            )
 
     def _on_item_error(self, name: str, message: str) -> None:
         # A download failure belongs in the download area, not on the sync dot.
@@ -334,13 +359,26 @@ class MainWindow(QWidget):
         # cleared by _end_progress), so a transient flash is fine here.
         self.progress_label.setText(f"Failed: {name} — {message}")
 
+    def _on_cancel_clicked(self) -> None:
+        if self._download_worker is not None:
+            self._download_worker.cancel()
+            self.cancel_btn.setEnabled(False)
+            self.cancel_btn.setText("Cancelling…")
+
     def _on_batch_finished(self) -> None:
+        cancelled = (self._download_worker is not None
+                     and self._download_worker.was_cancelled())
         if self._download_worker is not None:
             self._download_worker.deleteLater()
             self._download_worker = None
         self._end_progress()
         self.download_btn.setText("Download")
         self.download_btn.setEnabled(True)
+        self.cancel_btn.hide()
+        if cancelled:
+            # _end_progress hid the label; show a brief note in its place.
+            self.progress_label.setText("Download cancelled")
+            self.progress_label.show()
         self._refresh_downloaded()
         self.downloads_finished.emit()
 

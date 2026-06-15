@@ -360,3 +360,53 @@ def test_progress_bar_handles_files_larger_than_int32(qtbot):
     # Value stays a valid fraction within the bar's range.
     assert 0 <= win.progress_bar.value() <= win.progress_bar.maximum()
     assert abs(win.progress_bar.value() / win.progress_bar.maximum() - 0.5) < 0.05
+
+
+def test_human_size_formats_bytes():
+    from romhop.gui.main_window import _human_size
+    assert _human_size(0) == "0 B"
+    assert _human_size(1536) == "1.5 KB"
+    assert _human_size(4294967295).endswith("GB")
+
+
+def test_byte_indicator_shows_downloaded_over_total(qtbot):
+    from romhop.gui.main_window import MainWindow
+    win = MainWindow(settings=config.default_settings())
+    qtbot.addWidget(win)
+    win._begin_progress()
+    win._on_item_started(1, 1, "Bravely Default")
+    big = 4294967295
+    win._on_item_progress(big // 2, big, 5_000_000.0)
+    txt = win.progress_label.text()
+    assert "/" in txt and "GB" in txt          # "2.0 / 4.0 GB"
+    assert "MB/s" in txt
+
+
+def test_cancel_button_hidden_until_download_then_cancels(qtbot):
+    from romhop.gui.main_window import MainWindow
+    from romhop.romm_client import Rom
+    import threading
+    roms = [Rom(id=1, name="A", platform_slug="gba", fs_name="A.gba",
+                fs_name_no_ext="A", file_names=["A.gba"])]
+    gate = threading.Event()
+
+    def action(rom, on_progress, stop_event):
+        gate.wait(timeout=2)               # hold until cancel fires
+        return rom.name
+
+    win = MainWindow(settings=config.default_settings(),
+                     rom_provider=lambda: roms, download_action=action)
+    qtbot.addWidget(win)
+    win.load_library()
+    assert win.cancel_btn.isHidden()       # hidden when idle
+
+    check, rom = next(iter(win.library._checks.values()))
+    check.setChecked(True)
+    win.download_selected()
+    assert not win.cancel_btn.isHidden()   # visible during a batch
+
+    with qtbot.waitSignal(win.downloads_finished, timeout=2000):
+        win.cancel_btn.click()
+        gate.set()                         # let the held action return
+    assert win._download_worker is None
+    assert win.cancel_btn.isHidden()       # hidden again after the batch
