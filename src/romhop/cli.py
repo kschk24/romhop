@@ -22,6 +22,44 @@ from romhop import config, retroarch_cfg
 from romhop.platform_names import PlatformNames, display_name
 
 
+def complete_game_name(incomplete: str):
+    """
+    Completion callback for the 'name' argument of the 'download' command.
+    
+    Queries RomM for games matching the incomplete string and returns their names for shell completion.
+    """
+    # Try to construct a client; on any error, return no completions so we
+    # dont break users shell
+    try:
+        client=_client()
+    except typer.Exit:
+        return []
+    except Exception:
+        return []
+    
+    try:
+        # Use server-side search to keep it fast
+        roms = client.list_roms(search_term=incomplete)
+    except Exception:
+        return []
+
+    # Collect unique namees, limited to a small number.
+    seen = set()
+    suggestions: list[str] = []
+    for rom in roms:
+        title = rom.name
+        if not title:
+            continue
+        if title in seen:
+            continue
+        seen.add(title)
+        suggestions.append(title)
+        if len(suggestions) >= 20:
+            break
+    
+    return suggestions
+
+
 @contextmanager
 def _download_progress(label: str):
     """Yield an on_progress(downloaded, total) callback backed by a Rich bar.
@@ -407,7 +445,12 @@ def _exit_http(exc: httpx.HTTPStatusError, *, not_found: str | None = None):
 
 
 @app.command()
-def download(name: str = typer.Argument(..., help="Game name (substring match)")):
+def download(
+    name: str = typer.Argument(
+        ..., help="Game name (substring match)",
+        autocompletion=complete_game_name,
+        )
+    ):
     """Download a game into the ES-DE layout (exact name, or a unique substring)."""
     settings = config.load_settings()
     if not config.roms_root_configured(settings):

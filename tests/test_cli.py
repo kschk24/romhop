@@ -139,6 +139,54 @@ def test_download_exact_name_wins_over_substring(monkeypatch, tmp_path):
     assert picked["id"] == 2  # exact "Sonic", not the substring match
 
 
+def test_complete_game_name_queries_romm(monkeypatch):
+    # Prepare some Rom objects for the fake client.
+    roms = [
+        Rom(id=1, name="Sonic Adventure 2", platform_slug="dc",
+            fs_name="", fs_name_no_ext="", file_names=[]),
+        Rom(id=2, name="Super Mario World", platform_slug="snes",
+            fs_name="", fs_name_no_ext="", file_names=[]),
+    ]
+    class FakeClient:
+        def __init__(self, *a, **k):
+            self.calls = []
+
+        def list_roms(self, search_term=None):
+            # Record what search term was used.
+            self.calls.append(search_term)
+            # Emulate your real behavior: filter by substring, case-insensitive.
+            return [r for r in roms if search_term.lower() in r.name.lower()]
+
+    fake = FakeClient()
+
+    # Make cli._client() return our fake client instead of constructing a real one.
+    monkeypatch.setattr(cli, "_client", lambda: fake)
+
+    # Act: ask for completions for "So".
+    suggestions = cli.complete_game_name("So")
+
+    # Assert: it used the prefix as search term and returned matching titles.
+    assert fake.calls == ["So"]
+    assert "Sonic Adventure 2" in suggestions
+    assert "Super Mario World" not in suggestions  # doesn't contain "So"
+    # Ensure uniqueness and not empty.
+    assert len(set(suggestions)) == len(suggestions)
+    assert suggestions
+    
+
+def test_complete_game_name_handles_client_error(monkeypatch):
+    # Simulate _client() failing (e.g., not logged in or bad config).
+    def broken_client():
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(cli, "_client", broken_client)
+
+    suggestions = cli.complete_game_name("So")
+
+    # The callback must fail silently and return no suggestions.
+    assert suggestions == []
+
+
 def test_download_http_404_friendly(monkeypatch, tmp_path):
     import httpx
     _login(monkeypatch, tmp_path)
