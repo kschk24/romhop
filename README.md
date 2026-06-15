@@ -18,11 +18,30 @@ Two things:
 
 ## Install
 
+The recommended way to install romhop is with [pipx](https://pipx.pypa.io/),
+which installs it into an isolated environment and automatically puts the
+`romhop` command on your PATH — no virtualenv or manual PATH setup needed.
+
+**From source (clone first):**
+
 ```
-pip install .
+git clone -b gui-desktop-pyside https://github.com/kschk24/romhop
+cd romhop
+pipx install ".[gui]"
 ```
 
-This installs the `romhop` command.
+**Directly from GitHub (no clone needed):**
+
+```
+pipx install "romhop[gui] @ git+https://github.com/kschk24/romhop.git@gui-desktop-pyside"
+```
+
+If you don't have pipx yet:
+
+```
+pip install pipx
+pipx ensurepath
+```
 
 ## Setup
 
