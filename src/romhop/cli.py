@@ -233,7 +233,7 @@ def config_path():
 @config_app.command("show")
 def config_show():
     """Print all current settings in INI format."""
-    typer.echo(config._format_ini(config.load_settings()))
+    typer.echo(config.format_ini(config.load_settings()))
 
 
 @config_app.command("set")

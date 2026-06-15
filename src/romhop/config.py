@@ -133,7 +133,7 @@ _OVERRIDE_SECTIONS = (
 )
 
 
-def _format_ini(settings: Settings) -> str:
+def format_ini(settings: Settings) -> str:
     """Render Settings as commented ini text (configparser can't write the
     comments, so build the text by hand; configparser reads it back fine)."""
     lines: list[str] = []
@@ -161,7 +161,7 @@ def _format_ini(settings: Settings) -> str:
 def save_settings(settings: Settings, path: Path | None = None) -> None:
     path = path or settings_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_format_ini(settings))
+    path.write_text(format_ini(settings))
 
 
 def _new_parser() -> configparser.ConfigParser:
