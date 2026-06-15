@@ -25,6 +25,11 @@ class RommClient:
                  token: str = ""):
         self._http = http or httpx.Client(base_url=base_url, timeout=60.0)
         # NOTE: mutates the provided client's default headers (one client per run is expected).
+        self.set_token(token)
+
+    def set_token(self, token: str) -> None:
+        """Swap the bearer token on the live client (e.g. after the GUI edits
+        the keyring), so the change takes effect without restarting."""
         self._http.headers["Authorization"] = f"Bearer {token}"
 
     def list_roms(self, search_term: str | None = None) -> list[Rom]:

@@ -18,6 +18,8 @@ from romhop import config
 from romhop.config import SCHEMA, CATEGORY_ORDER, CATEGORY_LABELS, Settings
 
 SYNC_LABEL = "Enable save sync"  # the label of the sync_enabled FieldSpec
+TOKEN_LABEL = "API token"  # keyring-stored, not a SCHEMA field
+TOKEN_CATEGORY = "connection"  # group the token row lives under
 
 
 class SettingsView(QWidget):
@@ -27,6 +29,7 @@ class SettingsView(QWidget):
     saved = Signal()
     cancelled = Signal()
     scan_requested = Signal()
+    token_changed = Signal(str)  # emitted with the new token on a non-blank save
 
     def __init__(self, settings: Settings, parent=None):
         super().__init__(parent)
@@ -53,6 +56,8 @@ class SettingsView(QWidget):
                 self._edits[spec.label] = widget
                 self._row_form[spec.label] = form
                 form.addRow(spec.label, widget)
+            if category == TOKEN_CATEGORY:
+                self._add_token_row(form)
             self._groups.append(group)
             layout.addWidget(group)
 
@@ -88,6 +93,20 @@ class SettingsView(QWidget):
             return QCheckBox()
         return QLineEdit()
 
+    def _add_token_row(self, form: QFormLayout) -> None:
+        """API token is stored in the OS keyring, not the ini, so it isn't a
+        SCHEMA field. Add a masked row by hand and register it in _edits/
+        _row_form so search filtering covers it — _populate and _on_save skip
+        labels with no FieldSpec, so it stays out of the schema save path."""
+        edit = QLineEdit()
+        edit.setEchoMode(QLineEdit.EchoMode.Password)
+        edit.setToolTip("RomM API token. Stored in the OS keyring, never on disk.")
+        self.token_edit = edit
+        # Registered in _row_form (so search filtering reaches it) but NOT in
+        # _edits, which stays a pure map of SCHEMA labels.
+        self._row_form[TOKEN_LABEL] = form
+        form.addRow(TOKEN_LABEL, edit)
+
     def _populate(self) -> None:
         """Load every widget from the saved settings."""
         for label, widget in self._edits.items():
@@ -97,6 +116,17 @@ class SettingsView(QWidget):
                 widget.setChecked(bool(value))
             else:
                 widget.setText(str(value))
+        self._populate_token()
+
+    def _populate_token(self) -> None:
+        """Leave the field blank; a blank save keeps the current token (so we
+        never echo the secret back into a widget). Placeholder signals whether
+        one is already set."""
+        self.token_edit.clear()
+        if config.get_token():
+            self.token_edit.setPlaceholderText("•••••••• (leave blank to keep)")
+        else:
+            self.token_edit.setPlaceholderText("Not set")
 
     # --- sync shims (bottom-bar indicator) ---
     def sync_enabled(self) -> bool:
@@ -126,24 +156,28 @@ class SettingsView(QWidget):
             self._refresh_scan_enabled()
 
     # --- search/filter ---
+    def _widget_for(self, label: str) -> QWidget:
+        # Token isn't in _edits (kept pure to SCHEMA), so resolve it here.
+        return self.token_edit if label == TOKEN_LABEL else self._edits[label]
+
     def filter(self, query: str) -> None:
         q = query.strip().lower()
         for label, form in self._row_form.items():
-            widget = self._edits[label]
+            widget = self._widget_for(label)
             visible = q in label.lower() if q else True
             form.setRowVisible(widget, visible)
         # Hide a group whose rows are all filtered out.
         for group in self._groups:
             form = group.layout()
             any_visible = any(
-                form.isRowVisible(self._edits[label])
+                form.isRowVisible(self._widget_for(label))
                 for label, f in self._row_form.items()
                 if f is form
             )
             group.setVisible(any_visible)
 
     def is_field_visible(self, label: str) -> bool:
-        return self._row_form[label].isRowVisible(self._edits[label])
+        return self._row_form[label].isRowVisible(self._widget_for(label))
 
     # --- save / cancel ---
     def reset(self) -> None:
@@ -173,8 +207,16 @@ class SettingsView(QWidget):
         updates = {
             self._spec_by_label[label].key: self._read_widget(label)
             for label in self._edits
+            if label in self._spec_by_label
         }
         self._settings = replace(self._settings, **updates)
         self._refresh_scan_enabled()
         config.save_settings(self._settings)
+        # Token lives in the keyring, not the ini. Blank == keep current, so a
+        # bad save can never wipe a working token.
+        token = self.token_edit.text().strip()
+        if token:
+            config.set_token(token)
+            self.token_changed.emit(token)  # let the host update the live client
+        self._populate_token()  # reset placeholder to reflect the new state
         self.saved.emit()

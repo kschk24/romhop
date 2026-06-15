@@ -1,7 +1,9 @@
 from pathlib import Path
 
+from PySide6.QtWidgets import QLineEdit
+
 from romhop import config
-from romhop.gui.settings_view import SettingsView
+from romhop.gui.settings_view import SettingsView, TOKEN_LABEL
 
 
 def _labels_for(category):
@@ -71,6 +73,49 @@ def test_save_persists_all_fields_via_config(qtbot, monkeypatch):
     assert saved["s"].romm_url == "https://x"
     assert saved["s"].download_rate_limit_kbps == 512
     assert saved["s"].sync_enabled is True
+
+
+def test_token_row_is_masked_and_blank(qtbot, monkeypatch):
+    monkeypatch.setattr(config, "get_token", lambda: "rmm_existing")
+    view = SettingsView(config.default_settings())
+    qtbot.addWidget(view)
+    assert view.token_edit.echoMode() == QLineEdit.EchoMode.Password
+    # Never echo the secret back into the widget; placeholder signals it's set.
+    assert view.token_edit.text() == ""
+    assert "leave blank" in view.token_edit.placeholderText().lower()
+
+
+def test_blank_token_save_keeps_current(qtbot, monkeypatch):
+    monkeypatch.setattr(config, "save_settings", lambda st: None)
+    calls = []
+    monkeypatch.setattr(config, "set_token", lambda t: calls.append(t))
+    monkeypatch.setattr(config, "get_token", lambda: "rmm_existing")
+    view = SettingsView(config.default_settings())
+    qtbot.addWidget(view)
+    with qtbot.waitSignal(view.saved, timeout=1000):
+        view._on_save()
+    assert calls == []  # blank field never clobbers the keyring
+
+
+def test_nonblank_token_save_writes_keyring(qtbot, monkeypatch):
+    monkeypatch.setattr(config, "save_settings", lambda st: None)
+    calls = []
+    monkeypatch.setattr(config, "set_token", lambda t: calls.append(t))
+    monkeypatch.setattr(config, "get_token", lambda: None)
+    view = SettingsView(config.default_settings())
+    qtbot.addWidget(view)
+    view.token_edit.setText("  rmm_new  ")  # stripped before store
+    with qtbot.waitSignal(view.saved, timeout=1000):
+        view._on_save()
+    assert calls == ["rmm_new"]
+
+
+def test_token_row_is_searchable(qtbot):
+    view = SettingsView(config.default_settings())
+    qtbot.addWidget(view)
+    view.filter("api token")
+    assert view.is_field_visible(TOKEN_LABEL)
+    assert not view.is_field_visible("RomM URL")
 
 
 def test_save_preserves_override_dicts(qtbot, monkeypatch):

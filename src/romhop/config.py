@@ -170,9 +170,43 @@ def _new_parser() -> configparser.ConfigParser:
     return cp
 
 
+def _load_legacy_json(json_path: Path) -> Settings:
+    """Parse the pre-ini settings.json into a Settings, overlaying onto the
+    real per-OS defaults so a partial/old file keeps sensible fallbacks."""
+    import json
+
+    data = json.loads(json_path.read_text())
+    settings = default_settings()
+    for spec in SCHEMA:
+        if spec.key in data:
+            value = data[spec.key]
+            # JSON already holds typed scalars; only paths need wrapping.
+            setattr(settings, spec.key,
+                    Path(value) if spec.type == "path" else value)
+    for attr, _section in _OVERRIDE_SECTIONS:
+        if isinstance(data.get(attr), dict):
+            setattr(settings, attr, dict(data[attr]))
+    return settings
+
+
 def load_settings(path: Path | None = None) -> Settings:
     path = path or settings_path()
     if not path.exists():
+        # One-time migration: the storage format changed from settings.json to
+        # settings.ini. Without this, upgrading users silently lose their RomM
+        # connection (empty url -> no games). Adopt the old file and rewrite it
+        # as an ini so the next launch is native.
+        legacy = path.with_name("settings.json")
+        if legacy.exists():
+            try:
+                settings = _load_legacy_json(legacy)
+            except (ValueError, OSError):
+                return default_settings()
+            try:
+                save_settings(settings, path)
+            except OSError:
+                pass  # migration is best-effort; still return the loaded values
+            return settings
         return default_settings()
     cp = _new_parser()
     try:

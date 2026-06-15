@@ -9,6 +9,20 @@ def _client(handler) -> RommClient:
     return RommClient(http=http, token="rmm_test")
 
 
+def test_set_token_swaps_authorization_header():
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers["Authorization"])
+        return httpx.Response(200, json=[])
+
+    client = _client(handler)
+    client.list_roms()
+    client.set_token("rmm_new")
+    client.list_roms()
+    assert seen == ["Bearer rmm_test", "Bearer rmm_new"]
+
+
 def test_list_roms_parses_fields():
     def handler(request):
         assert request.headers["Authorization"] == "Bearer rmm_test"

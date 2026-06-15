@@ -75,9 +75,10 @@ class MainWindow(QWidget):
     def __init__(self, settings: Settings, parent=None, *,
                  rom_provider=None, download_action=None, scan_action=None,
                  sync_watch_fn=None, persist_settings=None, cover_provider=None,
-                 platform_label=None, platform_names=None):
+                 platform_label=None, platform_names=None, apply_token=None):
         super().__init__(parent)
         self._settings = settings
+        self._apply_token = apply_token
         self._rom_provider = rom_provider
         self._download_action = download_action
         self._cover_provider = cover_provider
@@ -118,6 +119,7 @@ class MainWindow(QWidget):
         self.settings_view.saved.connect(self._on_settings_saved)
         self.settings_view.cancelled.connect(self.show_library)
         self.settings_view.scan_requested.connect(self.run_scan)
+        self.settings_view.token_changed.connect(self._on_token_changed)
         self.stack = QStackedWidget()
         self.stack.addWidget(self.library)      # index 0
         self.stack.addWidget(self.settings_view)  # index 1
@@ -267,6 +269,17 @@ class MainWindow(QWidget):
         if self._sync_worker is not None:
             self._sync_worker.deleteLater()
             self._sync_worker = None
+
+    def _on_token_changed(self, token: str) -> None:
+        # Push the new token onto the live client and refresh the library so it
+        # takes effect without a restart. Library load failures are tolerated
+        # the same way startup is.
+        if self._apply_token is not None:
+            self._apply_token(token)
+        try:
+            self.load_library()
+        except Exception as exc:  # noqa: BLE001 - keep the window alive
+            self.set_sync_status(f"library load failed: {exc}")
 
     def _on_settings_saved(self) -> None:
         # Settings already persisted itself; adopt its Settings so our in-memory

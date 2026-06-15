@@ -228,3 +228,37 @@ def test_missing_file_returns_defaults(tmp_path):
     from romhop import config
     loaded = config.load_settings(tmp_path / "nope.ini")
     assert loaded.theme == "default"
+
+
+def test_migrates_legacy_json_when_ini_absent(tmp_path):
+    """Upgrading from the old settings.json format must not silently wipe a
+    user's RomM connection: when the ini is absent but a sibling settings.json
+    exists, load it and migrate."""
+    from romhop import config
+    (tmp_path / "settings.json").write_text(
+        '{"romm_url": "http://romm.legacy", '
+        '"roms_root": "/games/roms", '
+        '"saves_dir": "/games/saves", '
+        '"states_dir": "/games/states", '
+        '"platform_overrides": {"gba": "Game Boy Advance"}, '
+        '"sync_enabled": true, '
+        '"download_rate_limit_kbps": 256}'
+    )
+    ini = tmp_path / "settings.ini"
+    loaded = config.load_settings(ini)
+    assert loaded.romm_url == "http://romm.legacy"
+    assert loaded.platform_overrides == {"gba": "Game Boy Advance"}
+    assert loaded.sync_enabled is True
+    assert loaded.download_rate_limit_kbps == 256
+    # The legacy file is migrated to the new ini so the next launch is native.
+    assert ini.exists()
+    assert "romm_url = http://romm.legacy" in ini.read_text()
+
+
+def test_ini_wins_over_legacy_json(tmp_path):
+    """Once an ini exists it is authoritative; a stale settings.json is ignored."""
+    from romhop import config
+    (tmp_path / "settings.json").write_text('{"romm_url": "http://stale"}')
+    ini = tmp_path / "settings.ini"
+    ini.write_text("[connection]\nromm_url = http://current\n")
+    assert config.load_settings(ini).romm_url == "http://current"

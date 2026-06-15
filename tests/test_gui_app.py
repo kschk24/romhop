@@ -270,6 +270,44 @@ def test_settings_save_reconciles_sync_toggle(qtbot, monkeypatch):
     assert win.sync_button.isChecked() is True
 
 
+def test_token_save_applies_to_live_client_and_reloads(qtbot, monkeypatch):
+    from romhop.gui.main_window import MainWindow
+
+    monkeypatch.setattr(config, "save_settings", lambda s: None)
+    monkeypatch.setattr(config, "set_token", lambda t: None)
+    monkeypatch.setattr(config, "get_token", lambda: None)
+    applied = []
+    loads = []
+    win = MainWindow(settings=config.default_settings(),
+                     rom_provider=lambda: loads.append(1) or [],
+                     apply_token=lambda t: applied.append(t))
+    qtbot.addWidget(win)
+    loads.clear()  # ignore any startup load
+
+    win.settings_view.token_edit.setText("rmm_new")
+    win.settings_view._on_save()
+    assert applied == ["rmm_new"]  # pushed onto the live client
+    assert loads == [1]  # library refreshed without restart
+
+
+def test_blank_token_save_does_not_apply_or_reload(qtbot, monkeypatch):
+    from romhop.gui.main_window import MainWindow
+
+    monkeypatch.setattr(config, "save_settings", lambda s: None)
+    monkeypatch.setattr(config, "get_token", lambda: "rmm_existing")
+    applied = []
+    loads = []
+    win = MainWindow(settings=config.default_settings(),
+                     rom_provider=lambda: loads.append(1) or [],
+                     apply_token=lambda t: applied.append(t))
+    qtbot.addWidget(win)
+    loads.clear()
+
+    win.settings_view._on_save()  # token field left blank
+    assert applied == []
+    assert loads == []
+
+
 def test_filter_bar_hidden_in_settings_shown_in_library(qtbot):
     from romhop.gui.main_window import MainWindow
     win = MainWindow(config.default_settings(), rom_provider=lambda: [])

@@ -78,6 +78,7 @@ def run() -> None:
         platform_label=platform_label,
         platform_names=names,
         scan_action=scan_action,
+        apply_token=client.set_token,
     )
     window.resize(900, 600)
     # An unconfigured or unreachable RomM must not crash startup: open the
