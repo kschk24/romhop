@@ -8,25 +8,28 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from romhop.local_index import MatchResult
+
 
 class ScanResultDialog(QDialog):
     """Reports a scan outcome: a counts headline plus the unmatched games and
     basename collisions. Empty sections are omitted from the detail body."""
 
-    def __init__(self, result, parent=None):
+    def __init__(self, result: MatchResult, parent=None):
         super().__init__(parent)
         self._result = result
         self.setWindowTitle("Scan results")
 
+        detail_body = self.detail_text()
         summary = QLabel(self.summary_text())
-        detail = QPlainTextEdit(self.detail_text())
+        detail = QPlainTextEdit(detail_body)
         detail.setReadOnly(True)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         buttons.accepted.connect(self.accept)
 
         layout = QVBoxLayout(self)
         layout.addWidget(summary)
-        if self.detail_text():
+        if detail_body:
             layout.addWidget(detail)
         layout.addWidget(buttons)
 
