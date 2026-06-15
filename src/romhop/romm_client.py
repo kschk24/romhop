@@ -66,22 +66,6 @@ class RommClient:
         resp.raise_for_status()
         return resp.content
 
-    def download_rom_content(self, rom_id: int, out_name: str, on_progress=None) -> bytes:
-        # quote out_name fully (safe="") so a slash can't break the path structure
-        url = f"/api/roms/{rom_id}/content/{quote(out_name, safe='')}"
-        # Stream so we can report progress; total is None when the server omits Content-Length.
-        with self._http.stream("GET", url) as resp:
-            resp.raise_for_status()
-            total = int(resp.headers["content-length"]) if "content-length" in resp.headers else None
-            downloaded = 0
-            chunks: list[bytes] = []
-            for chunk in resp.iter_bytes():
-                chunks.append(chunk)
-                downloaded += len(chunk)
-                if on_progress is not None:
-                    on_progress(downloaded, total)
-        return b"".join(chunks)
-
     @contextmanager
     def stream_rom_content(self, rom_id: int, out_name: str):
         """Stream a rom's bytes. Yields ``(total, chunk_iterator)`` where total

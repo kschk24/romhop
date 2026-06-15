@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 import time
 import zipfile
 from pathlib import Path
@@ -45,6 +46,10 @@ class RateLimiter:
             self._sleep(behind)
 
 
+class DownloadCancelled(Exception):
+    """Raised when a download is aborted via stop_event."""
+
+
 def friendly_download_error(rom_name: str, rom_id: int, exc: Exception) -> str:
     """User-facing message for a failed rom download.
 
@@ -79,49 +84,73 @@ def _zip_to_files(payload: bytes) -> dict[str, bytes]:
     return files
 
 
-def _is_multi_disc(rom: Rom, payload: bytes) -> bool:
-    """Decide whether a download is a multi-file/disc bundle (subfolder + .m3u) or a
-    single flat rom. RomM returns a zip bundle for multi-part roms and the raw file
-    otherwise — but a single-file rom can itself be a .zip, so an archive rom is never
-    treated as a bundle."""
+def _is_multi_disc_head(rom: Rom, head: bytes) -> bool:
+    """Decide whether a download is a multi-file/disc bundle (subfolder + .m3u)
+    or a single flat rom, given the first bytes of the payload. RomM returns a
+    zip bundle for multi-part roms and the raw file otherwise — but a single-file
+    rom can itself be a .zip, so an archive rom is never treated as a bundle."""
     ext = Path(rom.fs_name).suffix.lower()
     if rom.has_multiple_files or ext == ".m3u":
         return True
     if ext in ARCHIVE_EXTS:
         return False  # the rom is its own archive; keep it flat
-    return payload[:2] == b"PK"  # a zip bundle for a non-archive rom = disc set
+    return head[:2] == b"PK"  # a zip bundle for a non-archive rom = disc set
 
 
 def download_rom(rom: Rom, client, *, roms_root: Path, cache: MappingCache,
                  overrides: dict[str, str], is_multi_file: bool | None = None,
-                 on_progress=None) -> Path:
+                 on_progress=None, stop_event=None, rate_limit_kbps: int = 0) -> Path:
     """Download a rom into the ES-DE layout and record a cache entry.
 
-    Single-file roms are written flat into <system>/; multi-disc roms get a
-    subfolder + .m3u + noload.txt. Returns the path written (the file or the .m3u).
-    `on_progress(downloaded, total)` is called during the transfer (total may be None).
+    Streams the rom to a ``.part`` temp file in the destination platform dir,
+    then finalizes: single-file roms are renamed into <system>/; multi-disc
+    bundles are extracted into a subfolder + .m3u + noload.txt. Returns the path
+    written (the file or the .m3u). ``on_progress(downloaded, total)`` is called
+    during the transfer (total may be None). Pass ``stop_event`` to abort
+    mid-stream (raises DownloadCancelled) and ``rate_limit_kbps`` to throttle.
     """
-    payload = client.download_rom_content(rom.id, rom.fs_name, on_progress=on_progress)
-
-    if is_multi_file is None:
-        is_multi_file = _is_multi_disc(rom, payload)
-
     system = esde_system_for_slug(rom.platform_slug, overrides)
     game_name = rom.fs_name_no_ext
+    system_dir = roms_root / system
+    system_dir.mkdir(parents=True, exist_ok=True)
+    part = system_dir / (Path(rom.fs_name).name + ".part")
+    limiter = RateLimiter(rate_limit_kbps)
 
-    if is_multi_file:
-        # Bundle zip: drop RomM's own .m3u / noload.txt — write_game rebuilds them.
-        files = {
-            name: data
-            for name, data in _zip_to_files(payload).items()
-            if not name.lower().endswith(".m3u") and name != "noload.txt"
-        }
-        written = write_game(roms_root, system, game_name, files)
-        cache_files = list(files)
-    else:
-        files = {rom.fs_name: payload}
-        written = write_single_file(roms_root, system, rom.fs_name, payload)
-        cache_files = [rom.fs_name]
+    try:
+        downloaded = 0
+        with part.open("wb") as f, \
+                client.stream_rom_content(rom.id, rom.fs_name) as (total, chunks):
+            for chunk in chunks:
+                if stop_event is not None and stop_event.is_set():
+                    raise DownloadCancelled
+                f.write(chunk)
+                downloaded += len(chunk)
+                if on_progress is not None:
+                    on_progress(downloaded, total)
+                limiter.tick(downloaded)
+
+        if is_multi_file is None:
+            with part.open("rb") as f:
+                head = f.read(2)
+            is_multi_file = _is_multi_disc_head(rom, head)
+
+        if is_multi_file:
+            payload = part.read_bytes()
+            files = {
+                name: data
+                for name, data in _zip_to_files(payload).items()
+                if not name.lower().endswith(".m3u") and name != "noload.txt"
+            }
+            written = write_game(roms_root, system, game_name, files)
+            cache_files = list(files)
+            part.unlink(missing_ok=True)
+        else:
+            target = system_dir / Path(rom.fs_name).name
+            os.replace(part, target)
+            written = target
+            cache_files = [rom.fs_name]
+    finally:
+        part.unlink(missing_ok=True)
 
     cache.add(seed_entry(rom.id, system, game_name, cache_files))
     cache.save()

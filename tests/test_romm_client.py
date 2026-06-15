@@ -31,14 +31,6 @@ def test_list_roms_parses_fields():
     )
 
 
-def test_download_rom_content_returns_bytes():
-    def handler(request):
-        assert request.url.path == "/api/roms/18/content/game.zip"
-        return httpx.Response(200, content=b"ROMBYTES")
-    data = _client(handler).download_rom_content(18, "game.zip")
-    assert data == b"ROMBYTES"
-
-
 def test_upload_save_posts_multipart():
     seen = {}
     def handler(request):
@@ -55,17 +47,6 @@ def test_upload_save_posts_multipart():
     assert seen["rom_id"] == "18"
     assert seen["emulator"] == "genesis_plus_gx"
     assert b"SAVE" in seen["body"]
-
-
-def test_download_rom_content_quotes_special_chars():
-    seen = {}
-    def handler(request):
-        seen["raw_path"] = request.url.raw_path
-        return httpx.Response(200, content=b"X")
-    _client(handler).download_rom_content(18, "Final Fantasy VII (Europe)/Disc 1.cue")
-    # httpx decodes %2F back to / in .path, so check raw_path (bytes) to confirm
-    # the slash inside out_name was percent-encoded and didn't corrupt the path structure
-    assert b"%2F" in seen["raw_path"]
 
 
 def test_list_roms_handles_null_files():
@@ -129,18 +110,6 @@ def test_list_roms_parses_has_multiple_files():
     roms = _client(handler).list_roms()
     assert roms[0].has_multiple_files is True
     assert roms[1].has_multiple_files is False   # default when absent
-
-
-def test_download_rom_content_reports_progress():
-    body = b"X" * 1000
-    def handler(request):
-        return httpx.Response(200, content=body)
-    calls = []
-    data = _client(handler).download_rom_content(7, "g.zip", on_progress=lambda d, t: calls.append((d, t)))
-    assert data == body
-    assert calls, "on_progress was never called"
-    assert calls[-1][0] == 1000          # cumulative bytes == total
-    assert calls[-1][1] == 1000          # Content-Length reported as total
 
 
 def test_list_roms_captures_url_cover():

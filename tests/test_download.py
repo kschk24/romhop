@@ -1,18 +1,26 @@
 import io
+import threading
 import zipfile
+from contextlib import contextmanager
 
 from romhop.download import download_rom
 from romhop.romm_client import Rom
 from romhop.mapping_cache import MappingCache
 
 
-class FakeClient:
-    def __init__(self, payload: bytes):
+class StreamClient:
+    """Fake RommClient exposing stream_rom_content over a fixed payload."""
+    def __init__(self, payload: bytes, chunk: int = 7):
         self._payload = payload
+        self._chunk = chunk
         self.requested = None
-    def download_rom_content(self, rom_id, out_name, on_progress=None):
+
+    @contextmanager
+    def stream_rom_content(self, rom_id, out_name):
         self.requested = (rom_id, out_name)
-        return self._payload
+        p, n = self._payload, self._chunk
+        chunks = (p[i:i + n] for i in range(0, len(p), n))
+        yield len(p), chunks
 
 
 def _zip_bytes(members: dict[str, str]) -> bytes:
@@ -23,11 +31,67 @@ def _zip_bytes(members: dict[str, str]) -> bytes:
     return buf.getvalue()
 
 
+def test_download_rom_streams_single_file_to_disk(tmp_path):
+    rom = Rom(id=1, name="A", platform_slug="gba", fs_name="A.gba",
+              fs_name_no_ext="A", file_names=["A.gba"])
+    written = download_rom(rom, StreamClient(b"CARTDATA"), roms_root=tmp_path,
+                           cache=MappingCache(tmp_path / "c.json"), overrides={})
+    assert written.read_bytes() == b"CARTDATA"
+    assert written.name == "A.gba"
+    assert not list(tmp_path.rglob("*.part"))
+
+
+def test_download_rom_extracts_zip_bundle(tmp_path):
+    payload = _zip_bytes({"disc1.cue": "ONE", "disc2.cue": "TWO"})
+    rom = Rom(id=2, name="Game", platform_slug="psx", fs_name="Game.cue",
+              fs_name_no_ext="Game", file_names=[], has_multiple_files=True)
+    written = download_rom(rom, StreamClient(payload), roms_root=tmp_path,
+                           cache=MappingCache(tmp_path / "c.json"), overrides={})
+    assert written.suffix == ".m3u"
+    game_dir = tmp_path / "psx" / "Game"
+    assert (game_dir / "disc1.cue").read_text() == "ONE"
+    assert not list(tmp_path.rglob("*.part"))
+
+
+def test_download_rom_cancel_midstream_raises_and_cleans_up(tmp_path):
+    from romhop.download import DownloadCancelled
+    stop = threading.Event()
+
+    class CancellingClient(StreamClient):
+        @contextmanager
+        def stream_rom_content(self, rom_id, out_name):
+            def gen():
+                yield b"AAAA"
+                stop.set()
+                yield b"BBBB"
+            yield 8, gen()
+
+    rom = Rom(id=3, name="Big", platform_slug="3ds", fs_name="Big.3ds",
+              fs_name_no_ext="Big", file_names=["Big.3ds"])
+    import pytest
+    with pytest.raises(DownloadCancelled):
+        download_rom(rom, CancellingClient(b""), roms_root=tmp_path,
+                     cache=MappingCache(tmp_path / "c.json"), overrides={},
+                     stop_event=stop)
+    assert not list(tmp_path.rglob("*.part"))
+    assert not (tmp_path / "3ds" / "Big.3ds").exists()
+
+
+def test_download_rom_reports_progress_streaming(tmp_path):
+    seen = []
+    rom = Rom(id=4, name="A", platform_slug="gba", fs_name="A.gba",
+              fs_name_no_ext="A", file_names=["A.gba"])
+    download_rom(rom, StreamClient(b"0123456789", chunk=5), roms_root=tmp_path,
+                 cache=MappingCache(tmp_path / "c.json"), overrides={},
+                 on_progress=lambda d, t: seen.append((d, t)))
+    assert seen[-1] == (10, 10)
+
+
 def test_single_file_rom_written_flat_and_cached(tmp_path):
     rom = Rom(id=7, name="Sonic", platform_slug="genesis",
               fs_name="Sonic (USA).md", fs_name_no_ext="Sonic (USA)",
               file_names=["Sonic (USA).md"])
-    client = FakeClient(b"MDDATA")
+    client = StreamClient(b"MDDATA")
     cache = MappingCache(tmp_path / "cache.json")
 
     written = download_rom(rom, client, roms_root=tmp_path, cache=cache, overrides={})
@@ -51,7 +115,7 @@ def test_single_file_zip_rom_stays_flat(tmp_path):
               file_names=[])
     cache = MappingCache(tmp_path / "c.json")
 
-    written = download_rom(rom, FakeClient(payload), roms_root=tmp_path, cache=cache, overrides={})
+    written = download_rom(rom, StreamClient(payload), roms_root=tmp_path, cache=cache, overrides={})
 
     assert written == tmp_path / "gba" / "Sonic Advance (USA).zip"
     assert written.read_bytes() == payload          # not extracted
@@ -68,7 +132,7 @@ def test_multi_disc_zip_extracted_to_subfolder(tmp_path):
               fs_name="FF7.cue", fs_name_no_ext="FF7", file_names=[])
     cache = MappingCache(tmp_path / "c.json")
 
-    m3u = download_rom(rom, FakeClient(payload), roms_root=tmp_path, cache=cache, overrides={})
+    m3u = download_rom(rom, StreamClient(payload), roms_root=tmp_path, cache=cache, overrides={})
 
     folder = tmp_path / "psx" / "FF7"
     assert (folder / "FF7 (Disc 1).cue").read_text() == "CUE1"
@@ -92,28 +156,12 @@ def test_multi_disc_drops_romm_bundled_m3u_and_noload(tmp_path):
               has_multiple_files=True)
     cache = MappingCache(tmp_path / "c.json")
 
-    m3u = download_rom(rom, FakeClient(payload), roms_root=tmp_path, cache=cache, overrides={})
+    m3u = download_rom(rom, StreamClient(payload), roms_root=tmp_path, cache=cache, overrides={})
     folder = tmp_path / "psx" / "Game"
     # RomM's own m3u is not deposited as a file inside the subfolder
     assert not (folder / "Game.m3u").exists()
     assert (folder / "Game (Disc 1).cue").read_text() == "C1"
     assert m3u.read_text() == "Game/Game (Disc 1).cue\n"
-
-
-def test_download_rom_forwards_on_progress(tmp_path):
-    seen = []
-
-    class ProgClient:
-        def download_rom_content(self, rom_id, out_name, on_progress=None):
-            on_progress(5, 10)
-            on_progress(10, 10)
-            return b"X"
-
-    rom = Rom(id=1, name="A", platform_slug="gba", fs_name="A.gba", fs_name_no_ext="A",
-              file_names=["A.gba"])
-    download_rom(rom, ProgClient(), roms_root=tmp_path, cache=MappingCache(tmp_path / "c.json"),
-                 overrides={}, on_progress=lambda d, t: seen.append((d, t)))
-    assert seen == [(5, 10), (10, 10)]
 
 
 def test_friendly_download_error_maps_content_404_to_rescan_hint():
