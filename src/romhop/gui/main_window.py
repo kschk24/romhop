@@ -3,7 +3,9 @@ from __future__ import annotations
 from PySide6.QtCore import Signal
 from dataclasses import replace
 
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
+    QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -12,6 +14,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QStackedWidget,
+    QSystemTrayIcon,
     QVBoxLayout,
     QWidget,
 )
@@ -19,6 +22,7 @@ from PySide6.QtWidgets import (
 from romhop import config
 from romhop.config import Settings
 from romhop.gui import theme
+from romhop.gui.tray import SYNC_DOT_COLORS, TrayIcon
 from romhop.gui.filter_bar import FilterBar
 from romhop.gui.library_view import LibraryView, platforms_from_roms
 from romhop.gui.settings_view import SettingsView
@@ -61,10 +65,6 @@ def _sync_state_class(state: str) -> str:
     return "off"
 
 
-# Dot colours per coarse class. Grey at rest, green while watching, red on error.
-_SYNC_DOT_COLORS = {"off": "#8b949e", "running": "#3fb950", "error": "#f85149"}
-
-
 class MainWindow(QWidget):
     """Layout A: top search row, library/settings stack, pinned bottom bar."""
 
@@ -76,7 +76,7 @@ class MainWindow(QWidget):
                  rom_provider=None, download_action=None, scan_action=None,
                  sync_watch_fn=None, persist_settings=None, cover_provider=None,
                  platform_label=None, platform_names=None, apply_token=None,
-                 apply_settings=None):
+                 apply_settings=None, quit_fn=None, confirm_no_tray=None):
         super().__init__(parent)
         self._settings = settings
         self._apply_token = apply_token
@@ -93,6 +93,11 @@ class MainWindow(QWidget):
         self._sync_worker = None
         self._progress_name = ""
         self._progress_pos = ""
+        self.tray = None
+        self._quitting = False
+        self._tray_hint_shown = False
+        self._quit_fn = quit_fn or (lambda: QApplication.instance().quit())
+        self._confirm_no_tray = confirm_no_tray or self._default_no_tray_notice
         self.setWindowTitle("romhop")
 
         loaded = theme.load_active_theme(settings.theme)
@@ -170,6 +175,14 @@ class MainWindow(QWidget):
         # setChecked above fired no signal (it ran pre-connect), so a persisted
         # sync_enabled=True would leave the worker stopped and the dot grey
         # despite the toggle reading on. Kick off the worker now to match it.
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray = TrayIcon(self)
+            self.tray.show_requested.connect(self.toggle_window_visibility)
+            self.tray.sync_toggled.connect(self.sync_button.setChecked)
+            self.tray.quit_requested.connect(self.quit_app)
+            self.tray.set_sync_checked(settings.sync_enabled)
+            self.tray.set_status(self._sync_state, self.sync_state())
+            self.tray.show()
         if settings.sync_enabled:
             self._reconcile_sync(True)
 
@@ -233,10 +246,60 @@ class MainWindow(QWidget):
         # Record the fine-grained text, then recolour the button's dot from its
         # coarse class. Tooltip carries the detail (e.g. an error message).
         self._sync_state = state
-        color = _SYNC_DOT_COLORS[_sync_state_class(state)]
+        color = SYNC_DOT_COLORS[_sync_state_class(state)]
         self.sync_button.setStyleSheet(f"#SyncButton {{ color: {color}; }}")
         self.sync_button.setToolTip(f"Sync: {state}")
+        if self.tray is not None:
+            self.tray.set_status(state, _sync_state_class(state))
         self._sync_status_changed.emit(state)
+
+    # --- window visibility / tray lifecycle ---
+    def show_and_raise(self) -> None:
+        # Restore + focus, used by the tray and by a second `romhop gui` launch.
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def toggle_window_visibility(self) -> None:
+        if self.isVisible():
+            self.hide()
+        else:
+            self.show_and_raise()
+
+    def _default_no_tray_notice(self) -> None:
+        QMessageBox.information(
+            self, "romhop",
+            "No system tray is available on this desktop. The window will hide "
+            "and keep syncing in the background. Relaunch `romhop gui` to bring "
+            "it back.")
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        # A real quit (via the tray) flows through here with _quitting set.
+        if self._quitting:
+            self._shutdown_sync()
+            super().closeEvent(event)
+            return
+        if self.tray is not None:
+            event.ignore()
+            self.hide()
+            if not self._tray_hint_shown:
+                self.tray.showMessage("romhop", "Still running — save-sync active.")
+                self._tray_hint_shown = True
+            return
+        # No tray: warn once, then hide and keep running headless.
+        self._confirm_no_tray()
+        event.ignore()
+        self.hide()
+
+    def quit_app(self) -> None:
+        self._quitting = True
+        self._shutdown_sync()
+        self._quit_fn()
+
+    def _shutdown_sync(self) -> None:
+        if self._sync_worker is not None:
+            self._sync_worker.stop()
+            self._sync_worker.wait(5000)
 
     # --- sync controls ---
     def _on_sync_toggled(self, enabled: bool) -> None:
@@ -247,6 +310,8 @@ class MainWindow(QWidget):
         if self._apply_settings is not None:
             self._apply_settings(self._settings)
         self.settings_view.set_sync_enabled(enabled)
+        if self.tray is not None:
+            self.tray.set_sync_checked(enabled)
         self._reconcile_sync(enabled)
 
     def _reconcile_sync(self, enabled: bool) -> None:
@@ -299,6 +364,8 @@ class MainWindow(QWidget):
         self.sync_button.blockSignals(True)
         self.sync_button.setChecked(enabled)
         self.sync_button.blockSignals(False)
+        if self.tray is not None:
+            self.tray.set_sync_checked(enabled)
         self._reconcile_sync(enabled)
 
     def _on_selection(self, roms: list) -> None:

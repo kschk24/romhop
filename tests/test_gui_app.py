@@ -531,3 +531,87 @@ def test_cancel_button_hidden_until_download_then_cancels(qtbot):
     assert win.cancel_btn.isHidden()       # hidden again after the batch
 
 
+def test_close_hides_to_tray_when_available(qtbot, monkeypatch):
+    from PySide6.QtWidgets import QSystemTrayIcon
+    monkeypatch.setattr(QSystemTrayIcon, "isSystemTrayAvailable",
+                        staticmethod(lambda: True))
+    from PySide6.QtGui import QCloseEvent
+    from romhop.gui.main_window import MainWindow
+
+    win = MainWindow(settings=config.default_settings())
+    qtbot.addWidget(win)
+    win.show()
+    ev = QCloseEvent()
+    win.closeEvent(ev)
+    assert not ev.isAccepted()   # close intercepted, app stays alive
+    assert win.isHidden()
+    assert win.tray is not None
+
+
+def test_close_warns_and_hides_when_no_tray(qtbot, monkeypatch):
+    from PySide6.QtWidgets import QSystemTrayIcon
+    monkeypatch.setattr(QSystemTrayIcon, "isSystemTrayAvailable",
+                        staticmethod(lambda: False))
+    from PySide6.QtGui import QCloseEvent
+    from romhop.gui.main_window import MainWindow
+
+    warned = []
+    win = MainWindow(settings=config.default_settings(),
+                     confirm_no_tray=lambda: warned.append(True))
+    qtbot.addWidget(win)
+    win.show()
+    ev = QCloseEvent()
+    win.closeEvent(ev)
+    assert warned == [True]       # user warned once
+    assert win.isHidden()         # still hides + keeps running headless
+    assert win.tray is None
+
+
+def test_tray_sync_toggle_propagates_to_button_and_settings(qtbot, monkeypatch):
+    from PySide6.QtWidgets import QSystemTrayIcon
+    monkeypatch.setattr(QSystemTrayIcon, "isSystemTrayAvailable",
+                        staticmethod(lambda: True))
+    from romhop.gui.main_window import MainWindow
+
+    win = MainWindow(settings=config.default_settings(),
+                     persist_settings=lambda s: None,
+                     sync_watch_fn=lambda ev: ev.wait(timeout=2))
+    qtbot.addWidget(win)
+    win.tray._sync_action.setChecked(True)
+    assert win.sync_button.isChecked() is True
+    assert win.settings_view.sync_check.isChecked() is True
+
+
+def test_set_sync_status_updates_tray_tooltip(qtbot, monkeypatch):
+    from PySide6.QtWidgets import QSystemTrayIcon
+    monkeypatch.setattr(QSystemTrayIcon, "isSystemTrayAvailable",
+                        staticmethod(lambda: True))
+    from romhop.gui.main_window import MainWindow
+
+    win = MainWindow(settings=config.default_settings())
+    qtbot.addWidget(win)
+    win.set_sync_status("watching")
+    assert "watching" in win.tray.toolTip()
+
+
+def test_quit_app_stops_sync_then_quits(qtbot, monkeypatch):
+    from PySide6.QtWidgets import QSystemTrayIcon
+    monkeypatch.setattr(QSystemTrayIcon, "isSystemTrayAvailable",
+                        staticmethod(lambda: True))
+    from romhop.gui.main_window import MainWindow
+
+    quit_called = []
+    win = MainWindow(settings=config.default_settings(),
+                     persist_settings=lambda s: None,
+                     sync_watch_fn=lambda ev: ev.wait(timeout=5),
+                     quit_fn=lambda: quit_called.append(True))
+    qtbot.addWidget(win)
+    win.sync_button.setChecked(True)
+    qtbot.waitUntil(lambda: win._sync_worker is not None, timeout=2000)
+    win.quit_app()
+    qtbot.waitUntil(
+        lambda: win._sync_worker is None or win._sync_worker.isFinished(),
+        timeout=3000)
+    assert quit_called == [True]
+
+
