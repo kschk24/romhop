@@ -137,7 +137,7 @@ class MainWindow(QWidget):
         # idle so the bottom bar stays clean until a download is running.
         self.progress_bar = QProgressBar()
         self.progress_bar.setObjectName("DownloadProgress")
-        self.progress_bar.setFixedWidth(180)
+        self.progress_bar.setFixedWidth(360)
         self.progress_bar.setTextVisible(True)
         self.progress_bar.hide()
         self.progress_label = QLabel("")
@@ -370,9 +370,9 @@ class MainWindow(QWidget):
     def _begin_progress(self) -> None:
         self.progress_bar.setMaximum(0)  # busy until the first byte count lands
         self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("")
         self.progress_bar.show()
-        self.progress_label.setText("")
-        self.progress_label.show()
+        self.progress_label.hide()
 
     def _on_item_started(self, index: int, count: int, name: str) -> None:
         self._progress_name = name
@@ -380,7 +380,7 @@ class MainWindow(QWidget):
         # New game in the batch: bar goes indeterminate until its total arrives.
         self.progress_bar.setMaximum(0)
         self.progress_bar.setValue(0)
-        self.progress_label.setText(f"{name} ({self._progress_pos})")
+        self.progress_bar.setFormat(f"{name} ({self._progress_pos})")
 
     # QProgressBar's range is a signed 32-bit int, so raw byte counts overflow on
     # large roms (~4 GiB 3DS titles). Track progress on a fixed permille scale.
@@ -395,11 +395,11 @@ class MainWindow(QWidget):
         rate = _human_speed(speed)
         if total > 0:
             size = f"{_human_size(downloaded)} / {_human_size(total)}"
-            self.progress_label.setText(
+            self.progress_bar.setFormat(
                 f"{self._progress_name} ({self._progress_pos}) · {size} · {rate}"
             )
         else:
-            self.progress_label.setText(
+            self.progress_bar.setFormat(
                 f"{self._progress_name} ({self._progress_pos}) · {_human_size(downloaded)} · {rate}"
             )
 
@@ -407,7 +407,7 @@ class MainWindow(QWidget):
         # A download failure belongs in the download area, not on the sync dot.
         # The batch keeps going; the label is overwritten by the next item (or
         # cleared by _end_progress), so a transient flash is fine here.
-        self.progress_label.setText(f"Failed: {name} — {message}")
+        self.progress_bar.setFormat(f"Failed: {name} — {message}")
 
     def _on_cancel_clicked(self) -> None:
         if self._download_worker is not None:

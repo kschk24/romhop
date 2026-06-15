@@ -128,8 +128,8 @@ def test_progress_slots_update_bottom_bar(qtbot):
     win._begin_progress()
     win._on_item_started(2, 5, "Sonic")
     assert not win.progress_bar.isHidden()
-    assert "2/5" in win.progress_label.text()
-    assert "Sonic" in win.progress_label.text()
+    assert "2/5" in win.progress_bar.format()
+    assert "Sonic" in win.progress_bar.format()
 
     win._on_item_progress(50, 100, 2048.0)
     # Progress is tracked on a fixed permille scale (byte counts overflow the
@@ -375,8 +375,8 @@ def test_item_error_surfaces_in_download_area_not_sync(qtbot):
     win._on_item_error("Animal Crossing", "no downloadable files (id 1542) — rescan in RomM")
 
     # The failure shows in the download progress label, with the rom + reason.
-    assert "Animal Crossing" in win.progress_label.text()
-    assert "rescan" in win.progress_label.text().lower()
+    assert "Animal Crossing" in win.progress_bar.format()
+    assert "rescan" in win.progress_bar.format().lower()
     # ...and must NOT hijack the sync indicator.
     assert win.sync_status_text() == sync_before
     assert "error" not in win.sync_status_text().lower()
@@ -415,7 +415,7 @@ def test_byte_indicator_shows_downloaded_over_total(qtbot):
     win._on_item_started(1, 1, "Bravely Default")
     big = 4294967295
     win._on_item_progress(big // 2, big, 5_000_000.0)
-    txt = win.progress_label.text()
+    txt = win.progress_bar.format()
     assert "/" in txt and "GB" in txt          # "2.0 / 4.0 GB"
     assert "MB/s" in txt
 
