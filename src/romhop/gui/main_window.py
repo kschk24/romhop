@@ -125,7 +125,7 @@ class MainWindow(QWidget):
         # dot reports the live worker state (grey idle → green watching → red
         # error). No separate indicator, no jump-to-settings shortcut.
         self._sync_state = "idle"
-        self.sync_button = QPushButton("●  Sync")
+        self.sync_button = QPushButton("●  Save-Sync")
         self.sync_button.setObjectName("SyncButton")
         self.sync_button.setCheckable(True)
         self.sync_button.setChecked(settings.sync_enabled)  # before connect: no fire
