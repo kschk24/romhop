@@ -43,8 +43,8 @@ def test_search_filters_settings_when_settings_active(qtbot):
     win.show_settings()
     win.search.setText("rom")
     # In settings, the search box filters settings rows, not the library.
-    assert win.settings_view.is_field_visible("romm_url")
-    assert not win.settings_view.is_field_visible("saves_dir")
+    assert win.settings_view.is_field_visible("RomM URL:")
+    assert not win.settings_view.is_field_visible("Saves directory:")
 
 
 def test_switching_into_settings_applies_current_query(qtbot):
@@ -56,8 +56,8 @@ def test_switching_into_settings_applies_current_query(qtbot):
     win.search.setText("saves")
     # ...takes effect on the settings rows once settings opens.
     win.show_settings()
-    assert win.settings_view.is_field_visible("saves_dir")
-    assert not win.settings_view.is_field_visible("romm_url")
+    assert win.settings_view.is_field_visible("Saves directory:")
+    assert not win.settings_view.is_field_visible("RomM URL:")
 
 
 def test_switching_back_to_library_reapplies_query_to_library(qtbot):

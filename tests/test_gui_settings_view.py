@@ -6,19 +6,20 @@ def test_settings_to_rows_lists_editable_fields():
     s = config.default_settings()
     s.romm_url = "https://romm.example"
     rows = settings_view.settings_to_rows(s)
-    assert rows["romm_url"] == "https://romm.example"
-    assert "sync_delay_seconds" in rows
-    assert "roms_root" in rows
+    assert rows["RomM URL:"] == "https://romm.example"
+    assert "Sync delay:" in rows
+    assert "Rom directory:" in rows
 
 
 def test_apply_rows_updates_settings():
     s = config.default_settings()
     updated = settings_view.apply_rows(s, {
-        "romm_url": "https://x",
-        "roms_root": "/games",
-        "saves_dir": "/saves",
-        "states_dir": "/states",
-        "sync_delay_seconds": "12",
+        "RomM URL:": "https://x",
+        "Rom directory:": "/games",
+        "Saves directory:": "/saves",
+        "States directory:": "/states",
+        "Sync delay:": "12",
+        settings_view.DOWNLOAD_LIMIT_LABEL: "0",
     })
     assert updated.romm_url == "https://x"
     assert str(updated.roms_root) == "/games"
@@ -42,11 +43,11 @@ def test_settings_view_cancel_discards_edits_and_emits(qtbot):
     view = SettingsView(s)
     qtbot.addWidget(view)
     # User types a change but then cancels.
-    view._edits["romm_url"].setText("https://edited")
+    view._edits["RomM URL:"].setText("https://edited")
     with qtbot.waitSignal(view.cancelled, timeout=1000):
         view._on_cancel()
     # Edited text is reverted to the original (changes discarded).
-    assert view._edits["romm_url"].text() == "https://original"
+    assert view._edits["RomM URL:"].text() == "https://original"
 
 
 def test_settings_view_reset_repopulates_from_settings(qtbot):
@@ -55,9 +56,9 @@ def test_settings_view_reset_repopulates_from_settings(qtbot):
     s.romm_url = "https://original"
     view = SettingsView(s)
     qtbot.addWidget(view)
-    view._edits["romm_url"].setText("https://stale")
+    view._edits["RomM URL:"].setText("https://stale")
     view.reset()
-    assert view._edits["romm_url"].text() == "https://original"
+    assert view._edits["RomM URL:"].text() == "https://original"
 
 
 def test_settings_view_filter_hides_nonmatching_rows(qtbot):
@@ -67,10 +68,10 @@ def test_settings_view_filter_hides_nonmatching_rows(qtbot):
     qtbot.addWidget(view)
     view.filter("rom")
     # Fields whose name contains the query stay visible; others hide.
-    assert view.is_field_visible("romm_url")
-    assert view.is_field_visible("roms_root")
-    assert not view.is_field_visible("saves_dir")
-    assert not view.is_field_visible("sync_delay_seconds")
+    assert view.is_field_visible("RomM URL:")
+    assert view.is_field_visible("Rom directory:")
+    assert not view.is_field_visible("Saves directory:")
+    assert not view.is_field_visible("Sync delay:")
 
 
 def test_settings_view_filter_is_case_insensitive(qtbot):
@@ -79,8 +80,8 @@ def test_settings_view_filter_is_case_insensitive(qtbot):
     view = SettingsView(s)
     qtbot.addWidget(view)
     view.filter("SAVES")
-    assert view.is_field_visible("saves_dir")
-    assert not view.is_field_visible("romm_url")
+    assert view.is_field_visible("Saves directory:")
+    assert not view.is_field_visible("RomM URL:")
 
 
 def test_settings_view_filter_empty_shows_all(qtbot):
