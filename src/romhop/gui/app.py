@@ -16,6 +16,7 @@ def run() -> None:
     from romhop.download import download_rom, friendly_download_error, DownloadCancelled
     from romhop.gui import covers
     from romhop.gui.main_window import MainWindow
+    from romhop.gui.single_instance import SingleInstance
     from romhop.mapping_cache import MappingCache
     from romhop.romm_client import RommClient
     from romhop.scan import run_scan
@@ -82,6 +83,15 @@ def run() -> None:
         return run_scan(client, cache, names, settings)
 
     app = QApplication(_sys.argv)
+    # Hiding the window must not quit the app — the sync worker lives on.
+    app.setQuitOnLastWindowClosed(False)
+
+    # Single instance: if one is already up, ask it to surface and exit.
+    instance = SingleInstance()
+    if instance.is_running():
+        return
+    instance.listen()
+
     window = MainWindow(
         settings=settings,
         rom_provider=rom_provider,
@@ -94,6 +104,7 @@ def run() -> None:
         apply_token=client.set_token,
         apply_settings=apply_settings,
     )
+    instance.activated.connect(window.show_and_raise)
     window.resize(900, 600)
     # An unconfigured or unreachable RomM must not crash startup: open the
     # window empty and surface the failure in the status bar instead.
