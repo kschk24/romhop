@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from urllib.parse import quote
 
@@ -80,6 +81,18 @@ class RommClient:
                 if on_progress is not None:
                     on_progress(downloaded, total)
         return b"".join(chunks)
+
+    @contextmanager
+    def stream_rom_content(self, rom_id: int, out_name: str):
+        """Stream a rom's bytes. Yields ``(total, chunk_iterator)`` where total
+        is the Content-Length in bytes (or None if absent). Pure transport —
+        the caller owns progress, cancellation, throttling, and writing."""
+        url = f"/api/roms/{rom_id}/content/{quote(out_name, safe='')}"
+        with self._http.stream("GET", url) as resp:
+            resp.raise_for_status()
+            cl = resp.headers.get("content-length")
+            total = int(cl) if cl is not None else None
+            yield total, resp.iter_bytes()
 
     def list_saves(self, rom_id: int) -> list[dict]:
         resp = self._http.get("/api/saves", params={"rom_id": rom_id})

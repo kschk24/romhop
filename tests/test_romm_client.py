@@ -199,3 +199,25 @@ def test_list_roms_captures_platform_name():
                                      base_url="http://x"))
     roms = client.list_roms()
     assert roms[0].platform_name == "Sega Genesis"
+
+
+def test_stream_rom_content_yields_total_and_chunks():
+    body = b"Z" * 2500
+    def handler(request):
+        assert request.url.path == "/api/roms/9/content/g.3ds"
+        return httpx.Response(200, content=body)
+    out = bytearray()
+    with _client(handler).stream_rom_content(9, "g.3ds") as (total, chunks):
+        assert total == 2500            # from Content-Length
+        for c in chunks:
+            out.extend(c)
+    assert bytes(out) == body
+
+
+def test_stream_rom_content_total_none_without_content_length():
+    def handler(request):
+        # streaming generator response => httpx sets no Content-Length
+        return httpx.Response(200, content=iter([b"a", b"b"]))
+    with _client(handler).stream_rom_content(1, "x") as (total, chunks):
+        assert total is None
+        assert b"".join(chunks) == b"ab"
