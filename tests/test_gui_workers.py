@@ -31,7 +31,7 @@ def test_download_worker_runs_jobs_sequentially(qtbot):
     roms = [_rom(1, "A"), _rom(2, "B")]
     order = []
 
-    def action(rom, on_progress):
+    def action(rom, on_progress, stop_event):
         on_progress(100, 100)
         order.append(rom.name)
         return rom.name
@@ -49,7 +49,7 @@ def test_download_worker_runs_jobs_sequentially(qtbot):
 def test_download_worker_reports_progress_with_speed(qtbot):
     roms = [_rom(1, "A")]
 
-    def action(rom, on_progress):
+    def action(rom, on_progress, stop_event):
         on_progress(50, 100)
         on_progress(100, 100)
         return rom.name
@@ -72,7 +72,7 @@ def test_download_worker_continues_past_item_error(qtbot):
     roms = [_rom(1, "A"), _rom(2, "B")]
     done = []
 
-    def action(rom, on_progress):
+    def action(rom, on_progress, stop_event):
         if rom.name == "A":
             raise ValueError("boom A")
         done.append(rom.name)
@@ -144,7 +144,7 @@ def test_download_worker_progress_survives_files_over_int32(qtbot):
     big = 4294967295  # 2**32 - 1
     roms = [_rom(1, "Bravely Default")]
 
-    def action(rom, on_progress):
+    def action(rom, on_progress, stop_event):
         on_progress(big // 2, big)
         on_progress(big, big)
         return rom.name
@@ -157,3 +157,26 @@ def test_download_worker_progress_survives_files_over_int32(qtbot):
 
     seen = {(d, t) for d, t in progressed}
     assert (big, big) in seen  # full size emitted without overflow
+
+
+def test_download_worker_cancel_stops_batch_without_item_error(qtbot):
+    from romhop.download import DownloadCancelled
+    roms = [_rom(1, "A"), _rom(2, "B")]
+    started = []
+
+    def action(rom, on_progress, stop_event):
+        started.append(rom.name)
+        if rom.name == "A":
+            raise DownloadCancelled  # first item cancelled mid-stream
+        return rom.name
+
+    w = workers.DownloadWorker(roms, action)
+    errors = []
+    w.item_error.connect(lambda n, m: errors.append((n, m)))
+    w.cancel()  # pre-cancel so the run aborts deterministically
+    with qtbot.waitSignal(w.finished, timeout=2000):
+        w.start()
+
+    assert errors == []                 # cancel is not an error
+    assert w.was_cancelled() is True
+    assert started == []                # cancelled before the first item ran

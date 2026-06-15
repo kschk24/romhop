@@ -7,6 +7,8 @@ from typing import Callable, Sequence
 from PySide6.QtCore import QThread, Qt, Signal
 from PySide6.QtGui import QImage
 
+from romhop.download import DownloadCancelled
+
 
 class CallableWorker(QThread):
     """Runs a zero-arg callable off the UI thread.
@@ -57,11 +59,21 @@ class DownloadWorker(QThread):
     # Don't emit more often than this between non-terminal updates (seconds).
     _MIN_INTERVAL = 0.1
 
-    def __init__(self, jobs: Sequence, action: Callable[[object, Callable], object],
+    def __init__(self, jobs: Sequence, action: Callable[..., object],
                  parent=None):
         super().__init__(parent)
         self._jobs = list(jobs)
         self._action = action
+        self._cancel = threading.Event()
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        """Request the batch stop: drops the queue and aborts the in-flight
+        transfer via the stop_event handed to the action."""
+        self._cancel.set()
+
+    def was_cancelled(self) -> bool:
+        return self._cancelled
 
     def _make_on_progress(self):
         state = {"t0": None, "last_t": 0.0, "last_b": 0, "emitted": False}
@@ -86,9 +98,15 @@ class DownloadWorker(QThread):
     def run(self) -> None:
         count = len(self._jobs)
         for index, rom in enumerate(self._jobs, start=1):
+            if self._cancel.is_set():
+                self._cancelled = True
+                break
             self.item_started.emit(index, count, rom.name)
             try:
-                self._action(rom, self._make_on_progress())
+                self._action(rom, self._make_on_progress(), self._cancel)
+            except DownloadCancelled:
+                self._cancelled = True
+                break
             except Exception as exc:  # one failure must not abort the queue
                 self.item_error.emit(rom.name, str(exc))
 

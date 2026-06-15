@@ -105,7 +105,7 @@ def test_download_selected_invokes_action(qtbot):
     win = MainWindow(
         settings=config.default_settings(),
         rom_provider=lambda: roms,
-        download_action=lambda rom, on_progress: called.append(rom.name),
+        download_action=lambda rom, on_progress, stop_event: called.append(rom.name),
     )
     qtbot.addWidget(win)
     win.load_library()
@@ -149,7 +149,7 @@ def test_download_selected_drives_progress_and_recovers(qtbot):
     roms = [Rom(id=1, name="Sonic", platform_slug="genesis",
                 fs_name="Sonic.md", fs_name_no_ext="Sonic", file_names=["Sonic.md"])]
 
-    def action(rom, on_progress):
+    def action(rom, on_progress, stop_event):
         on_progress(40, 100)
         on_progress(100, 100)
         return rom.name
