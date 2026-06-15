@@ -71,6 +71,28 @@ SCHEMA: list[FieldSpec] = [
 ]
 
 
+_TRUE_TOKENS = {"true", "1", "yes", "on"}
+
+
+def coerce_value(type_: str, raw: str):
+    """Turn a string from the ini into a typed Python value.
+
+    Raises ValueError on a malformed int/float (callers fall back to the
+    default in that case). Booleans are permissive and never raise.
+    """
+    if type_ == "str":
+        return raw
+    if type_ == "path":
+        return Path(raw)
+    if type_ == "int":
+        return int(raw)
+    if type_ == "float":
+        return float(raw)
+    if type_ == "bool":
+        return raw.strip().lower() in _TRUE_TOKENS
+    raise ValueError(f"unknown field type: {type_}")
+
+
 def settings_path() -> Path:
     return Path(platformdirs.user_config_dir("romhop")) / "settings.json"
 

@@ -137,3 +137,25 @@ def test_schema_categories_are_known_and_ordered():
         assert f.category in config.CATEGORY_ORDER
         assert f.type in {"str", "path", "int", "float", "bool"}
         assert f.label  # non-empty
+
+
+def test_coerce_value_by_type():
+    from pathlib import Path
+    from romhop import config
+    assert config.coerce_value("str", "hello") == "hello"
+    assert config.coerce_value("path", "/games") == Path("/games")
+    assert config.coerce_value("int", "512") == 512
+    assert config.coerce_value("float", "12.5") == 12.5
+    assert config.coerce_value("bool", "true") is True
+    assert config.coerce_value("bool", "FALSE") is False
+    assert config.coerce_value("bool", "1") is True
+    assert config.coerce_value("bool", "off") is False
+
+
+def test_coerce_value_raises_on_bad_number():
+    from romhop import config
+    import pytest
+    with pytest.raises(ValueError):
+        config.coerce_value("int", "not-a-number")
+    with pytest.raises(ValueError):
+        config.coerce_value("float", "abc")
