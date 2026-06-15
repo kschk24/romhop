@@ -47,9 +47,11 @@ class SingleInstance(QObject):
         conn = self._server.nextPendingConnection()
         if conn is None:
             return
+        # Free the per-activation socket once the peer disconnects.
+        conn.disconnected.connect(conn.deleteLater)
         conn.readyRead.connect(lambda: self._read(conn))
 
-    def _read(self, conn) -> None:
+    def _read(self, conn: QLocalSocket) -> None:
         if _MSG in bytes(conn.readAll()):
             self.activated.emit()
         conn.disconnectFromServer()

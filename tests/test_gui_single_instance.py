@@ -11,6 +11,7 @@ def test_second_instance_activates_first(qtbot):
     # `activated` signal (this is the "raise the existing window" path).
     with qtbot.waitSignal(primary.activated, timeout=2000):
         assert second.is_running() is True
+    qtbot.wait(50)
     primary.close()
 
 
