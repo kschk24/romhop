@@ -626,5 +626,32 @@ def gui() -> None:
     run()
 
 
+@app.command(name="install-desktop")
+def install_desktop(
+    uninstall: bool = typer.Option(False, "--uninstall", help="Remove the desktop launcher instead."),
+):
+    """Register (or remove) a native desktop launcher for the GUI.
+
+    Linux: writes an XDG .desktop entry + icons. Windows: creates a Start Menu
+    shortcut to the no-console romhop-gui.exe. Paths are absolute, so it works
+    regardless of PATH.
+    """
+    from romhop.gui import launcher_install
+
+    if uninstall:
+        removed = launcher_install.uninstall()
+        if removed:
+            for p in removed:
+                typer.echo(f"Removed {p}")
+        else:
+            typer.echo("No launcher found to remove.")
+        return
+
+    written = launcher_install.install()
+    for p in written:
+        typer.echo(f"Wrote {p}")
+    typer.secho("Desktop launcher installed. Look for 'RomHop' in your app menu.", fg=typer.colors.GREEN)
+
+
 if __name__ == "__main__":
     app()
