@@ -150,8 +150,11 @@ class MainWindow(QWidget):
         self.sync_button.setCheckable(True)
         self.sync_button.setChecked(settings.sync_enabled)  # before connect: no fire
         self.sync_button.toggled.connect(self._on_sync_toggled)
+        self.uncheck_btn = QPushButton("Uncheck")
+        self.uncheck_btn.clicked.connect(self.library.clear_selection)
         bottom_row = QHBoxLayout(self.bottom)
         bottom_row.addWidget(self._sel_label)
+        bottom_row.addWidget(self.uncheck_btn)
         bottom_row.addWidget(self.download_btn)
         bottom_row.addWidget(self.cancel_btn)
         bottom_row.addWidget(self.progress_bar)
@@ -189,12 +192,16 @@ class MainWindow(QWidget):
         self.settings_view.reset()
         self.settings_view.setFocus()
         self.filter_bar.hide()
+        self.uncheck_btn.hide()
+        self.download_btn.hide()
         self.stack.setCurrentIndex(1)
         # Apply the standing query to the rows now that settings is active.
         self.settings_view.filter(self.search.text())
 
     def show_library(self) -> None:
         self.filter_bar.show()
+        self.uncheck_btn.show()
+        self.download_btn.show()
         self.stack.setCurrentIndex(0)
         # Re-apply the standing query to the game list.
         self.library.filter(self.search.text())
@@ -271,7 +278,6 @@ class MainWindow(QWidget):
         self.sync_button.setChecked(enabled)
         self.sync_button.blockSignals(False)
         self._reconcile_sync(enabled)
-        self.show_library()
 
     def _on_selection(self, roms: list) -> None:
         self._sel_label.setText(f"{len(roms)} selected")

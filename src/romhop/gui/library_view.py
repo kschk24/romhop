@@ -273,6 +273,14 @@ class LibraryView(QWidget):
         super().resizeEvent(event)
         self._relayout()
 
+    def clear_selection(self) -> None:
+        self._selected_ids.clear()
+        for check, _rom in self._checks.values():
+            check.blockSignals(True)
+            check.setChecked(False)
+            check.blockSignals(False)
+        self._emit_selection()
+
     def selected_roms(self) -> list[Rom]:
         # Global selection across all filter states, not just the visible tiles.
         return [rom for rom in self._roms if rom.id in self._selected_ids]
