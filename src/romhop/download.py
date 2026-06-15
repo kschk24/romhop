@@ -8,10 +8,7 @@ from pathlib import Path
 
 import httpx
 
-from romhop.library import (
-    write_game,
-    write_single_file,
-)
+from romhop.library import write_game
 from romhop.mapping_cache import MappingCache, seed_entry
 from romhop.platform_map import esde_system_for_slug
 from romhop.romm_client import Rom
