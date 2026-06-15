@@ -65,7 +65,7 @@ def run() -> None:
             stop_event=stop_event,
         )
 
-    def scan_action():
+    def scan_action(settings):
         return run_scan(client, cache, names, settings)
 
     app = QApplication(_sys.argv)

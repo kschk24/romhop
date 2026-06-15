@@ -394,7 +394,7 @@ def test_run_scan_invokes_action_and_shows_dialog(qtbot, monkeypatch):
         collisions=[])
     called = {}
 
-    def fake_scan():
+    def fake_scan(settings):
         called["ran"] = True
         return result
 
@@ -427,7 +427,7 @@ def test_run_scan_error_shows_message_box(qtbot, monkeypatch):
     from romhop import config
     from pathlib import Path
 
-    def boom():
+    def boom(settings):
         raise RuntimeError("no server")
 
     seen = {}

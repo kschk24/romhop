@@ -302,7 +302,8 @@ class MainWindow(QWidget):
         if self._scan_action is None or self._scan_worker is not None:
             return
         self.settings_view.set_scanning(True)
-        worker = CallableWorker(self._scan_action)
+        settings = self._settings
+        worker = CallableWorker(lambda: self._scan_action(settings))
         worker.done.connect(self._on_scan_done)
         worker.error.connect(self._on_scan_error)
         worker.finished.connect(self._on_scan_finished)

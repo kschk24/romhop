@@ -117,7 +117,6 @@ class SettingsView(QWidget):
         with the rest of the UI."""
         self._settings = replace(self._settings, sync_enabled=enabled)
         self.sync_check.setChecked(enabled)
-        self._refresh_scan_enabled()
 
     def current_settings(self) -> Settings:
         """The last-saved Settings (drives the host's in-memory copy)."""
@@ -158,6 +157,7 @@ class SettingsView(QWidget):
         for field, edit in self._edits.items():
             edit.setText(rows[field])
         self.sync_check.setChecked(self._settings.sync_enabled)
+        self._refresh_scan_enabled()
 
     def keyPressEvent(self, event) -> None:
         # Esc backs out of settings without saving.
