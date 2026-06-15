@@ -13,3 +13,4 @@ build/
 .claude/settings.local.json
 docs/superpowers/
 CLAUDE.local.md
+CLAUDE.md
