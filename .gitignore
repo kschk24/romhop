@@ -1,4 +1,6 @@
 .superpowers/
+.vscode/
+.claude/
 __pycache__/
 *.pyc
 .venv/
