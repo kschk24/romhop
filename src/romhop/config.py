@@ -28,6 +28,49 @@ class Settings:
     download_rate_limit_kbps: int = 0  # 0 = unlimited
 
 
+@dataclass(frozen=True)
+class FieldSpec:
+    key: str       # Settings attribute name
+    category: str  # one of CATEGORY_ORDER
+    label: str     # GUI label / never written to the ini
+    type: str      # "str" | "path" | "int" | "float" | "bool"
+    help: str      # tooltip in GUI; comment above the key in the ini
+
+
+CATEGORY_ORDER = ["connection", "paths", "behavior"]
+CATEGORY_LABELS = {
+    "connection": "Connection",
+    "paths": "Paths",
+    "behavior": "Behavior",
+}
+
+# Order within a category is on-screen field order. Defaults are NOT stored
+# here: load_settings starts from default_settings() and overlays ini values,
+# so the natural fallback for a missing/bad value is the real per-OS default.
+SCHEMA: list[FieldSpec] = [
+    FieldSpec("romm_url", "connection", "RomM URL", "str",
+              "Base URL of your RomM server"),
+    FieldSpec("roms_root", "paths", "Rom directory", "path",
+              "Local root of your ROM library"),
+    FieldSpec("saves_dir", "paths", "Saves directory", "path",
+              "Folder RetroArch reads/writes save files in"),
+    FieldSpec("states_dir", "paths", "States directory", "path",
+              "Folder RetroArch reads/writes save states in"),
+    FieldSpec("sort_saves_by_core", "behavior", "Sort saves by core", "bool",
+              "Mirror RetroArch's per-core save subfolders"),
+    FieldSpec("sort_states_by_core", "behavior", "Sort states by core", "bool",
+              "Mirror RetroArch's per-core state subfolders"),
+    FieldSpec("sync_enabled", "behavior", "Enable save sync", "bool",
+              "Auto-push changed saves to RomM after play"),
+    FieldSpec("sync_delay_seconds", "behavior", "Sync delay (seconds)", "float",
+              "Debounce window before pushing a changed save"),
+    FieldSpec("download_rate_limit_kbps", "behavior",
+              "Download limit (KB/s, 0 = unlimited)", "int",
+              "Throttle downloads; 0 disables the cap"),
+    FieldSpec("theme", "behavior", "Theme", "str", "GUI theme name"),
+]
+
+
 def settings_path() -> Path:
     return Path(platformdirs.user_config_dir("romhop")) / "settings.json"
 

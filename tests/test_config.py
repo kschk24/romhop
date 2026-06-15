@@ -113,3 +113,27 @@ def test_download_rate_limit_roundtrips_and_defaults_zero(tmp_path):
     config.save_settings(s, p)
     loaded = config.load_settings(p)
     assert loaded.download_rate_limit_kbps == 512
+
+
+def test_schema_covers_every_scalar_settings_field():
+    from romhop import config
+    schema_keys = {f.key for f in config.SCHEMA}
+    # Every scalar Settings field is in SCHEMA; the two dict fields are not.
+    expected = {
+        "romm_url", "roms_root", "saves_dir", "states_dir",
+        "sort_saves_by_core", "sort_states_by_core",
+        "sync_enabled", "sync_delay_seconds",
+        "download_rate_limit_kbps", "theme",
+    }
+    assert schema_keys == expected
+    assert "platform_overrides" not in schema_keys
+    assert "core_overrides" not in schema_keys
+
+
+def test_schema_categories_are_known_and_ordered():
+    from romhop import config
+    assert config.CATEGORY_ORDER == ["connection", "paths", "behavior"]
+    for f in config.SCHEMA:
+        assert f.category in config.CATEGORY_ORDER
+        assert f.type in {"str", "path", "int", "float", "bool"}
+        assert f.label  # non-empty
