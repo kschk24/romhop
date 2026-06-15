@@ -19,10 +19,6 @@ from romhop.config import SCHEMA, CATEGORY_ORDER, CATEGORY_LABELS, Settings
 
 SYNC_LABEL = "Enable save sync"  # the label of the sync_enabled FieldSpec
 
-# Re-exported for backward compatibility with tests/code that imported this name
-# from settings_view. The value matches the SCHEMA label for the same field.
-DOWNLOAD_LIMIT_LABEL = "Download limit (KB/s, 0 = unlimited)"
-
 
 class SettingsView(QWidget):
     """Schema-driven settings form. One QGroupBox per category, built from

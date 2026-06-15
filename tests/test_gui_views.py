@@ -322,14 +322,14 @@ def test_cover_pixmap_cache_reused_across_platform_switch(qtbot, tmp_path):
 
 
 def test_settings_form_has_download_rate_limit_field(qtbot, monkeypatch):
-    from romhop.gui.settings_view import SettingsView, DOWNLOAD_LIMIT_LABEL
+    from romhop.gui.settings_view import SettingsView
     from romhop import config
     # _on_save persists via config.save_settings — stub it so the test never
     # writes the real user settings file.
     monkeypatch.setattr(config, "save_settings", lambda s: None)
     view = SettingsView(config.default_settings())
     qtbot.addWidget(view)
-    assert DOWNLOAD_LIMIT_LABEL in view._edits
-    view._edits[DOWNLOAD_LIMIT_LABEL].setText("256")
+    assert "Download limit (KB/s, 0 = unlimited)" in view._edits
+    view._edits["Download limit (KB/s, 0 = unlimited)"].setText("256")
     view._on_save()
     assert view.current_settings().download_rate_limit_kbps == 256
