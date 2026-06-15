@@ -31,13 +31,13 @@ class RateLimiter:
         self._limit = kbps * 1024  # bytes/sec
         self._now = now
         self._sleep = sleep
-        self._start = None
+        # Anchor the schedule at construction (download start), so elapsed time
+        # is measured from the real beginning rather than the first chunk.
+        self._start = now()
 
     def tick(self, downloaded_total: int) -> None:
         if self._limit <= 0:
             return
-        if self._start is None:
-            self._start = self._now()
         target = downloaded_total / self._limit          # ideal elapsed seconds
         elapsed = self._now() - self._start
         behind = target - elapsed

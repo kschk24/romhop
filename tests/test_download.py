@@ -161,15 +161,16 @@ def test_rate_limiter_sleeps_when_ahead_of_cap():
     from romhop.download import RateLimiter
     t = [0.0]
     slept = []
-    rl = RateLimiter(100, now=lambda: t[0], sleep=slept.append)
-    rl.tick(200 * 1024)  # 200 KiB at 100 KiB/s should take ~2s
+    rl = RateLimiter(100, now=lambda: t[0], sleep=slept.append)  # start anchored at 0
+    rl.tick(200 * 1024)  # 200 KiB at 100 KiB/s with ~0 elapsed => sleep ~2s
     assert slept and abs(sum(slept) - 2.0) < 0.05
 
 
 def test_rate_limiter_no_sleep_when_under_cap():
     from romhop.download import RateLimiter
-    t = [10.0]  # 10s elapsed
+    t = [0.0]
     slept = []
-    rl = RateLimiter(100, now=lambda: t[0], sleep=slept.append)
-    rl.tick(100 * 1024)  # 100 KiB in 10s = 10 KiB/s, under 100 => no sleep
+    rl = RateLimiter(100, now=lambda: t[0], sleep=slept.append)  # start anchored at 0
+    t[0] = 10.0          # 10s elapse before the chunk lands
+    rl.tick(100 * 1024)  # 100 KiB after 10s = 10 KiB/s, under 100 => no sleep
     assert slept == []
