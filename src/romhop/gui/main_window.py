@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QProgressBar,
     QPushButton,
     QStackedWidget,
@@ -21,7 +22,8 @@ from romhop.gui import theme
 from romhop.gui.filter_bar import FilterBar
 from romhop.gui.library_view import LibraryView, platforms_from_roms
 from romhop.gui.settings_view import SettingsView
-from romhop.gui.workers import DownloadWorker, SyncWorker
+from romhop.gui.scan_result_dialog import ScanResultDialog
+from romhop.gui.workers import CallableWorker, DownloadWorker, SyncWorker
 from romhop.local_index import downloaded_rom_ids
 from romhop.platform_names import display_name
 
@@ -71,7 +73,7 @@ class MainWindow(QWidget):
     _sync_status_changed = Signal(str)
 
     def __init__(self, settings: Settings, parent=None, *,
-                 rom_provider=None, download_action=None,
+                 rom_provider=None, download_action=None, scan_action=None,
                  sync_watch_fn=None, persist_settings=None, cover_provider=None,
                  platform_label=None, platform_names=None):
         super().__init__(parent)
@@ -82,7 +84,9 @@ class MainWindow(QWidget):
         self._sync_watch_fn = sync_watch_fn
         self._platform_names = platform_names
         self._persist_settings = persist_settings or config.save_settings
+        self._scan_action = scan_action
         self._download_worker = None
+        self._scan_worker = None
         self._sync_worker = None
         self._progress_name = ""
         self._progress_pos = ""
@@ -113,6 +117,7 @@ class MainWindow(QWidget):
         self.settings_view = SettingsView(settings)
         self.settings_view.saved.connect(self._on_settings_saved)
         self.settings_view.cancelled.connect(self.show_library)
+        self.settings_view.scan_requested.connect(self.run_scan)
         self.stack = QStackedWidget()
         self.stack.addWidget(self.library)      # index 0
         self.stack.addWidget(self.settings_view)  # index 1
@@ -291,6 +296,31 @@ class MainWindow(QWidget):
         ids = downloaded_rom_ids(roms, self._settings.roms_root,
                                  self._settings.platform_overrides)
         self.library.set_downloaded(ids)
+
+    def run_scan(self) -> None:
+        # One scan at a time; ignore re-clicks while a worker is live.
+        if self._scan_action is None or self._scan_worker is not None:
+            return
+        self.settings_view.set_scanning(True)
+        worker = CallableWorker(self._scan_action)
+        worker.done.connect(self._on_scan_done)
+        worker.error.connect(self._on_scan_error)
+        worker.finished.connect(self._on_scan_finished)
+        self._scan_worker = worker
+        worker.start()
+
+    def _on_scan_done(self, result) -> None:
+        self.settings_view.set_scanning(False)
+        ScanResultDialog(result, self).exec()
+
+    def _on_scan_error(self, message: str) -> None:
+        self.settings_view.set_scanning(False)
+        QMessageBox.critical(self, "Scan failed", message)
+
+    def _on_scan_finished(self) -> None:
+        if self._scan_worker is not None:
+            self._scan_worker.deleteLater()
+            self._scan_worker = None
 
     def download_selected(self) -> None:
         if self._download_action is None:

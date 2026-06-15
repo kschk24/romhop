@@ -382,6 +382,69 @@ def test_byte_indicator_shows_downloaded_over_total(qtbot):
     assert "MB/s" in txt
 
 
+def test_run_scan_invokes_action_and_shows_dialog(qtbot, monkeypatch):
+    from romhop.gui.main_window import MainWindow
+    from romhop.gui import main_window as mw
+    from romhop.local_index import LocalGame, MatchResult
+    from romhop import config
+    from pathlib import Path
+
+    result = MatchResult(
+        matched=[], unmatched=[LocalGame("nes", "X.nes", ["X.nes"], "x")],
+        collisions=[])
+    called = {}
+
+    def fake_scan():
+        called["ran"] = True
+        return result
+
+    shown = {}
+
+    class FakeDialog:
+        def __init__(self, res, parent=None):
+            shown["result"] = res
+        def exec(self):
+            shown["execed"] = True
+
+    monkeypatch.setattr(mw, "ScanResultDialog", FakeDialog)
+
+    s = config.default_settings()
+    s.roms_root = Path("/games")
+    win = MainWindow(settings=s, scan_action=fake_scan)
+    qtbot.addWidget(win)
+
+    win.run_scan()
+    qtbot.waitUntil(lambda: win._scan_worker is None, timeout=2000)
+
+    assert called.get("ran") is True
+    assert shown.get("result") is result
+    assert shown.get("execed") is True
+
+
+def test_run_scan_error_shows_message_box(qtbot, monkeypatch):
+    from romhop.gui.main_window import MainWindow
+    from romhop.gui import main_window as mw
+    from romhop import config
+    from pathlib import Path
+
+    def boom():
+        raise RuntimeError("no server")
+
+    seen = {}
+    monkeypatch.setattr(mw.QMessageBox, "critical",
+                        lambda *a, **k: seen.setdefault("msg", a[-1]))
+
+    s = config.default_settings()
+    s.roms_root = Path("/games")
+    win = MainWindow(settings=s, scan_action=boom)
+    qtbot.addWidget(win)
+
+    win.run_scan()
+    qtbot.waitUntil(lambda: win._scan_worker is None, timeout=2000)
+
+    assert "no server" in seen.get("msg", "")
+
+
 def test_cancel_button_hidden_until_download_then_cancels(qtbot):
     from romhop.gui.main_window import MainWindow
     from romhop.romm_client import Rom
