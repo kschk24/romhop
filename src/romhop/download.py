@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import time
 import zipfile
 from pathlib import Path
 
@@ -16,6 +17,32 @@ from romhop.romm_client import Rom
 
 # Rom files that are themselves archives — a zip payload IS the rom, not a server bundle.
 ARCHIVE_EXTS = {".zip", ".7z"}
+
+
+class RateLimiter:
+    """Paces a download to a max rate. ``kbps`` is KiB/s; 0 means unlimited.
+
+    Call ``tick(downloaded_total)`` after each chunk with the cumulative byte
+    count. If the transfer is ahead of the allowed schedule it sleeps the
+    difference. ``now``/``sleep`` are injectable for tests.
+    """
+
+    def __init__(self, kbps: int, *, now=time.monotonic, sleep=time.sleep):
+        self._limit = kbps * 1024  # bytes/sec
+        self._now = now
+        self._sleep = sleep
+        self._start = None
+
+    def tick(self, downloaded_total: int) -> None:
+        if self._limit <= 0:
+            return
+        if self._start is None:
+            self._start = self._now()
+        target = downloaded_total / self._limit          # ideal elapsed seconds
+        elapsed = self._now() - self._start
+        behind = target - elapsed
+        if behind > 0:
+            self._sleep(behind)
 
 
 def friendly_download_error(rom_name: str, rom_id: int, exc: Exception) -> str:

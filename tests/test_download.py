@@ -147,3 +147,29 @@ def test_friendly_download_error_falls_back_to_str_for_unknown():
     from romhop.download import friendly_download_error
 
     assert friendly_download_error("X", 1, ValueError("boom")) == "boom"
+
+
+def test_rate_limiter_unlimited_never_sleeps():
+    from romhop.download import RateLimiter
+    slept = []
+    rl = RateLimiter(0, now=lambda: 0.0, sleep=slept.append)
+    rl.tick(10_000_000)
+    assert slept == []
+
+
+def test_rate_limiter_sleeps_when_ahead_of_cap():
+    from romhop.download import RateLimiter
+    t = [0.0]
+    slept = []
+    rl = RateLimiter(100, now=lambda: t[0], sleep=slept.append)
+    rl.tick(200 * 1024)  # 200 KiB at 100 KiB/s should take ~2s
+    assert slept and abs(sum(slept) - 2.0) < 0.05
+
+
+def test_rate_limiter_no_sleep_when_under_cap():
+    from romhop.download import RateLimiter
+    t = [10.0]  # 10s elapsed
+    slept = []
+    rl = RateLimiter(100, now=lambda: t[0], sleep=slept.append)
+    rl.tick(100 * 1024)  # 100 KiB in 10s = 10 KiB/s, under 100 => no sleep
+    assert slept == []
