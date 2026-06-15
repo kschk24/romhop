@@ -25,6 +25,7 @@ class Settings:
     sync_delay_seconds: float = 8.0
     sync_enabled: bool = False
     theme: str = "default"
+    download_rate_limit_kbps: int = 0  # 0 = unlimited
 
 
 def settings_path() -> Path:
@@ -93,6 +94,7 @@ def load_settings(path: Path | None = None) -> Settings:
         sync_delay_seconds=data.get("sync_delay_seconds", 8.0),
         sync_enabled=data.get("sync_enabled", False),
         theme=data.get("theme", "default"),
+        download_rate_limit_kbps=data.get("download_rate_limit_kbps", 0),
     )
 
 

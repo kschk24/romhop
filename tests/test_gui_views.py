@@ -319,3 +319,14 @@ def test_cover_pixmap_cache_reused_across_platform_switch(qtbot, tmp_path):
 
     # Provider must NOT have been called again for rom_a.
     assert call_counts.get(rom_a.id, 0) == count_a_after_first
+
+
+def test_settings_form_has_download_rate_limit_field(qtbot):
+    from romhop.gui.settings_view import SettingsView, DOWNLOAD_LIMIT_LABEL
+    from romhop import config
+    view = SettingsView(config.default_settings())
+    qtbot.addWidget(view)
+    assert DOWNLOAD_LIMIT_LABEL in view._edits
+    view._edits[DOWNLOAD_LIMIT_LABEL].setText("256")
+    view._on_save()
+    assert view.current_settings().download_rate_limit_kbps == 256

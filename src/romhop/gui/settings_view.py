@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
 from romhop import config
 from romhop.config import Settings
 
+DOWNLOAD_LIMIT_LABEL = "Download limit (KB/s, 0 = unlimited):"
+
 # Order matters: this is the on-screen field order.
 EDITABLE_FIELDS = [
     "RomM URL:",
@@ -25,6 +27,7 @@ EDITABLE_FIELDS = [
     "Saves directory:",
     "States directory:",
     "Sync delay:",
+    DOWNLOAD_LIMIT_LABEL,
 ]
 
 
@@ -35,6 +38,7 @@ def settings_to_rows(s: Settings) -> dict[str, str]:
         "Saves directory:": str(s.saves_dir),
         "States directory:": str(s.states_dir),
         "Sync delay:": str(s.sync_delay_seconds),
+        DOWNLOAD_LIMIT_LABEL: str(s.download_rate_limit_kbps),
     }
 
 
@@ -46,6 +50,7 @@ def apply_rows(s: Settings, rows: dict[str, str]) -> Settings:
         saves_dir=Path(rows["Saves directory:"]),
         states_dir=Path(rows["States directory:"]),
         sync_delay_seconds=float(rows["Sync delay:"]),
+        download_rate_limit_kbps=int(rows[DOWNLOAD_LIMIT_LABEL]),
     )
 
 

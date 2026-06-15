@@ -102,3 +102,14 @@ def test_sort_flags_default_false(tmp_path):
     s = config.default_settings()
     assert s.sort_saves_by_core is False
     assert s.sort_states_by_core is False
+
+
+def test_download_rate_limit_roundtrips_and_defaults_zero(tmp_path):
+    from romhop import config
+    s = config.default_settings()
+    assert s.download_rate_limit_kbps == 0  # unlimited by default
+    s.download_rate_limit_kbps = 512
+    p = tmp_path / "settings.json"
+    config.save_settings(s, p)
+    loaded = config.load_settings(p)
+    assert loaded.download_rate_limit_kbps == 512
