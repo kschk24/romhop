@@ -59,6 +59,7 @@ class SettingsView(QWidget):
 
     saved = Signal()
     cancelled = Signal()
+    scan_requested = Signal()
 
     def __init__(self, settings: Settings, parent=None):
         super().__init__(parent)
@@ -92,10 +93,20 @@ class SettingsView(QWidget):
         buttons.addWidget(cancel_btn)
         buttons.addWidget(save_btn)
 
+        # Standalone maintenance action, separate from the form's Save/Cancel.
+        self.scan_btn = QPushButton("Scan local library")
+        self.scan_btn.setObjectName("ScanButton")
+        self.scan_btn.clicked.connect(lambda: self.scan_requested.emit())
+        scan_row = QHBoxLayout()
+        scan_row.addWidget(self.scan_btn)
+        scan_row.addStretch(1)
+
         layout = QVBoxLayout(self)
         layout.addLayout(form)
         layout.addWidget(self.sync_section)
         layout.addLayout(buttons)
+        layout.addLayout(scan_row)
+        self._refresh_scan_enabled()
 
     def sync_enabled(self) -> bool:
         return self._settings.sync_enabled
@@ -106,10 +117,24 @@ class SettingsView(QWidget):
         with the rest of the UI."""
         self._settings = replace(self._settings, sync_enabled=enabled)
         self.sync_check.setChecked(enabled)
+        self._refresh_scan_enabled()
 
     def current_settings(self) -> Settings:
         """The last-saved Settings (drives the host's in-memory copy)."""
         return self._settings
+
+    def _refresh_scan_enabled(self) -> None:
+        """Scan needs a configured ROMs folder; grey out the button otherwise."""
+        self.scan_btn.setEnabled(config.roms_root_configured(self._settings))
+
+    def set_scanning(self, scanning: bool) -> None:
+        """Busy state while a scan runs off the UI thread."""
+        if scanning:
+            self.scan_btn.setEnabled(False)
+            self.scan_btn.setText("Scanning…")
+        else:
+            self.scan_btn.setText("Scan local library")
+            self._refresh_scan_enabled()
 
     def focus_sync(self) -> None:
         """Surface the sync section (the clickable bottom-bar indicator lands
@@ -153,5 +178,6 @@ class SettingsView(QWidget):
             apply_rows(self._settings, rows),
             sync_enabled=self.sync_check.isChecked(),
         )
+        self._refresh_scan_enabled()
         config.save_settings(self._settings)
         self.saved.emit()

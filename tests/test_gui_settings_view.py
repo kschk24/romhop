@@ -150,3 +150,44 @@ def test_settings_view_focus_sync_is_callable(qtbot):
     view = SettingsView(config.default_settings())
     qtbot.addWidget(view)
     view.focus_sync()  # must not raise; points the user at the sync section
+
+
+def test_scan_button_emits_scan_requested(qtbot):
+    from romhop.gui.settings_view import SettingsView
+    from pathlib import Path
+
+    s = config.default_settings()
+    s.roms_root = Path("/games")  # configured
+    view = SettingsView(s)
+    qtbot.addWidget(view)
+
+    with qtbot.waitSignal(view.scan_requested, timeout=500):
+        view.scan_btn.click()
+
+
+def test_scan_button_disabled_when_roms_root_unconfigured(qtbot):
+    from romhop.gui.settings_view import SettingsView
+
+    s = config.default_settings()  # default roms_root is not configured
+    assert not config.roms_root_configured(s)
+    view = SettingsView(s)
+    qtbot.addWidget(view)
+    assert not view.scan_btn.isEnabled()
+
+
+def test_set_scanning_toggles_busy_state(qtbot):
+    from romhop.gui.settings_view import SettingsView
+    from pathlib import Path
+
+    s = config.default_settings()
+    s.roms_root = Path("/games")
+    view = SettingsView(s)
+    qtbot.addWidget(view)
+
+    view.set_scanning(True)
+    assert not view.scan_btn.isEnabled()
+    assert view.scan_btn.text() == "Scanning…"
+
+    view.set_scanning(False)
+    assert view.scan_btn.isEnabled()       # re-enabled (roms_root configured)
+    assert view.scan_btn.text() == "Scan local library"
