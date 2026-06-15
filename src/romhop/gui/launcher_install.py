@@ -25,15 +25,24 @@ LAUNCHER_STEM = "romhop-gui"
 
 
 def launcher_path() -> Path:
-    """Absolute path to the pip-generated ``romhop-gui`` launcher.
-
-    Written verbatim into the .desktop/.lnk so the shortcut never depends on
-    the desktop session having ~/.local/bin (Linux) or Scripts (Windows) on
-    PATH.
-    """
-    bindir = Path(sysconfig.get_path("scripts"))
+    """Absolute path to the pip-generated ``romhop-gui`` launcher."""
     exe = f"{LAUNCHER_STEM}.exe" if os.name == "nt" else LAUNCHER_STEM
-    return bindir / exe
+    
+    #Primary: sysconfig scripts dir (same env that installed romhop)
+    candidate = Path(sysconfig.get_path("scripts")) / exe
+    if candidate.exists():
+        return candidate
+    
+    #Fallback: search PATH (covers editable installs, pyenv shims, etc.)
+    found = shutil.which(exe)
+    if found:
+        return Path(found)
+    
+    raise FileNotFoundError(
+        f"Could not find '{exe}'."
+        f"Make sure romhop is installed with the GUI extra: "
+        f"pip install -e '.[gui]'"
+    )
 
 
 def asset(name: str) -> Path:
@@ -90,7 +99,11 @@ def _linux_paths(home: Path) -> dict[str, Path]:
 
 def install_linux(home: Path | None = None, exec_path: str | None = None) -> list[Path]:
     home = home or Path.home()
-    exec_path = exec_path or str(launcher_path())
+    try:
+        exec_path = exec_path or str(launcher_path())
+    except FileNotFoundError as exc:
+        raise SystemExit(f"Cannot install desktop launches: {exc}") from exc
+    
     paths = _linux_paths(home)
     written: list[Path] = []
 
