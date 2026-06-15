@@ -18,6 +18,7 @@ def run() -> None:
     from romhop.gui.main_window import MainWindow
     from romhop.mapping_cache import MappingCache
     from romhop.romm_client import RommClient
+    from romhop.scan import run_scan
     from romhop.sync import watch_and_push
 
     settings = load_settings()
@@ -64,6 +65,9 @@ def run() -> None:
             stop_event=stop_event,
         )
 
+    def scan_action():
+        return run_scan(client, cache, names, settings)
+
     app = QApplication(_sys.argv)
     window = MainWindow(
         settings=settings,
@@ -73,6 +77,7 @@ def run() -> None:
         cover_provider=cover_provider,
         platform_label=platform_label,
         platform_names=names,
+        scan_action=scan_action,
     )
     window.resize(900, 600)
     # An unconfigured or unreachable RomM must not crash startup: open the
