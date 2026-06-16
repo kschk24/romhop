@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -85,6 +86,64 @@ class ConnectionPage(QWizardPage):
             self._worker = None
 
 
+class PathsPage(QWizardPage):
+    """ROMs root + RetroArch saves/states, with auto-detect. Only the ROMs root
+    is required (saves/states fall back to defaults, matching the CLI)."""
+
+    def __init__(self, detect_retroarch_fn, parent=None):
+        super().__init__(parent)
+        self.setTitle("Local folders")
+        self._detect_retroarch_fn = detect_retroarch_fn
+        self.sort_saves = False
+        self.sort_states = False
+
+        self.roms_edit = QLineEdit()
+        self.saves_edit = QLineEdit()
+        self.states_edit = QLineEdit()
+        self.roms_edit.textChanged.connect(lambda *_: self.completeChanged.emit())
+
+        form = QFormLayout()
+        form.addRow("ROMs folder", self._with_browse(self.roms_edit))
+        form.addRow("RetroArch saves", self._with_browse(self.saves_edit))
+        form.addRow("RetroArch states", self._with_browse(self.states_edit))
+
+        self.detect_btn = QPushButton("Detect from RetroArch")
+        self.detect_btn.clicked.connect(self.detect_retroarch)
+
+        layout = QVBoxLayout(self)
+        layout.addLayout(form)
+        layout.addWidget(self.detect_btn)
+
+    def _with_browse(self, edit: QLineEdit):
+        wrap = QHBoxLayout()
+        wrap.setContentsMargins(0, 0, 0, 0)
+        wrap.addWidget(edit, 1)
+        btn = QPushButton("Browse…")
+        btn.clicked.connect(lambda: self._browse_into(edit))
+        wrap.addWidget(btn)
+        from PySide6.QtWidgets import QWidget
+        holder = QWidget()
+        holder.setLayout(wrap)
+        return holder
+
+    def _browse_into(self, edit: QLineEdit) -> None:
+        picked = QFileDialog.getExistingDirectory(self, "Choose folder", edit.text())
+        if picked:
+            edit.setText(picked)
+
+    def detect_retroarch(self) -> None:
+        saves, states, sort_saves, sort_states = self._detect_retroarch_fn()
+        if saves is not None:
+            self.saves_edit.setText(str(saves))
+        if states is not None:
+            self.states_edit.setText(str(states))
+        self.sort_saves = sort_saves
+        self.sort_states = sort_states
+
+    def isComplete(self) -> bool:  # noqa: N802 (Qt override)
+        return bool(self.roms_edit.text().strip())
+
+
 class SetupWizard(QWizard):
     """First-run wizard: Connection -> Paths -> Scan. Emits completed(settings,
     do_scan) on Finish. Backend access is injected (validate_fn,
@@ -101,3 +160,6 @@ class SetupWizard(QWizard):
 
         self.connection_page = ConnectionPage(validate_fn)
         self.addPage(self.connection_page)
+
+        self.paths_page = PathsPage(detect_retroarch_fn)
+        self.addPage(self.paths_page)

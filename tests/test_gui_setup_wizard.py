@@ -53,3 +53,31 @@ def test_connection_page_validation_failure_keeps_locked(qtbot):
     qtbot.wait(50)
     assert page.isComplete() is False
     assert "401" in page.status_label.text()
+
+
+def test_paths_page_detect_fills_fields(qtbot, tmp_path):
+    saves = tmp_path / "saves"
+    states = tmp_path / "states"
+
+    def detect():
+        return (saves, states, True, False)
+
+    wiz = SetupWizard(validate_fn=lambda u, t: None, detect_retroarch_fn=detect,
+                      persist=lambda s: None)
+    qtbot.addWidget(wiz)
+    page = wiz.paths_page
+    page.detect_retroarch()
+    assert page.saves_edit.text() == str(saves)
+    assert page.states_edit.text() == str(states)
+    assert page.sort_saves is True
+    assert page.sort_states is False
+
+
+def test_paths_page_complete_requires_roms(qtbot):
+    wiz = SetupWizard(validate_fn=lambda u, t: None,
+                      detect_retroarch_fn=_noop_detect, persist=lambda s: None)
+    qtbot.addWidget(wiz)
+    page = wiz.paths_page
+    assert page.isComplete() is False
+    page.roms_edit.setText("/games/roms")
+    assert page.isComplete() is True
