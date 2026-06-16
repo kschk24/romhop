@@ -2,6 +2,7 @@ name: package
 on:
   push:
     tags: ['v*']   # release only on version tags (e.g. v0.2.0), never on every push
+    branches: ['packaging-freeze-installers']   # TEMP: test build on this branch; remove before merge
   workflow_dispatch: {}   # manual run: builds + uploads artifacts, publishes nothing
 
 permissions:
