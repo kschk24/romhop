@@ -1,4 +1,3 @@
-# src/romhop/install_bootstrap.py
 from __future__ import annotations
 
 """Qt-free bootstrap for the frozen Linux AppImage installer.
@@ -54,7 +53,7 @@ def extract_and_install(src_onedir: Path, home: Path | None = None) -> Path:
     tmp = dest.parent / (dest.name + ".tmp")
     if tmp.exists():
         shutil.rmtree(tmp)
-    shutil.copytree(src_onedir, tmp)
+    shutil.copytree(src_onedir, tmp, symlinks=True)
     if dest.exists():
         shutil.rmtree(dest)
     os.replace(tmp, dest)  # atomic on the same filesystem

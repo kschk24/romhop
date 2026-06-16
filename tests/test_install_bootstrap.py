@@ -4,8 +4,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import pytest
-
 from romhop import install_bootstrap as ib
 
 
@@ -55,6 +53,16 @@ def test_extract_and_install_replaces_existing(tmp_path, monkeypatch):
     stale.write_text("old")
     ib.extract_and_install(src, home=tmp_path)
     assert not stale.exists()
+
+
+def test_extract_and_install_cleans_stale_tmp(tmp_path, monkeypatch):
+    monkeypatch.setattr(os, "name", "posix")
+    src = _fake_onedir(tmp_path)
+    stale_tmp = ib.install_dir(home=tmp_path).parent / "romhop.tmp"
+    stale_tmp.mkdir(parents=True)
+    (stale_tmp / "leftover.bin").write_text("x")
+    launcher = ib.extract_and_install(src, home=tmp_path)  # must not raise
+    assert launcher.exists()
 
 
 def test_launch_installed_execs_launcher(tmp_path, monkeypatch):
