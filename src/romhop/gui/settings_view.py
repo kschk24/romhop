@@ -29,6 +29,7 @@ class SettingsView(QWidget):
     saved = Signal()
     cancelled = Signal()
     scan_requested = Signal()
+    setup_requested = Signal()
     token_changed = Signal(str)  # emitted with the new token on a non-blank save
 
     def __init__(self, settings: Settings, parent=None):
@@ -77,8 +78,12 @@ class SettingsView(QWidget):
         self.scan_btn = QPushButton("Scan local library")
         self.scan_btn.setObjectName("ScanButton")
         self.scan_btn.clicked.connect(lambda: self.scan_requested.emit())
+        self.setup_btn = QPushButton("Run setup wizard")
+        self.setup_btn.setObjectName("SetupButton")
+        self.setup_btn.clicked.connect(lambda: self.setup_requested.emit())
         scan_row = QHBoxLayout()
         scan_row.addWidget(self.scan_btn)
+        scan_row.addWidget(self.setup_btn)
         scan_row.addStretch(1)
         layout.addLayout(scan_row)
 
@@ -183,6 +188,12 @@ class SettingsView(QWidget):
     def reset(self) -> None:
         self._populate()
         self._refresh_scan_enabled()
+
+    def load(self, settings: Settings) -> None:
+        """Replace the backing settings and refresh every widget. Used after the
+        setup wizard writes new values so the form reflects them."""
+        self._settings = settings
+        self.reset()
 
     def keyPressEvent(self, event) -> None:
         if event.key() == Qt.Key.Key_Escape:

@@ -236,3 +236,23 @@ def test_set_scanning_toggles_busy_state(qtbot):
     view.set_scanning(False)
     assert view.scan_btn.isEnabled()
     assert view.scan_btn.text() == "Scan local library"
+
+
+def test_setup_button_emits_setup_requested(qtbot):
+    from romhop.config import default_settings
+    from romhop.gui.settings_view import SettingsView
+    view = SettingsView(default_settings())
+    qtbot.addWidget(view)
+    with qtbot.waitSignal(view.setup_requested, timeout=1000):
+        view.setup_btn.click()
+
+
+def test_load_repopulates_from_new_settings(qtbot):
+    from romhop.config import default_settings
+    from romhop.gui.settings_view import SettingsView
+    view = SettingsView(default_settings())
+    qtbot.addWidget(view)
+    s = default_settings()
+    s.romm_url = "http://new.test"
+    view.load(s)
+    assert view._edits["RomM URL"].text() == "http://new.test"
