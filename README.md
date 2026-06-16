@@ -52,7 +52,7 @@ romhop setup
 ```
 
 The token is stored in the OS keyring, never in a config file. Everything else
-is written to `settings.json` (run `romhop config path` to see where).
+is written to `settings.ini` (run `romhop config path` to see where).
 
 Non-interactive equivalent:
 
@@ -111,11 +111,14 @@ romhop gui
 ```
 
 It browses your RomM library, downloads games (single or multi-select), edits
-settings, and shows sync status — all in one window. The look is themeable: drop
-a `.romhop-theme` package (a zip of `manifest.json` + `tokens.json`, with
-optional `assets/` and `theme.qss`) into the romhop config dir under `themes/`,
-then set `theme` in your settings. A broken or partial theme falls back to the
-default, so it can never brick the UI.
+settings, and shows sync status — all in one window. Closing the window minimizes
+to a system-tray icon and keeps save sync running in the background; relaunching
+raises the existing window instead of starting a second copy. Quit from the tray
+menu to stop sync and exit. The look is themeable: drop a `.romhop-theme` package
+(a zip of `manifest.json` + `tokens.json`, with optional `assets/` and
+`theme.qss`) into the romhop config dir under `themes/`, then set `theme` in your
+settings. A broken or partial theme falls back to the default, so it can never
+brick the UI.
 
 ## Scan existing games
 
@@ -140,8 +143,11 @@ Scanning needs no extra token scope (`roms.read`, which you already have).
 ## Configuration
 
 ```
-romhop config show                  # print current settings as JSON
-romhop config set <key> <value>     # roms_root, saves_dir, states_dir, romm_url, sync_delay_seconds
+romhop config show                  # print current settings (ini)
+romhop config set <key> <value>     # romm_url, roms_root, saves_dir, states_dir,
+                                    # sort_saves_by_core, sort_states_by_core,
+                                    # sync_enabled, sync_delay_seconds,
+                                    # download_rate_limit_kbps, theme
 romhop config set-platform <slug> <es-de-dir>   # override platform -> ES-DE system dir mapping
 romhop config set-core <core-folder> <es-de-dir> # map a RetroArch core folder -> ES-DE system dir
 ```
