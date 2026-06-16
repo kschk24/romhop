@@ -5,13 +5,13 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-06-16 15:03'
-updated_date: '2026-06-16 16:57'
+updated_date: '2026-06-16 17:04'
 labels:
   - bug
   - packaging
 dependencies: []
 priority: medium
-ordinal: 2000
+ordinal: 1000
 ---
 
 ## Description
@@ -57,3 +57,13 @@ AC#1 VERIFIED on real local AppImage build (2026-06-16):
 - --uninstall removes the symlink AND install dir ('romhop uninstalled', exit 0).
 AC#2 (Windows Inno PATH) still needs Windows smoke.
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: Kilian
+created: 2026-06-16 17:04
+---
+Windows smoke still outstanding, can be moved into done when verified
+---
+<!-- COMMENTS:END -->

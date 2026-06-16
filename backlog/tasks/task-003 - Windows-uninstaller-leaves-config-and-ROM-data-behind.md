@@ -1,11 +1,11 @@
 ---
 id: TASK-003
 title: Windows uninstaller leaves config and ROM data behind
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-06-16 15:03'
-updated_date: '2026-06-16 17:13'
+updated_date: '2026-06-16 17:32'
 labels:
   - bug
   - packaging
