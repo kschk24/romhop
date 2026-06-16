@@ -1,10 +1,41 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from romhop.gui.setup_wizard import SetupWizard
 
 
 def _noop_detect():
     return (None, None, False, False)
+
+
+def test_wizard_prefills_from_initial_settings(qtbot):
+    from romhop import config
+
+    settings = config.default_settings()
+    settings.romm_url = "http://romm.saved"
+    settings.roms_root = Path("/games/roms")
+    settings.saves_dir = Path("/games/saves")
+    settings.states_dir = Path("/games/states")
+
+    wiz = SetupWizard(validate_fn=lambda u, t: None, detect_retroarch_fn=_noop_detect,
+                      persist=lambda s: None, initial_settings=settings)
+    qtbot.addWidget(wiz)
+    assert wiz.connection_page.url_edit.text() == "http://romm.saved"
+    assert wiz.paths_page.roms_edit.text() == "/games/roms"
+    assert wiz.paths_page.saves_edit.text() == "/games/saves"
+    assert wiz.paths_page.states_edit.text() == "/games/states"
+
+
+def test_wizard_skips_cwd_placeholder_roms_root(qtbot):
+    from romhop import config
+
+    settings = config.default_settings()  # roms_root defaults to "."
+    wiz = SetupWizard(validate_fn=lambda u, t: None, detect_retroarch_fn=_noop_detect,
+                      persist=lambda s: None, initial_settings=settings)
+    qtbot.addWidget(wiz)
+    assert wiz.paths_page.roms_edit.text() == ""
+    assert wiz.paths_page.isComplete() is False
 
 
 def test_connection_page_next_locked_until_validated(qtbot):
@@ -137,6 +168,7 @@ def test_main_window_run_setup_wizard_refreshes(qtbot, monkeypatch, tmp_path):
     monkeypatch.setattr(config, "set_token", lambda t: None)
     monkeypatch.setattr(config, "get_token", lambda: "rmm_x")
     monkeypatch.setattr(config, "load_settings", default_settings)
+    monkeypatch.setattr(config, "save_settings", lambda s: None)  # never touch real config
 
     recreated = {}
     scans = []

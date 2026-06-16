@@ -23,7 +23,7 @@ class ConnectionPage(QWizardPage):
     """RomM URL + token, with a Test-connection gate. Next stays disabled until
     a test passes; editing either field re-locks it."""
 
-    def __init__(self, validate_fn, parent=None):
+    def __init__(self, validate_fn, parent=None, *, initial_settings=None):
         super().__init__(parent)
         self.setTitle("Connect to RomM")
         self._validate_fn = validate_fn
@@ -32,6 +32,8 @@ class ConnectionPage(QWizardPage):
 
         self.url_edit = QLineEdit()
         self.url_edit.setPlaceholderText("http://romm.local")
+        if initial_settings is not None and initial_settings.romm_url:
+            self.url_edit.setText(initial_settings.romm_url)
         self.token_edit = QLineEdit()
         self.token_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.token_edit.setPlaceholderText("rmm_...")
@@ -98,7 +100,7 @@ class PathsPage(QWizardPage):
     """ROMs root + RetroArch saves/states, with auto-detect. Only the ROMs root
     is required (saves/states fall back to defaults, matching the CLI)."""
 
-    def __init__(self, detect_retroarch_fn, parent=None):
+    def __init__(self, detect_retroarch_fn, parent=None, *, initial_settings=None):
         super().__init__(parent)
         self.setTitle("Local folders")
         self._detect_retroarch_fn = detect_retroarch_fn
@@ -108,6 +110,16 @@ class PathsPage(QWizardPage):
         self.roms_edit = QLineEdit()
         self.saves_edit = QLineEdit()
         self.states_edit = QLineEdit()
+        if initial_settings is not None:
+            roms_root = str(initial_settings.roms_root)
+            if roms_root not in ("", "."):  # skip the cwd placeholder default
+                self.roms_edit.setText(roms_root)
+            if initial_settings.saves_dir:
+                self.saves_edit.setText(str(initial_settings.saves_dir))
+            if initial_settings.states_dir:
+                self.states_edit.setText(str(initial_settings.states_dir))
+            self.sort_saves = initial_settings.sort_saves_by_core
+            self.sort_states = initial_settings.sort_states_by_core
         self.roms_edit.textChanged.connect(lambda *_: self.completeChanged.emit())
 
         form = QFormLayout()
@@ -181,17 +193,20 @@ class SetupWizard(QWizard):
 
     completed = Signal(object, bool)
 
-    def __init__(self, *, validate_fn, detect_retroarch_fn, persist=None, parent=None):
+    def __init__(self, *, validate_fn, detect_retroarch_fn, persist=None,
+                 initial_settings=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("romhop setup")
         self._detect_retroarch_fn = detect_retroarch_fn
         import romhop.config as config
         self._persist = persist or config.save_settings
 
-        self.connection_page = ConnectionPage(validate_fn)
+        self.connection_page = ConnectionPage(
+            validate_fn, initial_settings=initial_settings)
         self.addPage(self.connection_page)
 
-        self.paths_page = PathsPage(detect_retroarch_fn)
+        self.paths_page = PathsPage(
+            detect_retroarch_fn, initial_settings=initial_settings)
         self.addPage(self.paths_page)
 
         self.scan_page = ScanPage(self.paths_page)

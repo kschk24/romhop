@@ -415,6 +415,7 @@ class MainWindow(QWidget):
         wiz = SetupWizard(
             validate_fn=self._validate_fn,
             detect_retroarch_fn=self._detect_retroarch_fn,
+            initial_settings=self._settings,
             parent=self,
         )
         wiz.completed.connect(self._on_setup_complete)
