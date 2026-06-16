@@ -23,6 +23,22 @@ def test_set_token_swaps_authorization_header():
     assert seen == ["Bearer rmm_test", "Bearer rmm_new"]
 
 
+def test_empty_token_drops_authorization_header():
+    # `Bearer ` (trailing space) is an illegal header value: h11 rejects it
+    # before the request leaves, surfacing as "Illegal header value b'Bearer '".
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers.get("Authorization"))
+        return httpx.Response(200, json=[])
+
+    client = _client(handler)
+    client.set_token("")
+    assert "Authorization" not in client._http.headers
+    client.list_roms()  # must not raise LocalProtocolError
+    assert seen == [None]
+
+
 def test_list_roms_parses_fields():
     def handler(request):
         assert request.headers["Authorization"] == "Bearer rmm_test"

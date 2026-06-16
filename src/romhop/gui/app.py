@@ -138,12 +138,15 @@ def run() -> None:
         window.show()
         window.run_setup_wizard()
     else:
-        # An unreachable RomM must not crash startup: open the window empty and
-        # surface the failure in the status bar instead.
+        # Configured by presence (URL + token), but presence != reachability: a
+        # bad/stale URL or revoked token passes is_configured yet fails here. Open
+        # the window, surface the failure, and guide the user back into the wizard
+        # so they can fix it instead of staring at an empty, silent library.
+        window.show()
         try:
             window.load_library()
         except Exception as exc:  # noqa: BLE001 - keep the window alive
             logger.warning("Could not load RomM library at startup: %s", exc)
             window.set_sync_status(f"library load failed: {exc}")
-        window.show()
+            window.run_setup_wizard()
     _sys.exit(app.exec())

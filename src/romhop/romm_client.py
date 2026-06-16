@@ -29,8 +29,13 @@ class RommClient:
 
     def set_token(self, token: str) -> None:
         """Swap the bearer token on the live client (e.g. after the GUI edits
-        the keyring), so the change takes effect without restarting."""
-        self._http.headers["Authorization"] = f"Bearer {token}"
+        the keyring), so the change takes effect without restarting. An empty
+        token drops the header entirely: ``Bearer `` (trailing space) is an
+        illegal header value that httpx/h11 reject before any request goes out."""
+        if token:
+            self._http.headers["Authorization"] = f"Bearer {token}"
+        else:
+            self._http.headers.pop("Authorization", None)
 
     def ping(self) -> None:
         """Cheap auth + URL check: fetch a single-item page and raise on any HTTP
