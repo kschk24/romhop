@@ -89,3 +89,41 @@ def test_remove_install(tmp_path, monkeypatch):
 def test_remove_install_noop_when_absent(tmp_path, monkeypatch):
     monkeypatch.setattr(os, "name", "posix")
     assert ib.remove_install(home=tmp_path) is False
+
+
+def test_cli_link_path_linux(tmp_path, monkeypatch):
+    monkeypatch.setattr(os, "name", "posix")
+    assert ib.cli_link_path(home=tmp_path) == tmp_path / ".local" / "bin" / "romhop"
+
+
+def test_link_cli_creates_symlink_to_installed_launcher(tmp_path, monkeypatch):
+    monkeypatch.setattr(os, "name", "posix")
+    src = _fake_onedir(tmp_path)
+    ib.extract_and_install(src, home=tmp_path)
+    link = ib.link_cli(home=tmp_path)
+    assert link == tmp_path / ".local" / "bin" / "romhop"
+    assert link.is_symlink()
+    assert link.resolve() == ib.installed_launcher(home=tmp_path).resolve()
+
+
+def test_link_cli_replaces_existing_link(tmp_path, monkeypatch):
+    monkeypatch.setattr(os, "name", "posix")
+    src = _fake_onedir(tmp_path)
+    ib.extract_and_install(src, home=tmp_path)
+    ib.link_cli(home=tmp_path)
+    ib.link_cli(home=tmp_path)  # idempotent, no error
+    assert ib.cli_link_path(home=tmp_path).is_symlink()
+
+
+def test_unlink_cli_removes_symlink(tmp_path, monkeypatch):
+    monkeypatch.setattr(os, "name", "posix")
+    src = _fake_onedir(tmp_path)
+    ib.extract_and_install(src, home=tmp_path)
+    ib.link_cli(home=tmp_path)
+    ib.unlink_cli(home=tmp_path)
+    assert not ib.cli_link_path(home=tmp_path).exists()
+
+
+def test_unlink_cli_noop_when_absent(tmp_path, monkeypatch):
+    monkeypatch.setattr(os, "name", "posix")
+    ib.unlink_cli(home=tmp_path)  # no error

@@ -4,12 +4,13 @@ title: Windows uninstaller leaves config and ROM data behind
 status: To Do
 assignee: []
 created_date: '2026-06-16 15:03'
+updated_date: '2026-06-16 16:54'
 labels:
   - bug
   - packaging
   - windows
 dependencies: []
-priority: medium
+priority: high
 ordinal: 3000
 ---
 

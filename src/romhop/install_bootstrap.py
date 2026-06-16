@@ -50,6 +50,38 @@ def is_installed(home: Path | None = None) -> bool:
     return installed_launcher(home).exists()
 
 
+def cli_link_path(home: Path | None = None) -> Path:
+    """POSIX path to the ``romhop`` symlink that exposes the CLI on PATH.
+
+    ``~/.local/bin`` is the XDG user-binary dir and conventionally on PATH, so a
+    symlink there makes the single frozen exe invocable as ``romhop`` from a
+    shell (bare -> GUI, args -> CLI; see :mod:`romhop.frozen_dispatch`).
+    """
+    home = home or Path.home()
+    return home / ".local" / "bin" / LAUNCHER_NAME
+
+
+def link_cli(home: Path | None = None) -> Path:
+    """Symlink ``~/.local/bin/romhop`` -> the installed launcher. Returns the link.
+
+    Idempotent: an existing link/file at the target is replaced. POSIX only
+    (Windows exposes the CLI on PATH via the Inno installer instead).
+    """
+    link = cli_link_path(home)
+    link.parent.mkdir(parents=True, exist_ok=True)
+    if link.is_symlink() or link.exists():
+        link.unlink()
+    link.symlink_to(installed_launcher(home))
+    return link
+
+
+def unlink_cli(home: Path | None = None) -> None:
+    """Remove the ``~/.local/bin/romhop`` symlink if present (no-op otherwise)."""
+    link = cli_link_path(home)
+    if link.is_symlink() or link.exists():
+        link.unlink()
+
+
 def extract_and_install(src_onedir: Path, home: Path | None = None) -> Path:
     """Copy the onedir bundle into the install dir, return the launcher path.
 

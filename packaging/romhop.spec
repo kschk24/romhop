@@ -1,5 +1,8 @@
 # packaging/romhop.spec  — build from repo root: pyinstaller packaging/romhop.spec
-# Produces dist/romhop/ (onedir). PySide6's bundled PyInstaller hook collects the
+# Produces dist/romhop/ (onedir). Single exe serves both frontends: bare launch
+# -> GUI, any args -> Typer CLI (see romhop.frozen_dispatch / entry.py). Built
+# console=False so double-click never flashes a terminal; CLI mode re-attaches
+# the parent console on Windows. PySide6's bundled PyInstaller hook collects the
 # Qt platform plugins (qxcb/qoffscreen/qwindows) automatically; the --smoke-exit
 # CI gate catches any that are missed.
 from PyInstaller.utils.hooks import collect_data_files
@@ -10,11 +13,11 @@ datas = collect_data_files(
 )
 
 a = Analysis(
-    ["entry_gui.py"],
+    ["entry.py"],
     pathex=["../src"],
     binaries=[],
     datas=datas,
-    hiddenimports=["romhop.gui.app"],
+    hiddenimports=["romhop.gui.app", "romhop.cli"],
     hookspath=[],
     runtime_hooks=[],
     excludes=["tkinter"],

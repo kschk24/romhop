@@ -4,10 +4,12 @@ title: Windows setup wizard theme mismatch (light header/footer on dark body)
 status: To Do
 assignee: []
 created_date: '2026-06-16 15:03'
+updated_date: '2026-06-16 16:45'
 labels:
   - bug
   - gui
   - windows
+  - visual
 dependencies: []
 priority: low
 ordinal: 6000

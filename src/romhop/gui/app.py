@@ -15,6 +15,7 @@ def _maybe_uninstall(argv) -> bool:
     from romhop.gui import launcher_install as li
 
     li.uninstall_linux()          # remove .desktop entries + icons
+    ib.unlink_cli()               # remove the ~/.local/bin/romhop CLI symlink
     ib.remove_install()           # remove the installed app dir
     print("romhop uninstalled")
     _sys.exit(0)
@@ -37,6 +38,7 @@ def _maybe_bootstrap(argv) -> bool:
         src = Path(_sys.executable).parent  # the onedir we are frozen into
         launcher = ib.extract_and_install(src)
         li.install_linux(exec_path=str(launcher))
+        ib.link_cli()  # expose the CLI as ~/.local/bin/romhop
     ib.launch_installed()  # execv — does not return
     return True
 
