@@ -3,47 +3,19 @@
 Sync a self-hosted [RomM](https://github.com/rommapp/romm) library with a local
 [ES-DE](https://es-de.org/) / [RetroArch](https://www.retroarch.com/) setup.
 
-Two things:
+It does two things:
 
 - **Download** a game from RomM into the on-disk layout ES-DE expects
   (an `.m3u` plus a per-game folder).
 - **Sync** RetroArch save files and savestates back to RomM automatically
   as they change.
 
-## Requirements
-
-- Python 3.11+
-- A reachable RomM instance and a client API token with `roms.read` and
-  `assets.read`/`assets.write` scope.
+There's a [Typer](https://typer.tiangolo.com/) CLI for scripting and a desktop
+GUI (PySide6) for everyday use. Pick whichever you like — they share the same core.
 
 ## Install
 
-The recommended way to install romhop is with [pipx](https://pipx.pypa.io/),
-which installs it into an isolated environment and automatically puts the
-`romhop` command on your PATH — no virtualenv or manual PATH setup needed.
-
-**From source (clone first):**
-
-```
-git clone -b gui-desktop-pyside https://github.com/kschk24/romhop
-cd romhop
-pipx install ".[gui]"
-```
-
-**Directly from GitHub (no clone needed):**
-
-```
-pipx install "romhop[gui] @ git+https://github.com/kschk24/romhop.git@gui-desktop-pyside"
-```
-
-If you don't have pipx yet:
-
-```
-pip install pipx
-pipx ensurepath
-```
-
-## Install (end users, no Python needed)
+### Most people — desktop app, no Python needed
 
 Download the latest installer from the [Releases page](../../releases):
 
@@ -58,9 +30,48 @@ Download the latest installer from the [Releases page](../../releases):
 
 Verify a download against `SHA256SUMS` on the release if you wish.
 
+On first launch the GUI runs a short setup wizard (RomM URL, API token, local
+paths) — see [Setup](#setup).
+
+### Power users — CLI via pipx
+
+If you want the `romhop` command for scripting or headless use, install with
+[pipx](https://pipx.pypa.io/). It drops romhop into an isolated environment and
+puts both `romhop` (CLI) and `romhop-gui` on your PATH — no virtualenv or manual
+PATH setup.
+
+Directly from GitHub (no clone needed):
+
+```
+pipx install "romhop[gui] @ git+https://github.com/kschk24/romhop.git@gui-desktop-pyside"
+```
+
+Or from a clone:
+
+```
+git clone -b gui-desktop-pyside https://github.com/kschk24/romhop
+cd romhop
+pipx install ".[gui]"
+```
+
+Drop the `[gui]` extra if you only want the CLI. If you don't have pipx yet:
+
+```
+pip install pipx
+pipx ensurepath
+```
+
+### Requirements
+
+- A reachable RomM instance and a client API token with `roms.read` and
+  `assets.read`/`assets.write` scope.
+- Python 3.11+ — **only** for the pipx / source install. The desktop installers
+  bundle their own runtime; you don't need Python for those.
+
 ## Setup
 
-Interactive first-time setup (RomM URL, API token, and your local paths):
+Interactive first-time setup (RomM URL, API token, and your local paths). The
+GUI runs this as a wizard on first launch; from the CLI:
 
 ```
 romhop setup
@@ -82,10 +93,30 @@ asks for your RetroArch installation folder (where `retroarch.cfg` lives, e.g. a
 portable `D:\RetroArch`). If the cfg doesn't specify them, it prompts. The ROMs
 root has no universal default and must be set.
 
-As its last step, `setup` offers to scan your ROMs folder (see below) so games
-already on disk become save-syncable immediately.
+As its last step, `setup` offers to scan your ROMs folder (see
+[Scan existing games](#scan-existing-games)) so games already on disk become
+save-syncable immediately.
 
-## Usage
+## GUI
+
+Launch the desktop GUI:
+
+```
+romhop gui          # or the Start-Menu / app-menu entry from an installer
+```
+
+It browses your RomM library, downloads games (single or multi-select), edits
+settings, and shows sync status — all in one window. Closing the window minimizes
+to a system-tray icon and keeps save sync running in the background; relaunching
+raises the existing window instead of starting a second copy. Quit from the tray
+menu to stop sync and exit.
+
+The look is themeable: drop a `.romhop-theme` package (a zip of `manifest.json` +
+`tokens.json`, with optional `assets/` and `theme.qss`) into the romhop config dir
+under `themes/`, then set `theme` in your settings. A broken or partial theme
+falls back to the default, so it can never brick the UI.
+
+## CLI usage
 
 Download a game by exact name or a unique substring:
 
@@ -116,31 +147,13 @@ local or take RomM's — unless `--remote` is set. New saves are placed by your
 RetroArch sort setting (per-core subfolder or flat), read from `retroarch.cfg`
 during `setup`. Needs the RomM token to have `assets.read` scope.
 
-## GUI
-
-A desktop GUI (PySide6) is available as an optional extra:
-
-```
-pip install 'romhop[gui]'
-romhop gui
-```
-
-It browses your RomM library, downloads games (single or multi-select), edits
-settings, and shows sync status — all in one window. Closing the window minimizes
-to a system-tray icon and keeps save sync running in the background; relaunching
-raises the existing window instead of starting a second copy. Quit from the tray
-menu to stop sync and exit. The look is themeable: drop a `.romhop-theme` package
-(a zip of `manifest.json` + `tokens.json`, with optional `assets/` and
-`theme.qss`) into the romhop config dir under `themes/`, then set `theme` in your
-settings. A broken or partial theme falls back to the default, so it can never
-brick the UI.
-
 ## Scan existing games
 
 Match games already in your ROMs folder to your RomM library and seed the
 save-sync cache — no re-downloading. Run it once after pointing romhop at an
 existing ES-DE library so `sync` can push saves for games you didn't download
-through romhop.
+through romhop. (The GUI exposes the same thing as a "Scan local library" button
+in settings.)
 
 ```
 romhop scan          # preview matches, then confirm
@@ -178,16 +191,32 @@ pytest
 ```
 
 The RomM client is tested against `httpx`'s `MockTransport`, so the suite runs
-with no network and no live server.
+with no network and no live server. GUI tests use `pytest-qt`.
 
-## License
+## Releasing (maintainers)
 
-GNU Affero General Public License v3.0 (AGPL-3.0). See [LICENSE](LICENSE).
+Releases are built and published by the `package` GitHub Actions workflow
+(`.github/workflows/package.yml`). It builds a frozen GUI app on each OS
+(PyInstaller onedir) and wraps it in a Windows Inno Setup installer and a Linux
+bootstrap AppImage.
 
-If you run a modified version as a network-accessible service, the AGPL
-requires you to make the modified source available to its users.
+- **Publish a release:** bump `__version__` in `src/romhop/__init__.py`, then push
+  a matching version tag:
 
-### Release smoke checklist (maintainers)
+  ```
+  git tag v0.2.0
+  git push origin v0.2.0
+  ```
+
+  The tag push triggers the build on Windows + Linux and publishes a GitHub
+  Release with both installers and a `SHA256SUMS` file. Tags must match `v*`.
+- **Dry run:** trigger the workflow manually (`workflow_dispatch`) to build and
+  upload artifacts **without** publishing a Release — handy for testing a build.
+
+Only a maintainer should bump the version and push a tag; don't tag from a
+feature branch you don't intend to release.
+
+### Release smoke checklist
 
 After a tagged build publishes, verify on each OS:
 
@@ -195,3 +224,10 @@ After a tagged build publishes, verify on each OS:
   launches the GUI → uninstall via Add/Remove Programs removes it.
 - **Linux:** `chmod +x` the AppImage → run it → menu entry appears → menu entry launches
   the installed copy → re-running the AppImage just launches (does not reinstall).
+
+## License
+
+GNU Affero General Public License v3.0 (AGPL-3.0). See [LICENSE](LICENSE).
+
+If you run a modified version as a network-accessible service, the AGPL
+requires you to make the modified source available to its users.
