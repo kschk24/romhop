@@ -61,6 +61,8 @@ class ConnectionPage(QWizardPage):
         return self._validated
 
     def test_connection(self) -> None:
+        if self._worker is not None:
+            return  # a test is already in flight; ignore re-entry
         url = self.url_edit.text().strip()
         token = self.token_edit.text().strip()
         self.status_label.setText("Testing…")
@@ -209,5 +211,6 @@ class SetupWizard(QWizard):
         token = self.connection_page.token_edit.text().strip()
         if token:
             config.set_token(token)
-        self.completed.emit(settings, self.scan_page.scan_check.isChecked())
-        super().accept()
+        do_scan = self.scan_page.scan_check.isChecked()
+        super().accept()  # close the dialog before notifying listeners
+        self.completed.emit(settings, do_scan)
