@@ -78,6 +78,28 @@ def test_txt_sidecars_excluded_from_subfolder_file_names(tmp_path):
     assert games[0].file_names == ["Game (USA) (Disc 1).chd"]
 
 
+def test_system_filter_walks_only_that_system(tmp_path):
+    # download's already-local check only cares about one system; the filter
+    # must not pay for sibling system dirs (TASK-009).
+    _touch(tmp_path / "genesis" / "Sonic (USA).md", b"x")
+    _touch(tmp_path / "snes" / "Mario (USA).sfc", b"y")
+    games = index_local_library(tmp_path, overrides={}, system="genesis")
+    assert [g.game_name for g in games] == ["Sonic (USA).md"]
+    assert {g.system for g in games} == {"genesis"}
+
+
+def test_system_filter_missing_dir_returns_empty(tmp_path):
+    _touch(tmp_path / "genesis" / "Sonic (USA).md", b"x")
+    assert index_local_library(tmp_path, overrides={}, system="n64") == []
+
+
+def test_system_filter_none_walks_whole_tree(tmp_path):
+    _touch(tmp_path / "genesis" / "Sonic (USA).md", b"x")
+    _touch(tmp_path / "snes" / "Mario (USA).sfc", b"y")
+    games = index_local_library(tmp_path, overrides={})
+    assert {g.system for g in games} == {"genesis", "snes"}
+
+
 # ---------------------------------------------------------------------------
 # match_to_roms tests (Task 3)
 # ---------------------------------------------------------------------------

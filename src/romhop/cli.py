@@ -461,8 +461,7 @@ def download(
     rom = _select_match(name, matches)
     # Already on disk? Skip the transfer, just record the mapping for save sync.
     system = esde_system_for_slug(rom.platform_slug, settings.platform_overrides)
-    locals_ = [g for g in index_local_library(settings.roms_root, settings.platform_overrides)
-               if g.system == system]
+    locals_ = index_local_library(settings.roms_root, settings.platform_overrides, system=system)
     target_keys = {norm(rom.fs_name), norm(rom.fs_name_no_ext)}
     already = next((g for g in locals_ if g.match_key in target_keys), None)
     if already is not None:

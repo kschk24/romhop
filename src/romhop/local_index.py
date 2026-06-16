@@ -17,7 +17,8 @@ class LocalGame:
     match_key: str          # norm() of the value matched against the rom
 
 
-def index_local_library(roms_root: Path, overrides: dict[str, str]) -> list[LocalGame]:
+def index_local_library(roms_root: Path, overrides: dict[str, str],
+                         system: str | None = None) -> list[LocalGame]:
     """Walk the ES-DE tree and return one LocalGame per game.
 
     Layout mirrors download writes: a flat file in <system>/ is one game; a
@@ -27,11 +28,20 @@ def index_local_library(roms_root: Path, overrides: dict[str, str]) -> list[Loca
     `overrides` is accepted for call-site parity with match_to_roms (callers pass
     settings.platform_overrides to both); the local system is just the dir name,
     so platform overrides are applied on the rom side during matching.
+
+    `system` limits the walk to a single ``roms_root/<system>`` dir. download's
+    already-local check filters to one system anyway, so scoping the walk avoids
+    a full-tree scan on every download (TASK-009).
     """
     games: list[LocalGame] = []
     if not roms_root.is_dir():
         return games
-    for system_dir in sorted(p for p in roms_root.iterdir() if p.is_dir()):
+    if system is not None:
+        one = roms_root / system
+        system_dirs = [one] if one.is_dir() else []
+    else:
+        system_dirs = sorted(p for p in roms_root.iterdir() if p.is_dir())
+    for system_dir in system_dirs:
         system = system_dir.name
         subfolder_names: set[str] = set()
         # Multi-disc games: each subfolder is one game.
