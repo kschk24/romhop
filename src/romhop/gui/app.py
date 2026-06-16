@@ -36,6 +36,31 @@ def _prompt_purge_user_data() -> bool:
     return box.exec() == QMessageBox.Yes
 
 
+def _notify_uninstalled() -> None:
+    """Confirm completion to the user after a Linux uninstall.
+
+    The "Uninstall RomHop" launcher runs with ``Terminal=false``, so the
+    ``print`` below goes nowhere and the app just vanishes with no feedback
+    (TASK-019). Show a blocking QMessageBox so the click has a visible result.
+    Best-effort: a no-op if Qt is unavailable (the print still serves a shell).
+    """
+    try:
+        from PySide6.QtWidgets import QApplication, QMessageBox
+    except Exception:
+        return
+    QApplication.instance() or QApplication([])
+    box = QMessageBox()
+    box.setIcon(QMessageBox.Information)
+    box.setWindowTitle("RomHop uninstalled")
+    box.setText("RomHop has been removed.")
+    box.setInformativeText(
+        "The launcher and app files are gone.\n"
+        "Your ROM library, saves, and savestates were left untouched."
+    )
+    box.setStandardButtons(QMessageBox.Ok)
+    box.exec()
+
+
 def _maybe_uninstall(argv) -> bool:
     """Handle `--uninstall` for the Linux frozen install. Returns True if handled."""
     if "--uninstall" not in argv:
@@ -52,6 +77,7 @@ def _maybe_uninstall(argv) -> bool:
     ib.unlink_cli()               # remove the ~/.local/bin/romhop CLI symlink
     ib.remove_install()           # remove the installed app dir
     print("romhop uninstalled")
+    _notify_uninstalled()         # visible feedback (Terminal=false launcher)
     _sys.exit(0)
 
 
