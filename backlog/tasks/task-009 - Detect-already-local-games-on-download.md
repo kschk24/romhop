@@ -1,10 +1,10 @@
 ---
 id: TASK-009
 title: Limit already-local download check to roms_root/system
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-16 15:04'
-updated_date: '2026-06-16 15:07'
+updated_date: '2026-06-16 21:57'
 labels:
   - feature
 dependencies: []
@@ -20,7 +20,13 @@ download's already-local short-circuit calls index_local_library(roms_root, over
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Already-local check walks only roms_root/system, not the whole tree
-- [ ] #2 index_local_library gains optional system filter (or equivalent focused check)
-- [ ] #3 Behaviour unchanged for the matched/skip path
+- [x] #1 Already-local check walks only roms_root/system, not the whole tree
+- [x] #2 index_local_library gains optional system filter (or equivalent focused check)
+- [x] #3 Behaviour unchanged for the matched/skip path
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Added optional system param to index_local_library; download (cli.py) passes system= so walk touches only roms_root/<system>. 3 tests added (test_local_index.py). 369 suite green.
+<!-- SECTION:NOTES:END -->
