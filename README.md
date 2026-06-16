@@ -43,6 +43,19 @@ pip install pipx
 pipx ensurepath
 ```
 
+## Install (end users, no Python needed)
+
+Download the latest installer from the [Releases page](../../releases):
+
+- **Windows:** `romhop-setup-<version>.exe` — double-click, install (no admin needed),
+  launch from the Start Menu. Windows SmartScreen may warn "unknown publisher" the first
+  time; choose **More info → Run anyway**.
+- **Linux:** `romhop-installer-<version>-x86_64.AppImage` — make it executable
+  (`chmod +x`) and double-click (or run it). It installs RomHop to
+  `~/.local/share/romhop` and adds a menu entry; launch RomHop from your menu afterwards.
+
+Verify a download against `SHA256SUMS` on the release if you wish.
+
 ## Setup
 
 Interactive first-time setup (RomM URL, API token, and your local paths):
@@ -171,3 +184,12 @@ GNU Affero General Public License v3.0 (AGPL-3.0). See [LICENSE](LICENSE).
 
 If you run a modified version as a network-accessible service, the AGPL
 requires you to make the modified source available to its users.
+
+### Release smoke checklist (maintainers)
+
+After a tagged build publishes, verify on each OS:
+
+- **Windows:** run `romhop-setup-*.exe` → installs without admin → Start-Menu shortcut
+  launches the GUI → uninstall via Add/Remove Programs removes it.
+- **Linux:** `chmod +x` the AppImage → run it → menu entry appears → menu entry launches
+  the installed copy → re-running the AppImage just launches (does not reinstall).
