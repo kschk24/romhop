@@ -61,6 +61,9 @@ class ConnectionPage(QWizardPage):
         return self._validated
 
     def test_connection(self) -> None:
+        if self._validate_fn is None:
+            self.status_label.setText("Connection test unavailable")
+            return
         if self._worker is not None:
             return  # a test is already in flight; ignore re-entry
         url = self.url_edit.text().strip()
