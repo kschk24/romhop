@@ -27,6 +27,7 @@ class Settings:
     sync_enabled: bool = False
     theme: str = "default"
     download_rate_limit_kbps: int = 0  # 0 = unlimited
+    auto_update_check: bool = True
 
 
 @dataclass(frozen=True)
@@ -69,6 +70,8 @@ SCHEMA: list[FieldSpec] = [
               "Download limit (KB/s, 0 = unlimited)", "int",
               "Throttle downloads; 0 disables the cap"),
     FieldSpec("theme", "behavior", "Theme", "str", "GUI theme name"),
+    FieldSpec("auto_update_check", "behavior", "Check for updates on launch", "bool",
+              "Look for a new version at startup (frozen installs only)"),
 ]
 
 

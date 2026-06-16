@@ -124,6 +124,7 @@ def test_schema_covers_every_scalar_settings_field():
         "sort_saves_by_core", "sort_states_by_core",
         "sync_enabled", "sync_delay_seconds",
         "download_rate_limit_kbps", "theme",
+        "auto_update_check",
     }
     assert schema_keys == expected
     assert "platform_overrides" not in schema_keys
@@ -286,6 +287,16 @@ def test_is_configured_false_when_token_missing(monkeypatch):
     s = config.default_settings()
     s.romm_url = "http://romm.test"
     assert config.is_configured(s) is False
+
+
+def test_auto_update_check_defaults_on_and_roundtrips(tmp_path):
+    from romhop.config import default_settings, load_settings, save_settings
+    s = default_settings()
+    assert s.auto_update_check is True
+    s.auto_update_check = False
+    path = tmp_path / "config.ini"
+    save_settings(s, path)
+    assert load_settings(path).auto_update_check is False
 
 
 def test_purge_user_data_removes_given_dirs(tmp_path):
