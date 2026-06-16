@@ -6,7 +6,10 @@ logger = logging.getLogger(__name__)
 
 
 def _maybe_bootstrap(argv) -> bool:
-    """Handle the AppImage first-run install. Returns True if handled (caller exits)."""
+    """Handle the AppImage first-run install. Returns True if handled (caller exits).
+
+    Extraction/install errors propagate uncaught (no user-facing error UI yet).
+    """
     if "--appimage-bootstrap" not in argv:
         return False
     import sys as _sys
@@ -33,7 +36,7 @@ def _maybe_smoke_exit(argv) -> bool:
 
     QApplication(_sys.argv)  # fails loudly if the Qt platform plugin is missing
     print("romhop smoke ok")
-    return True
+    _sys.exit(0)
 
 
 def run() -> None:
