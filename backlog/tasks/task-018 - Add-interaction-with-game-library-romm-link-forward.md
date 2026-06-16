@@ -4,7 +4,9 @@ title: 'Add interaction with game library, romm link forward'
 status: To Do
 assignee: []
 created_date: '2026-06-16 15:58'
-labels: []
+updated_date: '2026-06-16 16:06'
+labels:
+  - feature
 dependencies: []
 priority: low
 ordinal: 21000
