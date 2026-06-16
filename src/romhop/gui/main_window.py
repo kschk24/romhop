@@ -289,7 +289,9 @@ class MainWindow(QWidget):
             event.ignore()
             self.hide()
             if not self._tray_hint_shown:
-                self.tray.showMessage("romhop", "Still running — save-sync active.")
+                msg = ("Still running — save-sync active." if self._settings.sync_enabled
+                       else "Still running in the tray.")
+                self.tray.showMessage("romhop", msg)
                 self._tray_hint_shown = True
             return
         # No tray: warn once, then hide and keep running headless.

@@ -585,8 +585,9 @@ def _run_scan(settings, *, assume_yes: bool) -> None:
 
     cache = MappingCache(_cache_path())
     for local, rom in result.matched:
-        system = esde_system_for_slug(rom.platform_slug, settings.platform_overrides)
-        cache.add(seed_entry(rom.id, system, rom.fs_name_no_ext, local.file_names))
+        # local.system already equals esde_system_for_slug(rom.platform_slug) —
+        # match_to_roms only pairs a rom with a local game in the same system dir.
+        cache.add(seed_entry(rom.id, local.system, rom.fs_name_no_ext, local.file_names))
     cache.save()
     typer.echo(f"Wrote {len(result.matched)} mappings to {_cache_path()}")
 

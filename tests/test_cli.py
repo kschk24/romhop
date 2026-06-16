@@ -355,6 +355,24 @@ def test_download_list_roms_403_friendly(monkeypatch, tmp_path):
     assert "Traceback" not in result.output
 
 
+def test_scan_list_roms_403_friendly(monkeypatch, tmp_path):
+    import httpx
+    _login(monkeypatch, tmp_path)
+
+    class FakeClient:
+        def __init__(self, *a, **k): pass
+        def list_roms(self, search_term=None):
+            raise httpx.HTTPStatusError(
+                "403", request=httpx.Request("GET", "http://romm.test/api/roms"),
+                response=httpx.Response(403),
+            )
+    monkeypatch.setattr(cli, "RommClient", FakeClient)
+    result = runner.invoke(cli.app, ["scan", "--yes"])
+    assert result.exit_code == 1
+    assert "token" in result.output.lower()
+    assert "Traceback" not in result.output
+
+
 def test_scan_matches_and_writes_with_yes(monkeypatch, tmp_path):
     _login(monkeypatch, tmp_path)
     # one local flat game on disk
