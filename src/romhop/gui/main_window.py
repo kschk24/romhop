@@ -26,6 +26,7 @@ from romhop.gui.tray import SYNC_DOT_COLORS, TrayIcon
 from romhop.gui.filter_bar import FilterBar
 from romhop.gui.library_view import LibraryView, platforms_from_roms
 from romhop.gui.settings_view import SettingsView
+from romhop.gui.setup_wizard import SetupWizard
 from romhop.gui.scan_result_dialog import ScanResultDialog
 from romhop.gui.workers import CallableWorker, DownloadWorker, SyncWorker
 from romhop.local_index import downloaded_rom_ids
@@ -76,11 +77,15 @@ class MainWindow(QWidget):
                  rom_provider=None, download_action=None, scan_action=None,
                  sync_watch_fn=None, persist_settings=None, cover_provider=None,
                  platform_label=None, platform_names=None, apply_token=None,
-                 apply_settings=None, quit_fn=None, confirm_no_tray=None):
+                 apply_settings=None, quit_fn=None, confirm_no_tray=None,
+                 validate_fn=None, detect_retroarch_fn=None, recreate_client=None):
         super().__init__(parent)
         self._settings = settings
         self._apply_token = apply_token
         self._apply_settings = apply_settings
+        self._validate_fn = validate_fn
+        self._detect_retroarch_fn = detect_retroarch_fn
+        self._recreate_client = recreate_client
         self._rom_provider = rom_provider
         self._download_action = download_action
         self._cover_provider = cover_provider
@@ -127,6 +132,7 @@ class MainWindow(QWidget):
         self.settings_view.cancelled.connect(self.show_library)
         self.settings_view.scan_requested.connect(self.run_scan)
         self.settings_view.token_changed.connect(self._on_token_changed)
+        self.settings_view.setup_requested.connect(self.run_setup_wizard)
         self.stack = QStackedWidget()
         self.stack.addWidget(self.library)      # index 0
         self.stack.addWidget(self.settings_view)  # index 1
@@ -404,6 +410,31 @@ class MainWindow(QWidget):
         worker.finished.connect(self._on_scan_finished)
         self._scan_worker = worker
         worker.start()
+
+    def _build_setup_wizard(self) -> SetupWizard:
+        wiz = SetupWizard(
+            validate_fn=self._validate_fn,
+            detect_retroarch_fn=self._detect_retroarch_fn,
+            parent=self,
+        )
+        wiz.completed.connect(self._on_setup_complete)
+        return wiz
+
+    def run_setup_wizard(self) -> None:
+        self._build_setup_wizard().exec()
+
+    def _on_setup_complete(self, settings, do_scan: bool) -> None:
+        self._settings = settings
+        if self._recreate_client is not None:
+            self._recreate_client(settings)
+        self.settings_view.load(settings)
+        self.show_library()
+        try:
+            self.load_library()
+        except Exception as exc:  # noqa: BLE001 - keep window alive
+            self.set_sync_status(f"library load failed: {exc}")
+        if do_scan:
+            self.run_scan()
 
     def _on_scan_done(self, result) -> None:
         self.settings_view.set_scanning(False)

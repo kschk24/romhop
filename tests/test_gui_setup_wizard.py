@@ -127,3 +127,36 @@ def test_finish_blank_token_keeps_existing(qtbot, monkeypatch, tmp_path):
     with qtbot.waitSignal(wiz.completed, timeout=2000):
         wiz.accept()
     assert calls == []  # blank token -> set_token never called
+
+
+def test_main_window_run_setup_wizard_refreshes(qtbot, monkeypatch, tmp_path):
+    import romhop.config as config
+    from romhop.config import default_settings
+    from romhop.gui.main_window import MainWindow
+
+    monkeypatch.setattr(config, "set_token", lambda t: None)
+    monkeypatch.setattr(config, "get_token", lambda: "rmm_x")
+    monkeypatch.setattr(config, "load_settings", default_settings)
+
+    recreated = {}
+    scans = []
+    win = MainWindow(
+        default_settings(),
+        rom_provider=lambda: [],
+        validate_fn=lambda u, t: None,
+        detect_retroarch_fn=lambda: (None, None, False, False),
+        recreate_client=lambda s: recreated.setdefault("settings", s),
+        scan_action=lambda s: scans.append(s) or [],
+    )
+    qtbot.addWidget(win)
+
+    # Drive the wizard programmatically instead of showing it modally.
+    wiz = win._build_setup_wizard()
+    wiz.connection_page.url_edit.setText("http://romm.test")
+    wiz.paths_page.roms_edit.setText(str(tmp_path / "roms"))
+    wiz.scan_page.scan_check.setChecked(False)
+    with qtbot.waitSignal(wiz.completed, timeout=2000):
+        wiz.accept()
+
+    assert recreated["settings"].romm_url == "http://romm.test"
+    assert win.settings_view._edits["RomM URL"].text() == "http://romm.test"
