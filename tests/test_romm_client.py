@@ -204,3 +204,26 @@ def test_stream_rom_content_total_none_without_content_length():
     with _client(handler).stream_rom_content(1, "x") as (total, chunks):
         assert total is None
         assert b"".join(chunks) == b"ab"
+
+
+def test_ping_hits_roms_with_limit_one():
+    seen = {}
+
+    def handler(request):
+        seen["path"] = request.url.path
+        seen["limit"] = request.url.params.get("limit")
+        return httpx.Response(200, json={"items": [], "total": 0, "limit": 1, "offset": 0})
+
+    _client(handler).ping()
+    assert seen["path"] == "/api/roms"
+    assert seen["limit"] == "1"
+
+
+def test_ping_raises_on_http_error():
+    import pytest
+
+    def handler(request):
+        return httpx.Response(401, json={"detail": "bad token"})
+
+    with pytest.raises(httpx.HTTPStatusError):
+        _client(handler).ping()

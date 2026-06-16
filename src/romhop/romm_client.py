@@ -32,6 +32,12 @@ class RommClient:
         the keyring), so the change takes effect without restarting."""
         self._http.headers["Authorization"] = f"Bearer {token}"
 
+    def ping(self) -> None:
+        """Cheap auth + URL check: fetch a single-item page and raise on any HTTP
+        error. Used to validate credentials without paging the whole library."""
+        resp = self._http.get("/api/roms", params={"limit": 1, "offset": 0})
+        resp.raise_for_status()
+
     def list_roms(self, search_term: str | None = None) -> list[Rom]:
         # GET /api/roms returns a paginated wrapper {items, total, limit, offset, ...}.
         # Page through all results; pass search_term to narrow server-side.
