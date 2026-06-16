@@ -85,3 +85,27 @@ def test_parse_sort_flags_false_and_absent(tmp_path):
 
 def test_parse_sort_flags_missing_file(tmp_path):
     assert parse_sort_flags(tmp_path / "nope.cfg") == (False, False)
+
+
+def test_detect_non_windows_reads_default_cfg(tmp_path, monkeypatch):
+    import romhop.retroarch_cfg as rc
+    monkeypatch.setattr(rc.sys, "platform", "linux")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    _write_cfg(tmp_path / "retroarch", 'savefile_directory = "/g/saves"\n'
+                                       'savestate_directory = "/g/states"\n'
+                                       'sort_savefiles_enable = "true"\n')
+    saves, states, sort_saves, sort_states = rc.detect()
+    assert saves == Path("/g/saves")
+    assert states == Path("/g/states")
+    assert sort_saves is True
+    assert sort_states is False
+
+
+def test_detect_windows_uses_install_folder(tmp_path, monkeypatch):
+    import romhop.retroarch_cfg as rc
+    monkeypatch.setattr(rc.sys, "platform", "win32")
+    _write_cfg(tmp_path, 'savefile_directory = "/g/saves"\n'
+                         'savestate_directory = "/g/states"\n')
+    saves, states, sort_saves, sort_states = rc.detect(tmp_path)
+    assert (saves, states) == (Path("/g/saves"), Path("/g/states"))
+    assert (sort_saves, sort_states) == (False, False)

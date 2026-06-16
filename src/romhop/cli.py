@@ -349,30 +349,20 @@ def login(url: str = typer.Option(..., "--url"),
 
 
 def _retroarch_cfg_values(current) -> tuple[Path | None, Path | None, bool, bool]:
-    """Detect RetroArch's saves/states dirs AND per-core sort flags from retroarch.cfg.
+    """Detect RetroArch's saves/states dirs AND per-core sort flags.
 
     Windows: prompt for the install folder (no reliable auto-location for a
-    portable install) and read its retroarch.cfg. Other OSes: auto-locate the
-    standard ~/.config/retroarch/retroarch.cfg. Dirs may be None when the cfg is
-    absent or the directory is unset/'default'; flags default to False.
-    """
+    portable install). Other OSes: auto-locate the standard retroarch.cfg.
+    Delegates the parsing to retroarch_cfg.detect."""
+    folder = None
     if sys.platform.startswith("win"):
         appdata = os.environ.get("APPDATA")
         guess = Path(appdata) / "RetroArch" if appdata else None
-        folder = typer.prompt(
+        folder = Path(typer.prompt(
             "RetroArch installation folder (where retroarch.cfg lives)",
             default=str(guess) if guess and guess.exists() else None,
-        )
-        folder = Path(folder).expanduser()
-        saves, states = retroarch_cfg.save_dirs_from_install(folder)
-        sort_saves, sort_states = retroarch_cfg.parse_sort_flags(folder / "retroarch.cfg")
-        return (saves, states, sort_saves, sort_states)
-    cfg = retroarch_cfg.default_cfg_path()
-    if cfg is None:
-        return (None, None, False, False)
-    saves, states = retroarch_cfg.parse_save_dirs(cfg)
-    sort_saves, sort_states = retroarch_cfg.parse_sort_flags(cfg)
-    return (saves, states, sort_saves, sort_states)
+        )).expanduser()
+    return retroarch_cfg.detect(folder)
 
 
 @app.command()

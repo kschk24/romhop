@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 _SAVE_KEYS = ("savefile_directory", "savestate_directory")
@@ -59,6 +60,28 @@ def default_cfg_path() -> Path | None:
     base = Path(xdg) if xdg else Path.home() / ".config"
     cfg = base / "retroarch" / "retroarch.cfg"
     return cfg if cfg.exists() else None
+
+
+def detect(install_folder: Path | None = None) -> tuple[Path | None, Path | None, bool, bool]:
+    """Non-interactive RetroArch detection: (saves, states, sort_saves, sort_states).
+
+    Non-Windows: read the standard retroarch.cfg (install_folder ignored).
+    Windows: read <install_folder>/retroarch.cfg (caller supplies the folder,
+    since there is no reliable auto-location for a portable install). Any value
+    that is absent/unset falls back to None / False.
+    """
+    if sys.platform.startswith("win"):
+        if install_folder is None:
+            return (None, None, False, False)
+        saves, states = save_dirs_from_install(install_folder)
+        sort_saves, sort_states = parse_sort_flags(install_folder / "retroarch.cfg")
+        return (saves, states, sort_saves, sort_states)
+    cfg = default_cfg_path()
+    if cfg is None:
+        return (None, None, False, False)
+    saves, states = parse_save_dirs(cfg)
+    sort_saves, sort_states = parse_sort_flags(cfg)
+    return (saves, states, sort_saves, sort_states)
 
 
 def parse_sort_flags(cfg_path: Path) -> tuple[bool, bool]:
