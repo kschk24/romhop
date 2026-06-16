@@ -17,3 +17,4 @@ CLAUDE.md
 packaging/build/
 packaging/dist/
 *.spec.bak
+docs/adr/
