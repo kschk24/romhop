@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 
 from watchfiles import watch
@@ -9,9 +10,18 @@ from romhop.mapping_cache import MappingCache
 from romhop.platform_map import system_for_core
 
 SAVE_EXTS = {".srm", ".sav"}
-STATE_EXTS = {".state", ".state1", ".state2", ".state3", ".state4",
-              ".state5", ".state6", ".state7", ".state8", ".state9"}
-WATCHED_EXTS = SAVE_EXTS | STATE_EXTS
+# RetroArch savestate slots: ".state" plus an arbitrary slot index (".state1",
+# ".state10", ".state995", ...). Match any digits, not a fixed 0-9 set.
+_STATE_RE = re.compile(r"\.state\d*$", re.IGNORECASE)
+
+
+def is_state_file(name: str) -> bool:
+    """True if a file name is a RetroArch savestate (any slot index)."""
+    return _STATE_RE.search(name) is not None
+
+
+def is_watched_file(name: str) -> bool:
+    return Path(name).suffix.lower() in SAVE_EXTS or is_state_file(name)
 
 
 def _digest(data: bytes) -> str:
@@ -27,7 +37,7 @@ def push_save_file(path: Path, cache: MappingCache, client,
     The parent directory name is the RetroArch core (RomM `emulator`); it is also
     used to recover the save's platform when a basename collides across systems.
     """
-    if path.suffix.lower() not in WATCHED_EXTS:
+    if not is_watched_file(path.name):
         return False
     core = path.parent.name
     candidates = cache.candidates_for(path.stem)
@@ -52,8 +62,10 @@ def push_save_file(path: Path, cache: MappingCache, client,
     digest = _digest(data)
     if seen.get(str(path)) == digest:
         return False
-    client.upload_save(rom_id=entry.rom_id, emulator=core,
-                       file_name=path.name, data=data)
+    # Route by extension: savestates go to /api/states, save files to /api/saves.
+    # Mixing them up puts states in RomM's saves list (and vice versa).
+    upload = client.upload_state if is_state_file(path.name) else client.upload_save
+    upload(rom_id=entry.rom_id, emulator=core, file_name=path.name, data=data)
     seen[str(path)] = digest
     return True
 

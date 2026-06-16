@@ -121,6 +121,18 @@ class RommClient:
         resp.raise_for_status()
         return resp.json()
 
+    def upload_state(self, *, rom_id: int, emulator: str | None,
+                     file_name: str, data: bytes) -> dict:
+        params = {"rom_id": rom_id}
+        if emulator:
+            params["emulator"] = emulator
+        resp = self._http.post(
+            "/api/states", params=params,
+            files={"stateFile": (file_name, data, "application/octet-stream")},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     def download_state_content(self, state_id: int) -> bytes:
         resp = self._http.get(f"/api/states/{state_id}/content")
         resp.raise_for_status()

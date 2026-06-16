@@ -79,6 +79,25 @@ def test_upload_save_posts_multipart():
     assert b"SAVE" in seen["body"]
 
 
+def test_upload_state_posts_to_states_multipart():
+    seen = {}
+    def handler(request):
+        seen["path"] = request.url.path
+        seen["rom_id"] = request.url.params.get("rom_id")
+        seen["emulator"] = request.url.params.get("emulator")
+        seen["body"] = request.content
+        return httpx.Response(200, json={"id": 7})
+    _client(handler).upload_state(
+        rom_id=18, emulator="genesis_plus_gx",
+        file_name="Sonic.state1", data=b"STATE",
+    )
+    assert seen["path"] == "/api/states"
+    assert seen["rom_id"] == "18"
+    assert seen["emulator"] == "genesis_plus_gx"
+    assert b'name="stateFile"' in seen["body"]
+    assert b"STATE" in seen["body"]
+
+
 def test_list_roms_handles_null_files():
     def handler(request):
         return httpx.Response(200, json=[{

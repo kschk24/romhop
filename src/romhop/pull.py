@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from romhop.sync import STATE_EXTS
+from romhop.sync import is_state_file
 
 
 @dataclass
@@ -69,10 +69,10 @@ def pull_games(client, entries, settings, *, take_remote: bool = False,
             for remote in lister(entry.rom_id):
                 data = downloader(remote["id"])
                 file_name = remote["file_name"]
-                # Route by extension, not by endpoint: RomM stores states under
-                # /api/saves too (sync pushes them there), so a .state* name must
-                # still land in states_dir.
-                kind = "state" if Path(file_name).suffix.lower() in STATE_EXTS else "save"
+                # Route by extension, not by endpoint: a .state* name must land in
+                # states_dir even if it came back from /api/saves (legacy uploads
+                # before sync routed states to /api/states landed there).
+                kind = "state" if is_state_file(file_name) else "save"
                 item = PullItem(
                     kind=kind, rom_id=entry.rom_id,
                     file_name=file_name,

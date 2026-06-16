@@ -5,8 +5,12 @@ from romhop.sync import push_save_file
 class RecordingClient:
     def __init__(self):
         self.uploads = []
+        self.state_uploads = []
     def upload_save(self, *, rom_id, emulator, file_name, data):
         self.uploads.append((rom_id, emulator, file_name, data))
+        return {"id": 1}
+    def upload_state(self, *, rom_id, emulator, file_name, data):
+        self.state_uploads.append((rom_id, emulator, file_name, data))
         return {"id": 1}
 
 
@@ -54,7 +58,7 @@ def test_push_returns_false_when_no_match(tmp_path):
     assert client.uploads == []
 
 
-def test_push_matches_state_file(tmp_path):
+def test_push_routes_state_file_to_states_endpoint(tmp_path):
     core_dir = tmp_path / "PCSX-ReARMed"
     core_dir.mkdir()
     save = core_dir / "Metal Gear Solid (USA).state1"
@@ -62,7 +66,33 @@ def test_push_matches_state_file(tmp_path):
     client = RecordingClient()
     pushed = push_save_file(save, _cache(tmp_path), client, {})
     assert pushed is True
-    assert client.uploads == [(18, "PCSX-ReARMed", "Metal Gear Solid (USA).state1", b"STATE")]
+    # Savestates must go to /api/states, not /api/saves.
+    assert client.state_uploads == [(18, "PCSX-ReARMed", "Metal Gear Solid (USA).state1", b"STATE")]
+    assert client.uploads == []
+
+
+def test_push_routes_multidigit_state_slot_to_states(tmp_path):
+    # RetroArch savestate slots can exceed 9 (.state10, .state995, ...).
+    core_dir = tmp_path / "mGBA"
+    core_dir.mkdir()
+    st = core_dir / "Metal Gear Solid (USA).state995"
+    st.write_bytes(b"STATE")
+    client = RecordingClient()
+    pushed = push_save_file(st, _cache(tmp_path), client, {})
+    assert pushed is True
+    assert client.state_uploads == [(18, "mGBA", "Metal Gear Solid (USA).state995", b"STATE")]
+    assert client.uploads == []
+
+
+def test_push_ignores_state_screenshot_png(tmp_path):
+    # RetroArch writes a .png thumbnail beside each savestate; must be ignored.
+    core_dir = tmp_path / "mGBA"
+    core_dir.mkdir()
+    png = core_dir / "Metal Gear Solid (USA).state995.png"
+    png.write_bytes(b"PNG")
+    client = RecordingClient()
+    assert push_save_file(png, _cache(tmp_path), client, {}) is False
+    assert client.uploads == [] and client.state_uploads == []
 
 
 def test_push_ignores_non_save_extension(tmp_path):
