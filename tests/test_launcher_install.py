@@ -48,6 +48,23 @@ def test_uninstall_linux_noop_when_absent(tmp_path):
     assert li.uninstall_linux(home=tmp_path) == []
 
 
+def test_install_linux_writes_uninstall_entry(tmp_path):
+    li.install_linux(home=tmp_path, exec_path="/x/romhop")
+    un = tmp_path / ".local/share/applications/romhop-uninstall.desktop"
+    assert un.exists()
+    text = un.read_text()
+    assert "Exec=/x/romhop --uninstall" in text
+    assert "Name=Uninstall RomHop" in text
+
+
+def test_uninstall_linux_removes_uninstall_entry(tmp_path):
+    li.install_linux(home=tmp_path, exec_path="/x/romhop")
+    un = tmp_path / ".local/share/applications/romhop-uninstall.desktop"
+    assert un.exists()
+    li.uninstall_linux(home=tmp_path)
+    assert not un.exists()
+
+
 def test_shortcut_ps_embeds_target_icon_lnk():
     ps = li.shortcut_ps(r"C:\env\Scripts\romhop-gui.exe", r"C:\a\romhop.ico", r"C:\sm\RomHop.lnk")
     assert r"C:\env\Scripts\romhop-gui.exe" in ps

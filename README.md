@@ -52,7 +52,9 @@ Download the latest installer from the [Releases page](../../releases):
   time; choose **More info → Run anyway**.
 - **Linux:** `romhop-installer-<version>-x86_64.AppImage` — make it executable
   (`chmod +x`) and double-click (or run it). It installs RomHop to
-  `~/.local/share/romhop` and adds a menu entry; launch RomHop from your menu afterwards.
+  `~/.local/lib/romhop` and adds a menu entry; launch RomHop from your menu afterwards.
+  To uninstall, use the "Uninstall RomHop" menu entry (or run the app with `--uninstall`);
+  your settings and saves are left untouched.
 
 Verify a download against `SHA256SUMS` on the release if you wish.
 

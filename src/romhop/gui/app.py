@@ -5,6 +5,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _maybe_uninstall(argv) -> bool:
+    """Handle `--uninstall` for the Linux frozen install. Returns True if handled."""
+    if "--uninstall" not in argv:
+        return False
+    import sys as _sys
+
+    from romhop import install_bootstrap as ib
+    from romhop.gui import launcher_install as li
+
+    li.uninstall_linux()          # remove .desktop entries + icons
+    ib.remove_install()           # remove the installed app dir
+    print("romhop uninstalled")
+    _sys.exit(0)
+
+
 def _maybe_bootstrap(argv) -> bool:
     """Handle the AppImage first-run install. Returns True if handled (caller exits).
 
@@ -41,6 +56,8 @@ def _maybe_smoke_exit(argv) -> bool:
 
 def run() -> None:
     import sys as _sys
+    if _maybe_uninstall(_sys.argv):
+        return
     if _maybe_bootstrap(_sys.argv):
         return
     if _maybe_smoke_exit(_sys.argv):

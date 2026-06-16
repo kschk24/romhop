@@ -47,3 +47,21 @@ def test_appimage_bootstrap_skips_extract_when_installed(monkeypatch):
 
 def test_no_flag_is_not_handled():
     assert gui_app._maybe_bootstrap(["romhop"]) is False
+
+
+def test_uninstall_dispatch_removes_and_exits(monkeypatch):
+    import pytest
+    import romhop.install_bootstrap as ib
+    import romhop.gui.launcher_install as li
+
+    calls = {}
+    monkeypatch.setattr(li, "uninstall_linux", lambda: calls.setdefault("shortcut", True))
+    monkeypatch.setattr(ib, "remove_install", lambda: calls.setdefault("app", True))
+    with pytest.raises(SystemExit) as exc:
+        gui_app._maybe_uninstall(["romhop", "--uninstall"])
+    assert exc.value.code == 0
+    assert calls == {"shortcut": True, "app": True}
+
+
+def test_uninstall_dispatch_no_flag():
+    assert gui_app._maybe_uninstall(["romhop"]) is False

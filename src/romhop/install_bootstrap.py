@@ -21,7 +21,15 @@ LAUNCHER_NAME = "romhop"  # must match EXE name in packaging/romhop.spec
 
 
 def install_dir(home: Path | None = None) -> Path:
-    """Per-user, writable directory the app installs into."""
+    """Per-user, writable directory the app installs into.
+
+    POSIX: ``~/.local/lib/romhop`` — deliberately distinct from
+    ``platformdirs.user_data_dir("romhop")`` (``~/.local/share/romhop``) so
+    that installing/reinstalling never touches the user's mapping cache or other
+    runtime data.
+
+    Windows: ``%LOCALAPPDATA%/Programs/romhop`` (unchanged).
+    """
     home = home or Path.home()
     if os.name == "nt":
         localappdata = os.environ.get("LOCALAPPDATA") or str(home / "AppData" / "Local")
@@ -29,7 +37,7 @@ def install_dir(home: Path | None = None) -> Path:
         # WindowsPath instantiation errors when running tests on Linux).
         base = type(home)(localappdata) / "Programs"
     else:
-        base = home / ".local" / "share"
+        base = home / ".local" / "lib"
     return base / APP_DIRNAME
 
 
@@ -58,6 +66,20 @@ def extract_and_install(src_onedir: Path, home: Path | None = None) -> Path:
         shutil.rmtree(dest)
     os.replace(tmp, dest)  # atomic on the same filesystem
     return installed_launcher(home)
+
+
+def remove_install(home: Path | None = None) -> bool:
+    """Remove the installed app directory. Returns True if something was removed.
+
+    Leaves user config/data untouched (those live elsewhere, e.g.
+    platformdirs.user_data_dir). Safe to call while running from inside the
+    install dir on Linux (open files survive unlink).
+    """
+    d = install_dir(home)
+    if d.exists():
+        shutil.rmtree(d)
+        return True
+    return False
 
 
 def launch_installed(home: Path | None = None) -> None:

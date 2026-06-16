@@ -9,7 +9,7 @@ from romhop import install_bootstrap as ib
 
 def test_install_dir_linux(tmp_path, monkeypatch):
     monkeypatch.setattr(os, "name", "posix")
-    assert ib.install_dir(home=tmp_path) == tmp_path / ".local" / "share" / "romhop"
+    assert ib.install_dir(home=tmp_path) == tmp_path / ".local" / "lib" / "romhop"
 
 
 def test_install_dir_windows(tmp_path, monkeypatch):
@@ -75,3 +75,17 @@ def test_launch_installed_execs_launcher(tmp_path, monkeypatch):
     expected = str(ib.install_dir(home=tmp_path) / "romhop")
     assert calls["path"] == expected
     assert calls["argv"] == [expected]
+
+
+def test_remove_install(tmp_path, monkeypatch):
+    monkeypatch.setattr(os, "name", "posix")
+    src = _fake_onedir(tmp_path)
+    ib.extract_and_install(src, home=tmp_path)
+    assert ib.is_installed(home=tmp_path) is True
+    assert ib.remove_install(home=tmp_path) is True
+    assert ib.is_installed(home=tmp_path) is False
+
+
+def test_remove_install_noop_when_absent(tmp_path, monkeypatch):
+    monkeypatch.setattr(os, "name", "posix")
+    assert ib.remove_install(home=tmp_path) is False
