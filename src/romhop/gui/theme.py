@@ -34,8 +34,8 @@ def render_qss(base_qss: str, tokens: dict[str, str]) -> str:
     newline could close the current QSS rule and inject arbitrary styling
     (UI spoofing only, no code execution). Acceptable while themes are local
     drop-ins the user installs themselves; sanitize values before this becomes
-    an installable-from-untrusted-source path (same trust boundary as the
-    Zip Slip TODO in install_theme).
+    an installable-from-untrusted-source path (install_theme already guards
+    Zip Slip on the same trust boundary).
     """
     merged = {**DEFAULT_TOKENS, **tokens}
     out = base_qss
@@ -113,10 +113,15 @@ def install_theme(zip_path: Path) -> str:
         if not name or "/" in name or "\\" in name or name.startswith("."):
             raise ValueError(f"Invalid theme name: {name!r}")
         dest = themes_dir() / name
+        # Reject Zip Slip: every member must resolve inside dest. Checked
+        # against the resolved dest so symlinked config dirs don't false-trip.
+        dest_root = dest.resolve()
+        for member in zf.namelist():
+            target = (dest_root / member).resolve()
+            if target != dest_root and dest_root not in target.parents:
+                raise ValueError(f"Unsafe theme entry escapes install dir: {member!r}")
         if dest.exists():
             shutil.rmtree(dest)
         dest.mkdir(parents=True)
-        # TODO: validate zip entries for path traversal (Zip Slip) before
-        # extractall if themes ever get installed from untrusted/remote sources.
         zf.extractall(dest)
     return name

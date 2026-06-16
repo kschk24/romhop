@@ -99,6 +99,18 @@ def test_install_theme_rejects_unsafe_name(tmp_path, monkeypatch):
         theme.install_theme(src)
 
 
+def test_install_theme_rejects_zip_slip_entry(tmp_path, monkeypatch):
+    dest = tmp_path / "themes"
+    monkeypatch.setattr(theme, "themes_dir", lambda: dest)
+    src = tmp_path / "slip.romhop-theme"
+    with zipfile.ZipFile(src, "w") as zf:
+        zf.writestr("manifest.json", json.dumps({"name": "slip"}))
+        zf.writestr("../../escape.txt", "pwned")
+    with pytest.raises(ValueError):
+        theme.install_theme(src)
+    assert not (tmp_path / "escape.txt").exists()
+
+
 def test_load_active_theme_resolves_user_theme(tmp_path, monkeypatch):
     dest = tmp_path / "themes"
     (dest / "midnight").mkdir(parents=True)
