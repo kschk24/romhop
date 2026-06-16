@@ -1,0 +1,4 @@
+#!/bin/sh
+# AppImage entry. The bundled exe handles first-run install via --appimage-bootstrap.
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/bin/romhop/romhop" --appimage-bootstrap
