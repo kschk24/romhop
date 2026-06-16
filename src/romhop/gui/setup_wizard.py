@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -144,6 +147,28 @@ class PathsPage(QWizardPage):
         return bool(self.roms_edit.text().strip())
 
 
+class ScanPage(QWizardPage):
+    """Optional post-setup scan to seed the mapping cache for games already on
+    disk. Disabled when no ROMs folder was given on the previous page."""
+
+    def __init__(self, paths_page, parent=None):
+        super().__init__(parent)
+        self.setTitle("Finish")
+        self._paths_page = paths_page
+        self.scan_check = QCheckBox(
+            "Scan local library now to enable save sync for existing games")
+        self.scan_check.setChecked(True)
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.scan_check)
+        layout.addWidget(QLabel("Click Finish to save your settings."))
+
+    def initializePage(self) -> None:  # noqa: N802 (Qt override)
+        has_roms = bool(self._paths_page.roms_edit.text().strip())
+        self.scan_check.setEnabled(has_roms)
+        if not has_roms:
+            self.scan_check.setChecked(False)
+
+
 class SetupWizard(QWizard):
     """First-run wizard: Connection -> Paths -> Scan. Emits completed(settings,
     do_scan) on Finish. Backend access is injected (validate_fn,
@@ -163,3 +188,26 @@ class SetupWizard(QWizard):
 
         self.paths_page = PathsPage(detect_retroarch_fn)
         self.addPage(self.paths_page)
+
+        self.scan_page = ScanPage(self.paths_page)
+        self.addPage(self.scan_page)
+
+    def accept(self) -> None:  # noqa: N802 (Qt override)
+        import romhop.config as config
+        settings = config.load_settings()
+        settings.romm_url = self.connection_page.url_edit.text().strip()
+        settings.roms_root = Path(self.paths_page.roms_edit.text().strip()).expanduser()
+        saves = self.paths_page.saves_edit.text().strip()
+        states = self.paths_page.states_edit.text().strip()
+        if saves:
+            settings.saves_dir = Path(saves).expanduser()
+        if states:
+            settings.states_dir = Path(states).expanduser()
+        settings.sort_saves_by_core = self.paths_page.sort_saves
+        settings.sort_states_by_core = self.paths_page.sort_states
+        self._persist(settings)
+        token = self.connection_page.token_edit.text().strip()
+        if token:
+            config.set_token(token)
+        self.completed.emit(settings, self.scan_page.scan_check.isChecked())
+        super().accept()

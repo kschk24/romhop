@@ -81,3 +81,49 @@ def test_paths_page_complete_requires_roms(qtbot):
     assert page.isComplete() is False
     page.roms_edit.setText("/games/roms")
     assert page.isComplete() is True
+
+
+def test_finish_persists_and_emits(qtbot, monkeypatch, tmp_path):
+    import romhop.config as config
+    saved = {}
+    tokens = {}
+    monkeypatch.setattr(config, "set_token", lambda t: tokens.setdefault("v", t))
+    monkeypatch.setattr(config, "get_token", lambda: None)
+    monkeypatch.setattr(config, "load_settings", config.default_settings)
+
+    wiz = SetupWizard(validate_fn=lambda u, t: None,
+                      detect_retroarch_fn=_noop_detect,
+                      persist=lambda s: saved.setdefault("settings", s))
+    qtbot.addWidget(wiz)
+    wiz.connection_page.url_edit.setText("http://romm.test")
+    wiz.connection_page.token_edit.setText("rmm_new")
+    wiz.paths_page.roms_edit.setText(str(tmp_path / "roms"))
+    wiz.paths_page.saves_edit.setText(str(tmp_path / "saves"))
+    wiz.paths_page.states_edit.setText(str(tmp_path / "states"))
+    wiz.scan_page.scan_check.setChecked(True)
+
+    with qtbot.waitSignal(wiz.completed, timeout=2000) as blocker:
+        wiz.accept()
+
+    settings, do_scan = blocker.args
+    assert saved["settings"].romm_url == "http://romm.test"
+    assert str(saved["settings"].roms_root).endswith("roms")
+    assert tokens["v"] == "rmm_new"
+    assert do_scan is True
+
+
+def test_finish_blank_token_keeps_existing(qtbot, monkeypatch, tmp_path):
+    import romhop.config as config
+    calls = []
+    monkeypatch.setattr(config, "set_token", lambda t: calls.append(t))
+    monkeypatch.setattr(config, "get_token", lambda: "rmm_existing")
+    monkeypatch.setattr(config, "load_settings", config.default_settings)
+
+    wiz = SetupWizard(validate_fn=lambda u, t: None,
+                      detect_retroarch_fn=_noop_detect, persist=lambda s: None)
+    qtbot.addWidget(wiz)
+    wiz.connection_page.url_edit.setText("http://romm.test")
+    wiz.paths_page.roms_edit.setText(str(tmp_path / "roms"))
+    with qtbot.waitSignal(wiz.completed, timeout=2000):
+        wiz.accept()
+    assert calls == []  # blank token -> set_token never called
