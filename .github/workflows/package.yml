@@ -1,0 +1,80 @@
+name: package
+on:
+  push:
+    tags: ['v*']   # release only on version tags (e.g. v0.2.0), never on every push
+
+permissions:
+  contents: write   # needed to create the Release and upload assets
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Set up venv + deps
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -e ".[gui]" pyinstaller
+      - name: Freeze
+        run: cd packaging && ../.venv/bin/pyinstaller romhop.spec
+      - name: Smoke test (headless)
+        run: QT_QPA_PLATFORM=offscreen packaging/dist/romhop/romhop --smoke-exit
+      - name: Install appimagetool
+        run: |
+          curl -L -o /usr/local/bin/appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /usr/local/bin/appimagetool
+      - name: Build AppImage
+        run: ./packaging/linux/build_appimage.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/romhop-installer-*.AppImage
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Set up venv + deps
+        run: |
+          python -m venv .venv
+          .venv\Scripts\pip install -e ".[gui]" pyinstaller
+      - name: Freeze
+        run: cd packaging; ..\.venv\Scripts\pyinstaller romhop.spec
+      - name: Smoke test (headless)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: packaging\dist\romhop\romhop.exe --smoke-exit
+      - name: Build installer
+        env:
+          ROMHOP_VERSION: ${{ github.ref_name }}
+        run: |
+          choco install innosetup --no-progress -y
+          iscc packaging\windows\romhop.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: packaging/dist/romhop-setup-*.exe
+
+  release:
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Collect + checksum
+        run: |
+          mkdir release
+          find artifacts -type f \( -name '*.AppImage' -o -name '*.exe' \) -exec cp {} release/ \;
+          cd release && sha256sum * > SHA256SUMS
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
