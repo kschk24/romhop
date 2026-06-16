@@ -5,8 +5,63 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _maybe_uninstall(argv) -> bool:
+    """Handle `--uninstall` for the Linux frozen install. Returns True if handled."""
+    if "--uninstall" not in argv:
+        return False
+    import sys as _sys
+
+    from romhop import install_bootstrap as ib
+    from romhop.gui import launcher_install as li
+
+    li.uninstall_linux()          # remove .desktop entries + icons
+    ib.remove_install()           # remove the installed app dir
+    print("romhop uninstalled")
+    _sys.exit(0)
+
+
+def _maybe_bootstrap(argv) -> bool:
+    """Handle the AppImage first-run install. Returns True if handled (caller exits).
+
+    Extraction/install errors propagate uncaught (no user-facing error UI yet).
+    """
+    if "--appimage-bootstrap" not in argv:
+        return False
+    import sys as _sys
+    from pathlib import Path
+
+    from romhop import install_bootstrap as ib
+    from romhop.gui import launcher_install as li
+
+    if not ib.is_installed():
+        src = Path(_sys.executable).parent  # the onedir we are frozen into
+        launcher = ib.extract_and_install(src)
+        li.install_linux(exec_path=str(launcher))
+    ib.launch_installed()  # execv — does not return
+    return True
+
+
+def _maybe_smoke_exit(argv) -> bool:
+    """CI headless check: build a QApplication and exit 0. Returns True if handled."""
+    if "--smoke-exit" not in argv:
+        return False
+    import sys as _sys
+
+    from PySide6.QtWidgets import QApplication
+
+    QApplication(_sys.argv)  # fails loudly if the Qt platform plugin is missing
+    print("romhop smoke ok")
+    _sys.exit(0)
+
+
 def run() -> None:
     import sys as _sys
+    if _maybe_uninstall(_sys.argv):
+        return
+    if _maybe_bootstrap(_sys.argv):
+        return
+    if _maybe_smoke_exit(_sys.argv):
+        return
     from pathlib import Path
 
     import platformdirs

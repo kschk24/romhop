@@ -22,6 +22,7 @@ from pathlib import Path
 APP_NAME = "RomHop"
 COMMENT = "Sync your RomM library with ES-DE/RetroArch"
 LAUNCHER_STEM = "romhop-gui"
+UNINSTALL_NAME = "Uninstall RomHop"
 
 
 def launcher_path() -> Path:
@@ -64,6 +65,20 @@ def desktop_entry_text(exec_path: str) -> str:
     )
 
 
+def uninstall_desktop_entry_text(exec_path: str) -> str:
+    return (
+        "[Desktop Entry]\n"
+        f"Name={UNINSTALL_NAME}\n"
+        f"Comment=Remove RomHop\n"
+        f"Exec={exec_path} --uninstall\n"
+        "Icon=romhop\n"
+        "Terminal=false\n"
+        "Type=Application\n"
+        "Categories=Game;Utility;\n"
+        "StartupNotify=false\n"
+    )
+
+
 def shortcut_ps(target: str, icon: str, lnk: str) -> str:
     """PowerShell to create a Windows Start Menu .lnk via WScript.Shell."""
     return (
@@ -92,6 +107,7 @@ def _linux_paths(home: Path) -> dict[str, Path]:
     share = home / ".local" / "share"
     return {
         "desktop": share / "applications" / "romhop.desktop",
+        "uninstall_desktop": share / "applications" / "romhop-uninstall.desktop",
         "icon_png": share / "icons" / "hicolor" / "256x256" / "apps" / "romhop.png",
         "icon_svg": share / "icons" / "hicolor" / "scalable" / "apps" / "romhop.svg",
     }
@@ -110,6 +126,9 @@ def install_linux(home: Path | None = None, exec_path: str | None = None) -> lis
     paths["desktop"].parent.mkdir(parents=True, exist_ok=True)
     paths["desktop"].write_text(desktop_entry_text(exec_path), encoding="utf-8")
     written.append(paths["desktop"])
+
+    paths["uninstall_desktop"].write_text(uninstall_desktop_entry_text(exec_path), encoding="utf-8")
+    written.append(paths["uninstall_desktop"])
 
     for asset_name, key in (("romhop.png", "icon_png"), ("romhop.svg", "icon_svg")):
         src = asset(asset_name)
