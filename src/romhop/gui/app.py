@@ -12,7 +12,8 @@ def run() -> None:
     import platformdirs
     from PySide6.QtWidgets import QApplication
 
-    from romhop.config import get_token, load_settings
+    from romhop import retroarch_cfg
+    from romhop.config import get_token, is_configured, load_settings
     from romhop.download import download_rom, friendly_download_error, DownloadCancelled
     from romhop.gui import covers
     from romhop.gui.main_window import MainWindow
@@ -82,6 +83,27 @@ def run() -> None:
     def scan_action(settings):
         return run_scan(client, cache, names, settings)
 
+    def validate_fn(url, token):
+        # Throwaway client: base_url is baked into httpx.Client at construction,
+        # so testing arbitrary creds means a fresh client, not the live one.
+        RommClient(base_url=url, token=token).ping()
+
+    def detect_retroarch_fn():
+        folder = None
+        if _sys.platform.startswith("win"):
+            from PySide6.QtWidgets import QFileDialog
+            picked = QFileDialog.getExistingDirectory(None, "RetroArch installation folder")
+            folder = Path(picked) if picked else None
+        return retroarch_cfg.detect(folder)
+
+    def recreate_client(new_settings):
+        # The wizard may have changed the URL and RommClient has no base_url
+        # setter, so rebuild it. The closures above read `client` at call time,
+        # so this nonlocal rebind takes effect for all of them.
+        nonlocal client
+        client = RommClient(base_url=new_settings.romm_url, token=get_token() or "")
+        apply_settings(new_settings)
+
     app = QApplication(_sys.argv)
     # Hiding the window must not quit the app — the sync worker lives on.
     app.setQuitOnLastWindowClosed(False)
@@ -101,17 +123,27 @@ def run() -> None:
         platform_label=platform_label,
         platform_names=names,
         scan_action=scan_action,
-        apply_token=client.set_token,
+        apply_token=lambda t: client.set_token(t),  # late-bind: recreate_client may swap client
         apply_settings=apply_settings,
+        validate_fn=validate_fn,
+        detect_retroarch_fn=detect_retroarch_fn,
+        recreate_client=recreate_client,
     )
     instance.activated.connect(window.show_and_raise)
     window.resize(900, 600)
-    # An unconfigured or unreachable RomM must not crash startup: open the
-    # window empty and surface the failure in the status bar instead.
-    try:
-        window.load_library()
-    except Exception as exc:  # noqa: BLE001 - keep the window alive
-        logger.warning("Could not load RomM library at startup: %s", exc)
-        window.set_sync_status(f"library load failed: {exc}")
-    window.show()
+    if not is_configured(settings):
+        # Unconfigured: guide the user before trying to talk to RomM. The
+        # wizard's completion handler refreshes the library itself; a cancel
+        # leaves the window empty (nothing to load anyway).
+        window.show()
+        window.run_setup_wizard()
+    else:
+        # An unreachable RomM must not crash startup: open the window empty and
+        # surface the failure in the status bar instead.
+        try:
+            window.load_library()
+        except Exception as exc:  # noqa: BLE001 - keep the window alive
+            logger.warning("Could not load RomM library at startup: %s", exc)
+            window.set_sync_status(f"library load failed: {exc}")
+        window.show()
     _sys.exit(app.exec())
