@@ -5,15 +5,49 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _prompt_purge_user_data() -> bool:
+    """Ask (GUI) whether to also delete config + app data on uninstall.
+
+    The "Uninstall RomHop" launcher runs with ``Terminal=false`` from the app
+    menu, so there is no console to prompt on — use a QMessageBox. Default is No
+    (a wipe is destructive). Returns False if Qt is unavailable rather than
+    risking an unwanted delete.
+    """
+    try:
+        from PySide6.QtWidgets import QApplication, QMessageBox
+    except Exception:
+        return False
+    QApplication.instance() or QApplication([])
+    box = QMessageBox()
+    box.setIcon(QMessageBox.Question)
+    box.setWindowTitle("Uninstall RomHop")
+    box.setText("Also remove RomHop's settings and local cache?")
+    box.setInformativeText(
+        "Will delete:\n"
+        "  • RomHop settings (settings.ini)\n"
+        "  • RomHop cache (save↔game mapping, platform names)\n"
+        "\n"
+        "Will NOT touch:\n"
+        "  • Your downloaded ROM library\n"
+        "  • Your RetroArch save files and savestates"
+    )
+    box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+    box.setDefaultButton(QMessageBox.No)
+    return box.exec() == QMessageBox.Yes
+
+
 def _maybe_uninstall(argv) -> bool:
     """Handle `--uninstall` for the Linux frozen install. Returns True if handled."""
     if "--uninstall" not in argv:
         return False
     import sys as _sys
 
+    from romhop import config
     from romhop import install_bootstrap as ib
     from romhop.gui import launcher_install as li
 
+    if _prompt_purge_user_data():
+        config.purge_user_data()  # config + app data; never the ROM library
     li.uninstall_linux()          # remove .desktop entries + icons
     ib.unlink_cli()               # remove the ~/.local/bin/romhop CLI symlink
     ib.remove_install()           # remove the installed app dir

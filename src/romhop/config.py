@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import configparser
+import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -95,6 +96,30 @@ def coerce_value(type_: str, raw: str):
 
 def settings_path() -> Path:
     return Path(platformdirs.user_config_dir("romhop")) / "settings.ini"
+
+
+def user_data_dir() -> Path:
+    """romhop's app-data dir (mapping cache, platform names). Distinct from the
+    user's ROM library (roms_root) and from the install dir."""
+    return Path(platformdirs.user_data_dir("romhop"))
+
+
+def purge_user_data(dirs: list[Path] | None = None) -> list[Path]:
+    """Delete romhop's config + app-data dirs (settings.ini, mapping cache,
+    platform names). Returns the dirs that were removed.
+
+    Deliberately does NOT touch the user's downloaded ROM library (roms_root):
+    that is user data living at a user-chosen path, not romhop-owned. Both the
+    Linux ``--uninstall`` prompt and the Windows uninstaller call this.
+    """
+    if dirs is None:
+        dirs = [settings_path().parent, user_data_dir()]
+    removed: list[Path] = []
+    for d in dirs:
+        if d.exists():
+            shutil.rmtree(d)
+            removed.append(d)
+    return removed
 
 
 # Sentinel for an unset ROMs root. There is no universal default ROM library

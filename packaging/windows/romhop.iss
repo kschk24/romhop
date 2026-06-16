@@ -53,7 +53,9 @@ begin
   Result := Pos(';' + Uppercase(Dir) + ';', ';' + Uppercase(Path) + ';') = 0;
 end;
 
-// Strip {app} from the user PATH on uninstall, collapsing the leftover ';'.
+// Strip {app} from the user PATH on uninstall, collapsing the leftover ';',
+// and offer to wipe config + saved data (opt-in; the ROM library is left
+// alone). Mirrors the Linux --uninstall prompt.
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   Path, Dir: string;
@@ -61,6 +63,23 @@ var
 begin
   if CurUninstallStep <> usUninstall then
     exit;
+
+  // Opt-in wipe of config (%APPDATA%\romhop = platformdirs user_config_dir) and
+  // app data (%LOCALAPPDATA%\romhop = user_data_dir: mapping cache, platform
+  // names). Default No; the user's downloaded ROM library is never touched.
+  if MsgBox('Also remove RomHop''s settings and local cache?' #13#10 #13#10
+            'Will delete:' #13#10
+            '  - RomHop settings (settings.ini)' #13#10
+            '  - RomHop cache (save-to-game mapping, platform names)' #13#10 #13#10
+            'Will NOT touch:' #13#10
+            '  - Your downloaded ROM library' #13#10
+            '  - Your RetroArch save files and savestates',
+            mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+  begin
+    DelTree(ExpandConstant('{userappdata}\romhop'), True, True, True);
+    DelTree(ExpandConstant('{localappdata}\romhop'), True, True, True);
+  end;
+
   if not RegQueryStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', Path) then
     exit;
   Dir := ExpandConstant('{app}');

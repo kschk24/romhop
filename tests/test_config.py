@@ -286,3 +286,41 @@ def test_is_configured_false_when_token_missing(monkeypatch):
     s = config.default_settings()
     s.romm_url = "http://romm.test"
     assert config.is_configured(s) is False
+
+
+def test_purge_user_data_removes_given_dirs(tmp_path):
+    from romhop import config
+
+    cfg = tmp_path / "config" / "romhop"
+    data = tmp_path / "data" / "romhop"
+    cfg.mkdir(parents=True)
+    (cfg / "settings.ini").write_text("x")
+    data.mkdir(parents=True)
+    (data / "mapping_cache.json").write_text("{}")
+    missing = tmp_path / "gone"
+
+    removed = config.purge_user_data([cfg, data, missing])
+
+    assert not cfg.exists() and not data.exists()
+    assert removed == [cfg, data]  # missing dir skipped, not reported
+
+
+def test_purge_user_data_default_dirs_exclude_roms_and_saves(tmp_path, monkeypatch):
+    """Default scope is romhop's config + app-data dirs only; the ROM library
+    and RetroArch saves/states live elsewhere and must never be in scope."""
+    from romhop import config
+
+    cfg = tmp_path / "config" / "romhop"
+    data = tmp_path / "data" / "romhop"
+    roms = tmp_path / "roms"
+    saves = tmp_path / "retroarch" / "saves"
+    for d in (cfg, data, roms, saves):
+        d.mkdir(parents=True)
+
+    monkeypatch.setattr(config, "settings_path", lambda: cfg / "settings.ini")
+    monkeypatch.setattr(config, "user_data_dir", lambda: data)
+
+    removed = config.purge_user_data()
+
+    assert removed == [cfg, data]
+    assert roms.exists() and saves.exists()  # untouched
