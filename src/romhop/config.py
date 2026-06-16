@@ -127,6 +127,12 @@ def roms_root_configured(settings: Settings) -> bool:
     return str(settings.roms_root) not in ("", ".")
 
 
+def is_configured(settings: Settings) -> bool:
+    """True when the RomM connection is usable: a URL is set and a token is in
+    the keyring. Drives whether the GUI auto-launches the setup wizard."""
+    return bool(settings.romm_url) and bool(get_token())
+
+
 _OVERRIDE_SECTIONS = (
     ("platform_overrides", "platform_overrides"),
     ("core_overrides", "core_overrides"),

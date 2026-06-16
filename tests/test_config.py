@@ -262,3 +262,27 @@ def test_ini_wins_over_legacy_json(tmp_path):
     ini = tmp_path / "settings.ini"
     ini.write_text("[connection]\nromm_url = http://current\n")
     assert config.load_settings(ini).romm_url == "http://current"
+
+
+def test_is_configured_true_when_url_and_token(monkeypatch):
+    from romhop import config
+    monkeypatch.setattr(config, "get_token", lambda: "rmm_x")
+    s = config.default_settings()
+    s.romm_url = "http://romm.test"
+    assert config.is_configured(s) is True
+
+
+def test_is_configured_false_when_url_missing(monkeypatch):
+    from romhop import config
+    monkeypatch.setattr(config, "get_token", lambda: "rmm_x")
+    s = config.default_settings()
+    s.romm_url = ""
+    assert config.is_configured(s) is False
+
+
+def test_is_configured_false_when_token_missing(monkeypatch):
+    from romhop import config
+    monkeypatch.setattr(config, "get_token", lambda: None)
+    s = config.default_settings()
+    s.romm_url = "http://romm.test"
+    assert config.is_configured(s) is False
