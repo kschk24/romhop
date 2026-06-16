@@ -5,10 +5,10 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-06-16 15:03'
-updated_date: '2026-06-16 17:04'
+updated_date: '2026-06-16 22:06'
 labels:
   - bug
-  - packaging
+  - ready-for-human
 dependencies: []
 priority: medium
 ordinal: 1000

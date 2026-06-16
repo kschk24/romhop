@@ -4,8 +4,10 @@ title: Upload unmatched local games to RomM
 status: To Do
 assignee: []
 created_date: '2026-06-16 15:07'
+updated_date: '2026-06-16 22:07'
 labels:
   - feature
+  - blocked
 dependencies: []
 priority: low
 ordinal: 17000

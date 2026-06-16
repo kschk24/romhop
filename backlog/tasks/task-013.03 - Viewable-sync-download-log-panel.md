@@ -4,9 +4,10 @@ title: Viewable sync/download log panel
 status: To Do
 assignee: []
 created_date: '2026-06-16 15:04'
+updated_date: '2026-06-16 22:07'
 labels:
   - feature
-  - gui
+  - needs-info
 dependencies: []
 parent_task_id: TASK-013
 priority: low

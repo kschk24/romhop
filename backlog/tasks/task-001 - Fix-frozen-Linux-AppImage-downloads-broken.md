@@ -4,10 +4,10 @@ title: Validate roms_root before download; friendly error instead of raw traceba
 status: To Do
 assignee: []
 created_date: '2026-06-16 15:03'
-updated_date: '2026-06-16 15:44'
+updated_date: '2026-06-16 22:06'
 labels:
   - bug
-  - cli
+  - ready-for-agent
 dependencies: []
 priority: medium
 ordinal: 1000

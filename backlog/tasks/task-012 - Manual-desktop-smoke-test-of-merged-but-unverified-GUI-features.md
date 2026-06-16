@@ -4,9 +4,10 @@ title: Manual desktop smoke test of merged-but-unverified GUI features
 status: To Do
 assignee: []
 created_date: '2026-06-16 15:04'
+updated_date: '2026-06-16 22:07'
 labels:
-  - qa
-  - gui
+  - chore
+  - ready-for-human
 dependencies: []
 priority: medium
 ordinal: 12000

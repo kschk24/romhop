@@ -4,10 +4,10 @@ title: Windows installer shows git branch name instead of clean name/semver
 status: To Do
 assignee: []
 created_date: '2026-06-16 15:03'
+updated_date: '2026-06-16 22:06'
 labels:
   - bug
-  - packaging
-  - windows
+  - ready-for-agent
 dependencies: []
 priority: medium
 ordinal: 4000

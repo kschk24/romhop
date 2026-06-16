@@ -4,11 +4,10 @@ title: Frozen Windows download progress bar does not render
 status: To Do
 assignee: []
 created_date: '2026-06-16 15:03'
+updated_date: '2026-06-16 22:06'
 labels:
   - bug
-  - gui
-  - packaging
-  - windows
+  - ready-for-human
 dependencies: []
 priority: medium
 ordinal: 5000

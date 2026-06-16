@@ -4,9 +4,10 @@ title: Start on login (autostart) toggle
 status: To Do
 assignee: []
 created_date: '2026-06-16 15:07'
+updated_date: '2026-06-16 22:07'
 labels:
   - feature
-  - gui
+  - ready-for-agent
 dependencies: []
 priority: low
 ordinal: 19000

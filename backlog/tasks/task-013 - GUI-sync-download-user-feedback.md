@@ -4,9 +4,9 @@ title: GUI sync/download user feedback
 status: To Do
 assignee: []
 created_date: '2026-06-16 15:04'
+updated_date: '2026-06-16 22:07'
 labels:
   - feature
-  - gui
 dependencies: []
 priority: low
 ordinal: 13000
