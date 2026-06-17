@@ -1,6 +1,6 @@
 import httpx
 
-from romhop.romm_client import RommClient, Rom
+from romhop.romm_client import RommClient, Rom, RomDetail
 
 
 def _client(handler) -> RommClient:
@@ -262,3 +262,40 @@ def test_ping_raises_on_http_error():
 
     with pytest.raises(httpx.HTTPStatusError):
         _client(handler).ping()
+
+
+def test_get_rom_parses_detail():
+    def handler(request):
+        assert request.url.path == "/api/roms/42"
+        return httpx.Response(200, json={
+            "id": 42, "name": "Sonic",
+            "summary": "A fast hedgehog.",
+            "first_release_date_string": "1991",
+            "genres": [{"name": "Platform"}, {"name": "Action"}],
+            "fs_size_bytes": 524288,
+        })
+
+    detail = _client(handler).get_rom(42)
+    assert isinstance(detail, RomDetail)
+    assert detail.summary == "A fast hedgehog."
+    assert detail.release_date == "1991"
+    assert detail.genres == ["Platform", "Action"]
+    assert detail.file_size == 524288
+
+
+def test_get_rom_tolerates_missing_fields():
+    def handler(request):
+        return httpx.Response(200, json={"id": 7, "name": "Bare"})
+
+    detail = _client(handler).get_rom(7)
+    assert detail.summary is None
+    assert detail.release_date is None
+    assert detail.genres == []
+    assert detail.file_size is None
+
+
+def test_get_rom_accepts_plain_string_genres():
+    def handler(request):
+        return httpx.Response(200, json={"genres": ["RPG"]})
+
+    assert _client(handler).get_rom(1).genres == ["RPG"]

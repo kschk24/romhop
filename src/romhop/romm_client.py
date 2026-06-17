@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.parse import quote
 
 import httpx
@@ -21,6 +21,24 @@ class Rom:
     has_multiple_files: bool = False
     url_cover: str | None = None
     platform_name: str | None = None
+
+
+@dataclass
+class RomDetail:
+    summary: str | None = None
+    release_date: str | None = None
+    genres: list[str] = field(default_factory=list)
+    file_size: int | None = None
+
+
+def _genre_names(raw) -> list[str]:
+    names: list[str] = []
+    for g in raw or []:
+        if isinstance(g, str):
+            names.append(g)
+        elif isinstance(g, dict) and g.get("name"):
+            names.append(g["name"])
+    return names
 
 
 class RommClient:
@@ -98,6 +116,20 @@ class RommClient:
             cl = resp.headers.get("content-length")
             total = int(cl) if cl is not None else None
             yield total, resp.iter_bytes()
+
+    def get_rom(self, rom_id: int) -> RomDetail:
+        """Fetch one rom's detail metadata. Every field is optional — RomM may
+        omit any of them. NOTE: key names (first_release_date_string,
+        fs_size_bytes) are assumed; confirm against the live server."""
+        resp = self._http.get(f"/api/roms/{rom_id}")
+        resp.raise_for_status()
+        item = resp.json()
+        return RomDetail(
+            summary=item.get("summary") or None,
+            release_date=item.get("first_release_date_string") or None,
+            genres=_genre_names(item.get("genres")),
+            file_size=item.get("fs_size_bytes"),
+        )
 
     def list_saves(self, rom_id: int) -> list[dict]:
         resp = self._http.get("/api/saves", params={"rom_id": rom_id})
