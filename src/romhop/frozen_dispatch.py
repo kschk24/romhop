@@ -13,6 +13,7 @@ Qt-free: GUI/CLI are imported lazily so this module stays importable without the
 GUI extra (CLAUDE.md core invariant).
 """
 
+import os
 import sys
 
 # Flags consumed by the GUI launch path (gui.app.run); they must NOT trigger CLI
@@ -54,6 +55,13 @@ def main(argv: list[str] | None = None) -> None:
 
         app()
     else:
+        # Prevent the bundled libatk-bridge-2.0 from registering with the
+        # system AT-SPI2 D-Bus service. The bundled Ubuntu 24.04 build of
+        # libatk-bridge can segfault against a different-version system daemon
+        # (Fedora, Arch, newer Ubuntu). NO_AT_BRIDGE=1 skips bridge init while
+        # leaving Qt's own accessibility intact.
+        if sys.platform.startswith("linux"):
+            os.environ.setdefault("NO_AT_BRIDGE", "1")
         from romhop.gui.app import run
 
         run()
