@@ -5,6 +5,8 @@
 # the parent console on Windows. PySide6's bundled PyInstaller hook collects the
 # Qt platform plugins (qxcb/qoffscreen/qwindows) automatically; the --smoke-exit
 # CI gate catches any that are missed.
+import os
+
 from PyInstaller.utils.hooks import collect_data_files
 
 datas = collect_data_files(
@@ -23,6 +25,17 @@ a = Analysis(
     excludes=["tkinter"],
     noarchive=False,
 )
+# Drop the bundled libxkbcommon: it must match the host's XKB keymap data (under
+# /usr/share/X11/xkb). A copy collected from the build host cannot build a valid
+# xkb_state on a foreign distro, so xkb_state_key_get_layout dereferences garbage
+# and SIGSEGVs on the first keypress reaching a window/dialog (see TASK-025).
+# Excluding it lets the loader use the system lib (.so.0 ABI is stable) — the
+# standard Qt-on-Linux approach. No-op on Windows, which ships neither.
+a.binaries = [
+    b for b in a.binaries
+    if not os.path.basename(b[0]).startswith("libxkbcommon")
+]
+
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
