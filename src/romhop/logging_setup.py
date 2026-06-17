@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import logging.handlers
 import re
+import zipfile
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -101,3 +102,16 @@ def configure_logging(
         stream_handler.addFilter(redact)
         stream_handler._romhop_managed = True  # type: ignore[attr-defined]
         root.addHandler(stream_handler)
+
+
+def get_log_dir() -> Path:
+    return Path(platformdirs.user_log_dir("romhop"))
+
+
+def export_logs(dest_path: Path) -> None:
+    """Zip all current and rotated log files to dest_path."""
+    log_dir = get_log_dir()
+    log_files = sorted(log_dir.glob("romhop.log*"))
+    with zipfile.ZipFile(dest_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for f in log_files:
+            zf.write(f, arcname=f.name)

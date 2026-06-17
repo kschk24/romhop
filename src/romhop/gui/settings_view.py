@@ -5,6 +5,7 @@ from dataclasses import replace
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
+    QFileDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -33,9 +34,12 @@ class SettingsView(QWidget):
     token_changed = Signal(str)  # emitted with the new token on a non-blank save
     update_check_requested = Signal()
 
-    def __init__(self, settings: Settings, parent=None):
+    def __init__(self, settings: Settings, parent=None, *,
+                 open_log_dir_fn=None, export_logs_fn=None):
         super().__init__(parent)
         self._settings = settings
+        self._open_log_dir_fn = open_log_dir_fn
+        self._export_logs_fn = export_logs_fn
         # label -> editor widget (QLineEdit or QCheckBox)
         self._edits: dict[str, QWidget] = {}
         # label -> the QFormLayout holding its row (for show/hide)
@@ -91,6 +95,18 @@ class SettingsView(QWidget):
         scan_row.addWidget(self.update_check_btn)
         scan_row.addStretch(1)
         layout.addLayout(scan_row)
+
+        self.open_log_btn = QPushButton("Open log folder")
+        self.open_log_btn.setObjectName("OpenLogFolderButton")
+        self.open_log_btn.clicked.connect(self._on_open_log_folder)
+        self.export_logs_btn = QPushButton("Export logs…")
+        self.export_logs_btn.setObjectName("ExportLogsButton")
+        self.export_logs_btn.clicked.connect(self._on_export_logs)
+        log_row = QHBoxLayout()
+        log_row.addWidget(self.open_log_btn)
+        log_row.addWidget(self.export_logs_btn)
+        log_row.addStretch(1)
+        layout.addLayout(log_row)
 
         self._populate()
         self._refresh_scan_enabled()
@@ -152,6 +168,24 @@ class SettingsView(QWidget):
     # --- host integration ---
     def current_settings(self) -> Settings:
         return self._settings
+
+    # --- log actions ---
+    def _on_open_log_folder(self) -> None:
+        if self._open_log_dir_fn is not None:
+            self._open_log_dir_fn()
+
+    def _on_export_logs(self) -> None:
+        if self._export_logs_fn is None:
+            return
+        from pathlib import Path
+        import os
+        desktop = Path(os.path.expanduser("~/Desktop"))
+        default_dir = str(desktop) if desktop.is_dir() else os.path.expanduser("~")
+        dest, _ = QFileDialog.getSaveFileName(
+            self, "Export logs", f"{default_dir}/romhop-logs.zip", "Zip files (*.zip)"
+        )
+        if dest:
+            self._export_logs_fn(Path(dest))
 
     # --- scan action ---
     def _refresh_scan_enabled(self) -> None:

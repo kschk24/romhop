@@ -206,6 +206,14 @@ def run() -> None:
     live = {"settings": settings}
 
     def apply_settings(new_settings):
+        if new_settings.debug_logging != live["settings"].debug_logging:
+            from romhop.logging_setup import configure_logging
+            configure_logging(
+                debug=new_settings.debug_logging,
+                verbose=False,
+                token=get_token() or "",
+                romm_url=new_settings.romm_url,
+            )
         live["settings"] = new_settings
 
     def download_action(rom, on_progress=None, stop_event=None):
@@ -285,6 +293,16 @@ def run() -> None:
         update_apply_fn = None
         relaunch_fn = None
 
+    from romhop.logging_setup import export_logs, get_log_dir
+
+    def open_log_dir_fn():
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(get_log_dir())))
+
+    def export_logs_fn(dest_path):
+        export_logs(dest_path)
+
     app = QApplication(_sys.argv)
     # Hiding the window must not quit the app — the sync worker lives on.
     app.setQuitOnLastWindowClosed(False)
@@ -312,6 +330,8 @@ def run() -> None:
         update_check_fn=update_check_fn,
         update_apply_fn=update_apply_fn,
         relaunch_fn=relaunch_fn,
+        open_log_dir_fn=open_log_dir_fn,
+        export_logs_fn=export_logs_fn,
     )
     instance.activated.connect(window.show_and_raise)
     window.resize(900, 600)

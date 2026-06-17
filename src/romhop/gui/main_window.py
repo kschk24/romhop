@@ -83,7 +83,8 @@ class MainWindow(QWidget):
                  platform_label=None, platform_names=None, apply_token=None,
                  apply_settings=None, quit_fn=None, confirm_no_tray=None,
                  validate_fn=None, detect_retroarch_fn=None, recreate_client=None,
-                 update_check_fn=None, update_apply_fn=None, relaunch_fn=None):
+                 update_check_fn=None, update_apply_fn=None, relaunch_fn=None,
+                 open_log_dir_fn=None, export_logs_fn=None):
         super().__init__(parent)
         self._settings = settings
         self._apply_token = apply_token
@@ -138,7 +139,11 @@ class MainWindow(QWidget):
         self.filter_bar.sort_changed.connect(self.library.set_sort)
         # Search is context-dependent: it filters whichever view is active.
         self.search.textChanged.connect(self._on_search_changed)
-        self.settings_view = SettingsView(settings)
+        self.settings_view = SettingsView(
+            settings,
+            open_log_dir_fn=open_log_dir_fn,
+            export_logs_fn=export_logs_fn,
+        )
         self.settings_view.saved.connect(self._on_settings_saved)
         self.settings_view.cancelled.connect(self.show_library)
         self.settings_view.scan_requested.connect(self.run_scan)

@@ -333,3 +333,116 @@ def test_settings_form_has_download_rate_limit_field(qtbot, monkeypatch):
     view._edits["Download limit (KB/s, 0 = unlimited)"].setText("256")
     view._on_save()
     assert view.current_settings().download_rate_limit_kbps == 256
+
+
+# --- logging GUI controls (TASK-032) ---
+
+def test_settings_debug_logging_checkbox_auto_rendered(qtbot, monkeypatch):
+    from romhop.gui.settings_view import SettingsView
+    from romhop import config
+    monkeypatch.setattr(config, "save_settings", lambda s: None)
+    view = SettingsView(config.default_settings())
+    qtbot.addWidget(view)
+    assert "Detailed logging (debug)" in view._edits
+
+
+def test_settings_debug_logging_toggle_persists(qtbot, monkeypatch):
+    from romhop.gui.settings_view import SettingsView
+    from romhop import config
+    from PySide6.QtWidgets import QCheckBox
+    monkeypatch.setattr(config, "save_settings", lambda s: None)
+    view = SettingsView(config.default_settings())
+    qtbot.addWidget(view)
+    cb = view._edits["Detailed logging (debug)"]
+    assert isinstance(cb, QCheckBox)
+    assert not cb.isChecked()  # default False
+    cb.setChecked(True)
+    view._on_save()
+    assert view.current_settings().debug_logging is True
+
+
+def test_settings_debug_logging_live_apply_calls_configure_logging(qtbot, monkeypatch):
+    """Saving debug_logging=True must reconfigure the root logger to DEBUG."""
+    from romhop.gui.settings_view import SettingsView
+    from romhop import config
+    import romhop.logging_setup as ls
+    calls = []
+    monkeypatch.setattr(config, "save_settings", lambda s: None)
+    monkeypatch.setattr(ls, "configure_logging", lambda **kw: calls.append(kw))
+    monkeypatch.setattr(config, "get_token", lambda: "tok")
+
+    apply_calls = []
+
+    def fake_apply(new_settings):
+        # Simulate what app.py does: call configure_logging when debug changes.
+        import romhop.logging_setup as _ls
+        _ls.configure_logging(
+            debug=new_settings.debug_logging,
+            verbose=False,
+            token=config.get_token() or "",
+            romm_url=new_settings.romm_url,
+        )
+        apply_calls.append(new_settings)
+
+    from romhop.gui.main_window import MainWindow
+    settings = config.default_settings()
+    w = MainWindow(settings=settings, apply_settings=fake_apply)
+    qtbot.addWidget(w)
+
+    cb = w.settings_view._edits["Detailed logging (debug)"]
+    cb.setChecked(True)
+    w.settings_view._on_save()
+
+    assert apply_calls, "apply_settings never called"
+    assert calls, "configure_logging never called after save"
+    assert calls[-1]["debug"] is True
+
+
+def test_settings_open_log_folder_invokes_callable(qtbot, monkeypatch):
+    from romhop.gui.settings_view import SettingsView
+    from romhop import config
+    monkeypatch.setattr(config, "save_settings", lambda s: None)
+    called = []
+    view = SettingsView(config.default_settings(), open_log_dir_fn=lambda: called.append(1))
+    qtbot.addWidget(view)
+    view.open_log_btn.click()
+    assert called == [1]
+
+
+def test_settings_export_logs_invokes_callable(qtbot, monkeypatch):
+    from pathlib import Path
+    from romhop.gui.settings_view import SettingsView
+    from romhop import config
+    monkeypatch.setattr(config, "save_settings", lambda s: None)
+    received = []
+
+    def fake_export(dest):
+        received.append(dest)
+
+    view = SettingsView(config.default_settings(), export_logs_fn=fake_export)
+    qtbot.addWidget(view)
+
+    dest = Path("/tmp/test-romhop-logs.zip")
+    monkeypatch.setattr(
+        "romhop.gui.settings_view.QFileDialog.getSaveFileName",
+        lambda *a, **kw: (str(dest), "Zip files (*.zip)"),
+    )
+    view.export_logs_btn.click()
+    assert received == [dest]
+
+
+def test_settings_export_logs_no_op_when_cancelled(qtbot, monkeypatch):
+    from romhop.gui.settings_view import SettingsView
+    from romhop import config
+    monkeypatch.setattr(config, "save_settings", lambda s: None)
+    received = []
+
+    view = SettingsView(config.default_settings(), export_logs_fn=lambda p: received.append(p))
+    qtbot.addWidget(view)
+    # Simulate cancel: getSaveFileName returns empty string.
+    monkeypatch.setattr(
+        "romhop.gui.settings_view.QFileDialog.getSaveFileName",
+        lambda *a, **kw: ("", ""),
+    )
+    view.export_logs_btn.click()
+    assert received == []
