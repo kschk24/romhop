@@ -6,9 +6,14 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-06-17 12:48'
-updated_date: '2026-06-17 13:03'
-labels: []
+updated_date: '2026-06-17 13:09'
+labels:
+  - bug
+  - cli
+  - windows
+  - needs-info
 dependencies: []
+priority: low
 ordinal: 33000
 ---
 

@@ -4,8 +4,12 @@ title: 'Bug: installer download fully buffers in memory instead of streaming to 
 status: To Do
 assignee: []
 created_date: '2026-06-17 13:02'
+updated_date: '2026-06-17 13:09'
 labels:
+  - bug
+  - update
   - performance
+  - ready-for-agent
 dependencies: []
 priority: medium
 ordinal: 35000

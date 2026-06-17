@@ -4,8 +4,12 @@ title: 'Bug: SHA-256 verification silently skipped when SHA256SUMS asset absent'
 status: To Do
 assignee: []
 created_date: '2026-06-17 13:02'
+updated_date: '2026-06-17 13:09'
 labels:
   - bug
+  - security
+  - update
+  - ready-for-agent
 dependencies: []
 priority: high
 ordinal: 34000
