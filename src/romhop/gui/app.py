@@ -82,9 +82,15 @@ def _maybe_uninstall(argv) -> bool:
 
 
 def _maybe_bootstrap(argv) -> bool:
-    """Handle the AppImage first-run install. Returns True if handled (caller exits).
+    """Handle the AppImage first-run install or silent upgrade.
 
-    Extraction/install errors propagate uncaught (no user-facing error UI yet).
+    First install: extract, install desktop shortcut, link CLI, then execv
+    into the installed copy (never returns).
+
+    Upgrade (already installed): extract new version headlessly, link CLI,
+    then return True so the caller exits cleanly.  The update flow in
+    update.py relies on this path returning rather than exec'ing so that
+    subprocess.run() can return and the GUI can show the restart prompt.
     """
     if "--appimage-bootstrap" not in argv:
         return False
@@ -94,12 +100,14 @@ def _maybe_bootstrap(argv) -> bool:
     from romhop import install_bootstrap as ib
     from romhop.gui import launcher_install as li
 
-    if not ib.is_installed():
-        src = Path(_sys.executable).parent  # the onedir we are frozen into
-        launcher = ib.extract_and_install(src)
+    first_install = not ib.is_installed()
+    src = Path(_sys.executable).parent  # the onedir we are frozen into
+    launcher = ib.extract_and_install(src)
+    ib.link_cli()
+    if first_install:
         li.install_linux(exec_path=str(launcher))
-        ib.link_cli()  # expose the CLI as ~/.local/bin/romhop
-    ib.launch_installed()  # execv — does not return
+        ib.launch_installed()  # execv — does not return
+    # Upgrade path: extraction done, exit cleanly for the update caller.
     return True
 
 
