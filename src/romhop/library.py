@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from romhop.platform_map import esde_system_for_slug
+
 # Disc descriptor extensions: when present, only these go in the .m3u
 # (avoids invalid raw .bin track entries — matches RomM's own m3u logic).
 DESCRIPTOR_EXTS = {".cue", ".gdi", ".ccd", ".m3u8", ".chd", ".iso", ".pbp"}
@@ -65,6 +67,28 @@ def write_game(
     # newline="" keeps our explicit LF; encoding utf-8 has no BOM
     m3u_path.write_text(build_m3u(game_name, list(safe_files)), encoding="utf-8", newline="")
     return m3u_path
+
+
+def local_game_dir(rom, roms_root: Path | None, overrides: dict[str, str] | None = None) -> Path | None:
+    """Return the on-disk folder that holds the game, or None if not present.
+
+    Multi-disc games live in a subfolder (<system>/<game_name>/); single-file
+    games sit directly in the system dir.  Returns the innermost folder that
+    contains the game's files — i.e. the subfolder for multi-disc, or the
+    system dir for flat cartridges.
+    """
+    if roms_root is None:
+        return None
+    system = esde_system_for_slug(rom.platform_slug, overrides or {})
+    system_dir = roms_root / system
+    # Multi-disc: the downloader created a named subfolder.
+    game_dir = system_dir / rom.fs_name_no_ext
+    if game_dir.is_dir():
+        return game_dir
+    # Single-file: the rom sits flat in the system dir.
+    if (system_dir / Path(rom.fs_name).name).exists():
+        return system_dir
+    return None
 
 
 def write_single_file(roms_root: Path, system: str, file_name: str, data: bytes) -> Path:

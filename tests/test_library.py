@@ -1,4 +1,7 @@
-from romhop.library import build_m3u, candidate_basenames, norm, write_game
+from pathlib import Path
+
+from romhop.library import build_m3u, candidate_basenames, norm, write_game, local_game_dir
+from romhop.romm_client import Rom
 
 
 def test_build_m3u_relative_forward_slash_lf_no_bom():
@@ -94,3 +97,36 @@ def test_norm_collapses_whitespace_and_casefolds():
 def test_norm_keeps_revision_and_region_distinct():
     assert norm("Sonic (Rev 1)") != norm("Sonic (Rev 2)")
     assert norm("Game (USA)") != norm("Game (Europe)")
+
+
+def _rom(fs_name="Sonic.md", fs_name_no_ext="Sonic", platform_slug="genesis"):
+    return Rom(id=1, name="Sonic", platform_slug=platform_slug,
+               fs_name=fs_name, fs_name_no_ext=fs_name_no_ext, file_names=[fs_name])
+
+
+def test_local_game_dir_multi_disc(tmp_path):
+    # Multi-disc: game subdir exists
+    system_dir = tmp_path / "genesis"
+    game_dir = system_dir / "Sonic"
+    game_dir.mkdir(parents=True)
+    rom = _rom(fs_name="Sonic.zip", fs_name_no_ext="Sonic")
+    assert local_game_dir(rom, tmp_path, {}) == game_dir
+
+
+def test_local_game_dir_single_file(tmp_path):
+    # Single-file: rom sits flat in system dir
+    system_dir = tmp_path / "genesis"
+    system_dir.mkdir(parents=True)
+    (system_dir / "Sonic.md").touch()
+    rom = _rom(fs_name="Sonic.md", fs_name_no_ext="Sonic")
+    assert local_game_dir(rom, tmp_path, {}) == system_dir
+
+
+def test_local_game_dir_not_downloaded(tmp_path):
+    rom = _rom()
+    assert local_game_dir(rom, tmp_path, {}) is None
+
+
+def test_local_game_dir_none_roms_root():
+    rom = _rom()
+    assert local_game_dir(rom, None) is None

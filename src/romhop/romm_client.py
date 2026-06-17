@@ -31,6 +31,14 @@ class RomDetail:
     file_size: int | None = None
 
 
+_ROM_PATH_TEMPLATE = "/rom/{rom_id}"
+
+
+def romm_game_url(base_url: str, rom_id: int) -> str:
+    """Return the browser URL for a game's page on the RomM server."""
+    return base_url.rstrip("/") + _ROM_PATH_TEMPLATE.format(rom_id=rom_id)
+
+
 def _genre_names(raw) -> list[str]:
     names: list[str] = []
     for g in raw or []:

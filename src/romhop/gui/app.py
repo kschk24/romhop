@@ -268,6 +268,22 @@ def run() -> None:
         client = RommClient(base_url=new_settings.romm_url, token=get_token() or "")
         apply_settings(new_settings)
 
+    from romhop.romm_client import romm_game_url
+    from romhop.library import local_game_dir
+
+    def open_in_romm_fn(rom):
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        QDesktopServices.openUrl(QUrl(romm_game_url(live["settings"].romm_url, rom.id)))
+
+    def open_folder_fn(rom):
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        s = live["settings"]
+        path = local_game_dir(rom, s.roms_root, s.platform_overrides)
+        if path is not None:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
     from romhop import update as _update
 
     _updates_supported = _update.is_update_supported()
@@ -332,6 +348,8 @@ def run() -> None:
         relaunch_fn=relaunch_fn,
         open_log_dir_fn=open_log_dir_fn,
         export_logs_fn=export_logs_fn,
+        open_in_romm=open_in_romm_fn,
+        open_folder=open_folder_fn,
     )
     instance.activated.connect(window.show_and_raise)
     window.resize(900, 600)

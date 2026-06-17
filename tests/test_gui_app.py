@@ -656,3 +656,73 @@ def test_sigint_handler_installed_and_fires_quit_app(qtbot, monkeypatch):
     qtbot.waitUntil(lambda: quit_called == [True], timeout=1000)
 
 
+
+
+def test_dispatch_download_starts_worker(qtbot):
+    from romhop.gui.main_window import MainWindow
+
+    called = []
+    def fake_download(rom, on_progress=None, stop_event=None):
+        called.append(rom.id)
+
+    win = MainWindow(settings=config.default_settings(), download_action=fake_download)
+    qtbot.addWidget(win)
+    rom = Rom(id=9, name="Kirby", platform_slug="gba",
+              fs_name="Kirby.gba", fs_name_no_ext="Kirby", file_names=["Kirby.gba"])
+    with qtbot.waitSignal(win.downloads_finished, timeout=3000):
+        win._dispatch_action("download", rom)
+    assert called == [9]
+
+
+def test_dispatch_open_romm_calls_injected_fn(qtbot):
+    from romhop.gui.main_window import MainWindow
+
+    called = []
+    win = MainWindow(settings=config.default_settings(),
+                     open_in_romm=lambda r: called.append(r.id))
+    qtbot.addWidget(win)
+    rom = Rom(id=5, name="Sonic", platform_slug="genesis",
+              fs_name="Sonic.md", fs_name_no_ext="Sonic", file_names=["Sonic.md"])
+    win._dispatch_action("open_romm", rom)
+    assert called == [5]
+
+
+def test_dispatch_open_folder_calls_injected_fn(qtbot):
+    from romhop.gui.main_window import MainWindow
+
+    called = []
+    win = MainWindow(settings=config.default_settings(),
+                     open_folder=lambda r: called.append(r.id))
+    qtbot.addWidget(win)
+    rom = Rom(id=3, name="Link", platform_slug="gbc",
+              fs_name="Link.gbc", fs_name_no_ext="Link", file_names=["Link.gbc"])
+    win._dispatch_action("open_folder", rom)
+    assert called == [3]
+
+
+def test_library_action_requested_routes_to_dispatch(qtbot):
+    from romhop.gui.main_window import MainWindow
+
+    called = []
+    win = MainWindow(settings=config.default_settings(),
+                     open_in_romm=lambda r: called.append(("open_romm", r.id)))
+    qtbot.addWidget(win)
+    rom = Rom(id=7, name="Mario", platform_slug="snes",
+              fs_name="Mario.sfc", fs_name_no_ext="Mario", file_names=["Mario.sfc"])
+    win.library.set_roms([rom])
+    win.library.action_requested.emit("open_romm", rom)
+    assert called == [("open_romm", 7)]
+
+
+def test_detail_panel_open_romm_routes_to_dispatch(qtbot):
+    from romhop.gui.main_window import MainWindow
+
+    called = []
+    win = MainWindow(settings=config.default_settings(),
+                     open_in_romm=lambda r: called.append(r.id))
+    qtbot.addWidget(win)
+    rom = Rom(id=11, name="Metroid", platform_slug="nes",
+              fs_name="Metroid.nes", fs_name_no_ext="Metroid", file_names=["Metroid.nes"])
+    win.detail_panel.set_rom(rom)
+    win.detail_panel.open_romm_requested.emit(rom)
+    assert called == [11]

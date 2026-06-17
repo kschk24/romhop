@@ -85,7 +85,8 @@ class MainWindow(QWidget):
                  apply_settings=None, quit_fn=None, confirm_no_tray=None,
                  validate_fn=None, detect_retroarch_fn=None, recreate_client=None,
                  update_check_fn=None, update_apply_fn=None, relaunch_fn=None,
-                 open_log_dir_fn=None, export_logs_fn=None, detail_provider=None):
+                 open_log_dir_fn=None, export_logs_fn=None, detail_provider=None,
+                 open_in_romm=None, open_folder=None):
         super().__init__(parent)
         self._settings = settings
         self._apply_token = apply_token
@@ -104,6 +105,8 @@ class MainWindow(QWidget):
         self._update_apply_fn = update_apply_fn
         self._relaunch_fn = relaunch_fn
         self._detail_provider = detail_provider
+        self._open_in_romm_fn = open_in_romm
+        self._open_folder_fn = open_folder
         self._pending_update = None
         self._check_worker = None
         self._apply_worker = None
@@ -235,6 +238,13 @@ class MainWindow(QWidget):
 
         self.detail_panel = DetailPanel(detail_provider=detail_provider)
         self.library.tile_activated.connect(self._on_tile_activated)
+        self.library.action_requested.connect(self._dispatch_action)
+        self.detail_panel.download_requested.connect(
+            lambda r: self._dispatch_action("download", r))
+        self.detail_panel.open_romm_requested.connect(
+            lambda r: self._dispatch_action("open_romm", r))
+        self.detail_panel.open_folder_requested.connect(
+            lambda r: self._dispatch_action("open_folder", r))
         content = QHBoxLayout()
         content.addWidget(self.stack, 1)
         content.addWidget(self.detail_panel, 0)
@@ -511,6 +521,23 @@ class MainWindow(QWidget):
             self._scan_worker.deleteLater()
             self._scan_worker = None
 
+    def _start_download(self, roms: list) -> None:
+        if self._download_action is None or not roms or self._download_worker is not None:
+            return
+        self.download_btn.setEnabled(False)
+        self.download_btn.setText("Downloading…")
+        self.cancel_btn.show()
+        self.cancel_btn.setEnabled(True)
+        self.cancel_btn.setText("Cancel")
+        self._begin_progress()
+        worker = DownloadWorker(roms, self._download_action)
+        worker.item_started.connect(self._on_item_started)
+        worker.item_progress.connect(self._on_item_progress)
+        worker.item_error.connect(self._on_item_error)
+        worker.finished.connect(self._on_batch_finished)
+        self._download_worker = worker
+        worker.start()
+
     def download_selected(self) -> None:
         if self._download_action is None:
             self.downloads_finished.emit()
@@ -519,21 +546,17 @@ class MainWindow(QWidget):
         if not selected:
             self.downloads_finished.emit()
             return
-        # Disable while a batch runs so a second batch can't start underneath
-        # the in-flight queue. One worker drains the queue sequentially.
-        self.download_btn.setEnabled(False)
-        self.download_btn.setText("Downloading…")
-        self.cancel_btn.show()
-        self.cancel_btn.setEnabled(True)
-        self.cancel_btn.setText("Cancel")
-        self._begin_progress()
-        worker = DownloadWorker(selected, self._download_action)
-        worker.item_started.connect(self._on_item_started)
-        worker.item_progress.connect(self._on_item_progress)
-        worker.item_error.connect(self._on_item_error)
-        worker.finished.connect(self._on_batch_finished)
-        self._download_worker = worker
-        worker.start()
+        self._start_download(selected)
+
+    def _dispatch_action(self, name: str, rom) -> None:
+        if name == "download":
+            self._start_download([rom])
+        elif name == "open_romm":
+            if self._open_in_romm_fn is not None:
+                self._open_in_romm_fn(rom)
+        elif name == "open_folder":
+            if self._open_folder_fn is not None:
+                self._open_folder_fn(rom)
 
     # --- download progress UI ---
     def _begin_progress(self) -> None:

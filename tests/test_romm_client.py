@@ -1,6 +1,6 @@
 import httpx
 
-from romhop.romm_client import RommClient, Rom, RomDetail
+from romhop.romm_client import RommClient, Rom, RomDetail, romm_game_url
 
 
 def _client(handler) -> RommClient:
@@ -299,3 +299,11 @@ def test_get_rom_accepts_plain_string_genres():
         return httpx.Response(200, json={"genres": ["RPG"]})
 
     assert _client(handler).get_rom(1).genres == ["RPG"]
+
+
+def test_romm_game_url_basic():
+    assert romm_game_url("https://romm.example.com", 42) == "https://romm.example.com/rom/42"
+
+
+def test_romm_game_url_strips_trailing_slash():
+    assert romm_game_url("https://romm.example.com/", 7) == "https://romm.example.com/rom/7"
