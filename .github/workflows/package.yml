@@ -90,8 +90,8 @@ jobs:
           cd release && sha256sum * > SHA256SUMS
       - name: Extract release notes
         run: |
-          # grab the first "## [..]" section of the changelog, drop its header line
-          awk '/^## \[/{n++} n==1' CHANGELOG.md | sed '1d' > NOTES.md
+          # grab the first "## [..]" section, drop its header line, trim leading blanks
+          awk '/^## \[/{n++} n==1' CHANGELOG.md | sed '1d' | sed '/./,$!d' > NOTES.md
       - name: Publish Release
         id: release
         uses: softprops/action-gh-release@v2
