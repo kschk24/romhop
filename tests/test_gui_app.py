@@ -615,3 +615,27 @@ def test_quit_app_stops_sync_then_quits(qtbot, monkeypatch):
     assert quit_called == [True]
 
 
+def test_sigint_handler_installed_and_fires_quit_app(qtbot, monkeypatch):
+    import signal
+    from PySide6.QtWidgets import QApplication
+    from romhop import config
+    from romhop.gui.app import _install_sigint_handler
+    from romhop.gui.main_window import MainWindow
+
+    app = QApplication.instance()
+    win = MainWindow(settings=config.default_settings())
+    qtbot.addWidget(win)
+
+    quit_called = []
+    monkeypatch.setattr(win, "quit_app", lambda: quit_called.append(True))
+
+    _install_sigint_handler(app, win)
+
+    handler = signal.getsignal(signal.SIGINT)
+    assert callable(handler), "SIGINT handler must be set before app.exec()"
+
+    # Simulate Ctrl-C: handler schedules quit_app via QTimer.singleShot(0, ...)
+    handler(signal.SIGINT, None)
+    qtbot.waitUntil(lambda: quit_called == [True], timeout=1000)
+
+

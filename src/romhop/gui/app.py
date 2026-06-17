@@ -124,6 +124,28 @@ def _maybe_smoke_exit(argv) -> bool:
     _sys.exit(0)
 
 
+def _install_sigint_handler(app, window) -> None:
+    """Install a Ctrl-C handler so terminal launches exit cleanly.
+
+    Qt's C++ event loop never yields to Python, so SIGINT is silently swallowed
+    and a forced second Ctrl-C tears down Qt mid-state (segfault). Two pieces:
+    1. A signal handler that schedules quit_app on the main thread via QTimer.
+    2. A 200 ms no-op QTimer so the interpreter wakes up and can fire the handler.
+    """
+    import signal as _signal
+    from PySide6.QtCore import QTimer
+
+    def _handler(*_):
+        QTimer.singleShot(0, window.quit_app)
+
+    _signal.signal(_signal.SIGINT, _handler)
+
+    _wakeup = QTimer(app)
+    _wakeup.setInterval(200)
+    _wakeup.timeout.connect(lambda: None)
+    _wakeup.start()
+
+
 def run() -> None:
     import sys as _sys
     if _maybe_uninstall(_sys.argv):
@@ -304,4 +326,5 @@ def run() -> None:
             logger.warning("Could not load RomM library at startup: %s", exc)
             window.set_sync_status(f"library load failed: {exc}")
             window.run_setup_wizard()
+    _install_sigint_handler(app, window)
     _sys.exit(app.exec())
