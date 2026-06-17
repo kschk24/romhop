@@ -339,12 +339,22 @@ class MainWindow(QWidget):
     def quit_app(self) -> None:
         self._quitting = True
         self._shutdown_sync()
+        self._shutdown_update_workers()
         self._quit_fn()
 
     def _shutdown_sync(self) -> None:
         if self._sync_worker is not None:
             self._sync_worker.stop()
             self._sync_worker.wait(5000)
+
+    def _shutdown_update_workers(self) -> None:
+        for attr in ("_check_worker", "_apply_worker"):
+            worker = getattr(self, attr)
+            if worker is not None:
+                worker.quit()
+                worker.wait()
+                worker.deleteLater()
+                setattr(self, attr, None)
 
     # --- sync controls ---
     def _on_sync_toggled(self, enabled: bool) -> None:
@@ -588,6 +598,11 @@ class MainWindow(QWidget):
     def check_for_updates(self) -> None:
         if self._update_check_fn is None:
             return
+        if self._check_worker is not None:
+            self._check_worker.quit()
+            self._check_worker.wait()
+            self._check_worker.deleteLater()
+            self._check_worker = None
         self._check_worker = UpdateWorker(check_fn=self._update_check_fn)
         self._check_worker.available.connect(self._on_update_available)
         self._check_worker.failed.connect(self._on_update_failed)
@@ -610,6 +625,11 @@ class MainWindow(QWidget):
 
     def _on_update_clicked(self) -> None:
         self._hide_update_bar()
+        if self._apply_worker is not None:
+            self._apply_worker.quit()
+            self._apply_worker.wait()
+            self._apply_worker.deleteLater()
+            self._apply_worker = None
         self._apply_worker = UpdateWorker(
             apply_fn=self._update_apply_fn, info=self._pending_update
         )
