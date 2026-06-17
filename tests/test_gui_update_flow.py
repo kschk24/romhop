@@ -149,3 +149,19 @@ def test_update_failed_does_not_crash(qtbot):
     qtbot.wait(300)
     # No exception raised, banner stays hidden
     assert not w.update_banner.isVisibleTo(w)
+
+
+# ---------------------------------------------------------------------------
+# Thread cleanup
+# ---------------------------------------------------------------------------
+
+def test_check_for_updates_twice_no_dangling_thread(qtbot):
+    """Second call cleans up the first worker; only one result arrives."""
+    w = _window(qtbot, update_check_fn=lambda: _FAKE_INFO)
+    w.check_for_updates()
+    w.check_for_updates()
+    qtbot.waitUntil(lambda: w.update_banner.isVisibleTo(w), timeout=3000)
+    assert "0.4.0" in w.update_banner.text()
+    # First worker was replaced — current worker must have finished
+    assert w._check_worker is not None
+    assert not w._check_worker.isRunning()
