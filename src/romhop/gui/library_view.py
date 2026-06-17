@@ -60,7 +60,9 @@ def filter_games(roms: list[Rom], platform: str | None, query: str,
 class LibraryView(QWidget):
     """Flat game grid with checkbox multi-select and filter controls."""
 
-    selection_changed = Signal(list)  # emits list[Rom] currently checked
+    selection_changed = Signal(list)   # list[Rom] currently checked
+    tile_activated = Signal(object)    # Rom whose body was clicked
+    action_requested = Signal(str, object)  # (action_name, Rom)
 
     def __init__(self, parent=None, *, cover_provider=None, platform_label=None):
         super().__init__(parent)
@@ -176,15 +178,26 @@ class LibraryView(QWidget):
                 ribbon.setAlignment(Qt.AlignCenter)
                 ribbon.move(0, 0)
                 self._ribbons[rom.id] = ribbon
-            check = QCheckBox(rom.name)
-            # Reflect the global selection, set before connecting so this
-            # programmatic state doesn't fire a spurious toggle.
+            check = QCheckBox()  # bare glyph: batch-select only, no title text
             check.setChecked(rom.id in self._selected_ids)
             check.toggled.connect(
                 lambda checked, rid=rom.id: self._on_toggle(rid, checked)
             )
+            name = QLabel(rom.name)
+            name.setObjectName("TileName")
+            name.setWordWrap(True)
+            cover.mousePressEvent = lambda e, rid=rom.id: self._activate_rom(rid)
+            name.mousePressEvent = lambda e, rid=rom.id: self._activate_rom(rid)
+            name_row = QHBoxLayout()
+            name_row.setContentsMargins(0, 0, 0, 0)
+            name_row.addWidget(check, 0)
+            name_row.addWidget(name, 1)
+            cell.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            cell.customContextMenuRequested.connect(
+                lambda pos, rid=rom.id, c=cell: self._show_menu(c, rid)
+            )
             box.addWidget(cover)
-            box.addWidget(check)
+            box.addLayout(name_row)
             self._cells.append(cell)
             self._checks[rom.id] = (check, rom)
             self._cover_labels[rom.id] = cover
@@ -284,6 +297,37 @@ class LibraryView(QWidget):
     def selected_roms(self) -> list[Rom]:
         # Global selection across all filter states, not just the visible tiles.
         return [rom for rom in self._roms if rom.id in self._selected_ids]
+
+    def _rom_by_id(self, rom_id: int):
+        return next((r for r in self._roms if r.id == rom_id), None)
+
+    def _activate_rom(self, rom_id: int) -> None:
+        rom = self._rom_by_id(rom_id)
+        if rom is not None:
+            self.tile_activated.emit(rom)
+
+    def _emit_action(self, name: str, rom_id: int) -> None:
+        rom = self._rom_by_id(rom_id)
+        if rom is not None:
+            self.action_requested.emit(name, rom)
+
+    def _show_menu(self, cell, rom_id: int) -> None:
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        downloaded = rom_id in self._downloaded_ids
+        items = [
+            ("Re-download" if downloaded else "Download", "download", True),
+            ("Pull savegames", "pull", True),
+            ("Open in RomM", "open_romm", True),
+            ("Open containing folder", "open_folder", downloaded),
+        ]
+        for label, action_name, enabled in items:
+            act = menu.addAction(label)
+            act.setEnabled(enabled)
+            act.triggered.connect(
+                lambda _=False, n=action_name: self._emit_action(n, rom_id)
+            )
+        menu.exec(cell.mapToGlobal(cell.rect().center()))
 
     def _emit_selection(self) -> None:
         self.selection_changed.emit(self.selected_roms())

@@ -1,4 +1,5 @@
 from romhop.gui import library_view
+from romhop.gui.library_view import LibraryView
 from romhop.romm_client import Rom
 
 
@@ -429,6 +430,29 @@ def test_settings_export_logs_invokes_callable(qtbot, monkeypatch):
     )
     view.export_logs_btn.click()
     assert received == [dest]
+
+
+def test_tile_body_click_emits_tile_activated(qtbot):
+    view = LibraryView()
+    qtbot.addWidget(view)
+    rom = _rom("Sonic", "genesis")
+    view.set_roms([rom])
+    captured = []
+    view.tile_activated.connect(captured.append)
+    view._activate_rom(rom.id)
+    assert captured == [rom]
+    assert view.selected_roms() == []  # body click must NOT select
+
+
+def test_context_menu_action_emits_action_requested(qtbot):
+    view = LibraryView()
+    qtbot.addWidget(view)
+    rom = _rom("Sonic", "genesis")
+    view.set_roms([rom])
+    captured = []
+    view.action_requested.connect(lambda name, r: captured.append((name, r.id)))
+    view._emit_action("pull", rom.id)
+    assert captured == [("pull", rom.id)]
 
 
 def test_settings_export_logs_no_op_when_cancelled(qtbot, monkeypatch):
