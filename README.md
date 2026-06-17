@@ -198,20 +198,40 @@ with no network and no live server. GUI tests use `pytest-qt`.
 Releases are built and published by the `package` GitHub Actions workflow
 (`.github/workflows/package.yml`). It builds a frozen GUI app on each OS
 (PyInstaller onedir) and wraps it in a Windows Inno Setup installer and a Linux
-bootstrap AppImage.
+bootstrap AppImage. CI also attaches a build-provenance attestation (verifiable
+with `gh attestation verify`) — no signing keys or secrets required.
 
-- **Publish a release:** bump `__version__` in `src/romhop/__init__.py`, then push
-  a matching version tag:
+### Stable release
 
-  ```
-  git tag v0.2.0
-  git push origin v0.2.0
-  ```
+Bump `__version__` in `src/romhop/__init__.py`, then push a **clean** version tag
+(no hyphens):
 
-  The tag push triggers the build on Windows + Linux and publishes a GitHub
-  Release with both installers and a `SHA256SUMS` file. Tags must match `v*`.
-- **Dry run:** trigger the workflow manually (`workflow_dispatch`) to build and
-  upload artifacts **without** publishing a Release — handy for testing a build.
+```
+git tag v0.4.0
+git push origin v0.4.0
+```
+
+CI marks the GitHub Release as **stable** (not prerelease). All installed copies
+with auto-update on will see this release on next launch.
+
+### Pre-release / release-candidate
+
+Use a **hyphenated** tag:
+
+```
+git tag v0.4.0-rc1
+git push origin v0.4.0-rc1
+```
+
+CI marks the release `prerelease: true`. Users who have enabled
+**"Include experimental pre-release updates"** in Settings will see it; stable
+users will not. When the final `v0.4.0` tag ships, experimental users roll forward
+automatically (packaging.version ordering: `0.4.0rc1 < 0.4.0`).
+
+### Dry run
+
+Trigger the workflow manually (`workflow_dispatch`) to build and upload artifacts
+**without** publishing a Release — useful for testing a build.
 
 Only a maintainer should bump the version and push a tag; don't tag from a
 feature branch you don't intend to release.
@@ -220,10 +240,40 @@ feature branch you don't intend to release.
 
 After a tagged build publishes, verify on each OS:
 
+**Fresh install**
+
 - **Windows:** run `romhop-setup-*.exe` → installs without admin → Start-Menu shortcut
   launches the GUI → uninstall via Add/Remove Programs removes it.
 - **Linux:** `chmod +x` the AppImage → run it → menu entry appears → menu entry launches
   the installed copy → re-running the AppImage just launches (does not reinstall).
+
+**Auto-update (stable)**
+
+1. Install the **previous** stable release on each OS.
+2. Publish the **new** release tag. Wait for CI to finish.
+3. Launch the installed app. The banner `vX.Y.Z available [Update] [Later]`
+   should appear within seconds.
+4. Click **Update**. The progress bar fills while the new installer downloads.
+5. `Restart romhop to finish updating` dialog appears.
+6. The new version launches automatically.
+7. Confirm `romhop --version` shows the new version.
+
+**Auto-update (experimental / pre-release)**
+
+1. Toggle **"Include experimental pre-release updates"** on in Settings, Save.
+2. Repeat the update smoke with a `-rc` tag. The banner should appear for the
+   pre-release version. Stable-channel users should see nothing.
+
+**Troubleshooting**
+
+| Symptom | Likely cause | Action |
+|---|---|---|
+| Banner never appears | App not frozen, install dir not writable, or `auto_update_check` off | Settings → "Check for updates" manually; verify frozen build |
+| Banner appears but "No update" | Version in tag == installed version | Check `__version__` was bumped before tagging |
+| `update error: SHA-256 mismatch` | Corrupt/truncated download | Retry next launch; the `.part` temp is discarded |
+| `update error: Installer exited with code N` | Silent installer failed | Check installer log on disk; keep current install intact |
+| Update on Linux leaves old version | Bootstrap not extracting | Ensure `--appimage-bootstrap` completes (check for FUSE errors) |
+| GitHub rate-limit (403) | > 60 API calls/hour per IP | Back off automatically; retry next launch |
 
 ## License
 
