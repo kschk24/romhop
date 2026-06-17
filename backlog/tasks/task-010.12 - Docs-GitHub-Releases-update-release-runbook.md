@@ -1,9 +1,10 @@
 ---
 id: TASK-010.12
 title: 'Docs: GitHub-Releases update + release runbook'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-17 09:05'
+updated_date: '2026-06-17 09:36'
 labels:
   - auto-update-gh-releases
   - docs
@@ -23,7 +24,13 @@ Maintainer runbook for the GitHub-Releases auto-update (replaces the tufup key-m
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Documents stable vs prerelease tag flow (clean vs hyphenated tag) and the experimental-channel toggle
-- [ ] #2 Manual desktop smoke checklist: install old build, launch, accept update, confirm silent installer runs + relaunches new version (Win + Linux)
-- [ ] #3 Troubleshooting: offline / rate-limit / SHA mismatch / installer-failure behavior
+- [x] #1 Documents stable vs prerelease tag flow (clean vs hyphenated tag) and the experimental-channel toggle
+- [x] #2 Manual desktop smoke checklist: install old build, launch, accept update, confirm silent installer runs + relaunches new version (Win + Linux)
+- [x] #3 Troubleshooting: offline / rate-limit / SHA mismatch / installer-failure behavior
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Expanded README Releasing section: stable/RC tag flow, experimental channel toggle, auto-update smoke checklist (both OS, both channels), troubleshooting table.
+<!-- SECTION:NOTES:END -->

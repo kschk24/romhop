@@ -1,11 +1,11 @@
 ---
 id: TASK-010.10
 title: 'GUI update flow: worker, banner, restart, settings toggles'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-06-17 09:05'
-updated_date: '2026-06-17 09:29'
+updated_date: '2026-06-17 09:33'
 labels:
   - auto-update-gh-releases
   - feature
@@ -26,10 +26,10 @@ GUI surface for the GitHub-Releases updater. Reuses the approach-agnostic banner
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 UpdateWorker(QThread) runs check+download off the UI thread and emits progress
-- [ ] #2 On launch, if auto_update_check and is_update_supported(), background check passes update_include_prereleases; update-available shows non-blocking banner 'vX.Y.Z available [Update][Later]'
-- [ ] #3 Update -> progress bar -> modal 'Restart to finish updating' -> relaunch
-- [ ] #4 Settings: 'Check for updates' button + auto-check toggle + 'Include experimental pre-release updates' checkbox; hidden/disabled when is_update_supported() is False
+- [x] #1 UpdateWorker(QThread) runs check+download off the UI thread and emits progress
+- [x] #2 On launch, if auto_update_check and is_update_supported(), background check passes update_include_prereleases; update-available shows non-blocking banner 'vX.Y.Z available [Update][Later]'
+- [x] #3 Update -> progress bar -> modal 'Restart to finish updating' -> relaunch
+- [x] #4 Settings: 'Check for updates' button + auto-check toggle + 'Include experimental pre-release updates' checkbox; hidden/disabled when is_update_supported() is False
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -41,3 +41,9 @@ GUI surface for the GitHub-Releases updater. Reuses the approach-agnostic banner
 4. Wire update callables in app.run() + launch check
 5. Write tests/test_gui_update_flow.py covering banner/apply/restart/unsupported
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+UpdateWorker + banner/apply/restart flow + Settings check btn + app.run wiring. update_apply_fn takes (info, progress_cb). relaunch_fn does execv into installed_launcher(). 10 GUI tests. 401 pass.
+<!-- SECTION:NOTES:END -->
