@@ -125,6 +125,7 @@ def test_schema_covers_every_scalar_settings_field():
         "sync_enabled", "sync_delay_seconds",
         "download_rate_limit_kbps", "theme",
         "auto_update_check", "update_include_prereleases",
+        "debug_logging",
     }
     assert schema_keys == expected
     assert "platform_overrides" not in schema_keys
@@ -323,15 +324,18 @@ def test_purge_user_data_default_dirs_exclude_roms_and_saves(tmp_path, monkeypat
 
     cfg = tmp_path / "config" / "romhop"
     data = tmp_path / "data" / "romhop"
+    logs = tmp_path / "log" / "romhop"
     roms = tmp_path / "roms"
     saves = tmp_path / "retroarch" / "saves"
-    for d in (cfg, data, roms, saves):
+    for d in (cfg, data, logs, roms, saves):
         d.mkdir(parents=True)
 
     monkeypatch.setattr(config, "settings_path", lambda: cfg / "settings.ini")
     monkeypatch.setattr(config, "user_data_dir", lambda: data)
+    import platformdirs as _pd
+    monkeypatch.setattr(_pd, "user_log_dir", lambda *_: str(logs))
 
     removed = config.purge_user_data()
 
-    assert removed == [cfg, data]
+    assert removed == [cfg, data, logs]
     assert roms.exists() and saves.exists()  # untouched

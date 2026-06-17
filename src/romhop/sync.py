@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from pathlib import Path
 
 from watchfiles import watch
+
+logger = logging.getLogger(__name__)
 
 from romhop.mapping_cache import MappingCache
 from romhop.platform_map import system_for_core
@@ -67,6 +70,7 @@ def push_save_file(path: Path, cache: MappingCache, client,
     upload = client.upload_state if is_state_file(path.name) else client.upload_save
     upload(rom_id=entry.rom_id, emulator=core, file_name=path.name, data=data)
     seen[str(path)] = digest
+    logger.debug("sync pushed: %s (rom_id=%d)", path.name, entry.rom_id)
     return True
 
 
@@ -84,10 +88,13 @@ def watch_and_push(dirs: list[Path], cache: MappingCache, client,
     seen: dict[str, str] = {}
     existing = [str(d) for d in dirs if d.exists()]
     if not existing:
+        logger.info("sync: no watchable dirs exist, exiting")
         return
+    logger.info("sync watching: %s", existing)
     for changes in watch(*existing, debounce=int(debounce_seconds * 1000),
                          stop_event=stop_event):
         for _change, raw_path in changes:
+            logger.debug("sync event: %s", raw_path)
             path = Path(raw_path)
             if path.is_file() and push_save_file(
                 path, cache, client, seen,

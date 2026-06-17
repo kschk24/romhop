@@ -216,6 +216,22 @@ typer.rich_utils.rich_format_help = _rich_format_help
 
 app = typer.Typer(rich_markup_mode="markdown", help=_DESC)
 
+
+@app.callback()
+def _main(
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable DEBUG logging to stderr."),
+) -> None:
+    from romhop import config as _config
+    from romhop.logging_setup import configure_logging
+    settings = _config.load_settings()
+    configure_logging(
+        debug=settings.debug_logging,
+        verbose=verbose,
+        token=_config.get_token() or "",
+        romm_url=settings.romm_url,
+    )
+
+
 # Settings the user can change via `romhop config set`.
 _PATH_KEYS = ("roms_root", "saves_dir", "states_dir")
 _STR_KEYS = ("romm_url",)

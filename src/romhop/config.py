@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import configparser
+import logging
 import shutil
 import sys
 from dataclasses import dataclass, field
@@ -8,6 +9,8 @@ from pathlib import Path
 
 import keyring
 import platformdirs
+
+logger = logging.getLogger(__name__)
 
 KEYRING_SERVICE = "romhop"
 KEYRING_USER = "api_token"
@@ -29,6 +32,7 @@ class Settings:
     download_rate_limit_kbps: int = 0  # 0 = unlimited
     auto_update_check: bool = True
     update_include_prereleases: bool = False
+    debug_logging: bool = False
 
 
 @dataclass(frozen=True)
@@ -76,6 +80,8 @@ SCHEMA: list[FieldSpec] = [
     FieldSpec("update_include_prereleases", "behavior",
               "Include experimental pre-release updates", "bool",
               "Opt in to release-candidate and beta builds (frozen installs only)"),
+    FieldSpec("debug_logging", "behavior", "Detailed logging (debug)", "bool",
+              "Write DEBUG-level entries to the log file (default: INFO only)"),
 ]
 
 
@@ -120,7 +126,11 @@ def purge_user_data(dirs: list[Path] | None = None) -> list[Path]:
     Linux ``--uninstall`` prompt and the Windows uninstaller call this.
     """
     if dirs is None:
-        dirs = [settings_path().parent, user_data_dir()]
+        dirs = [
+            settings_path().parent,
+            user_data_dir(),
+            Path(platformdirs.user_log_dir("romhop")),
+        ]
     removed: list[Path] = []
     for d in dirs:
         if d.exists():
@@ -264,6 +274,7 @@ def load_settings(path: Path | None = None) -> Settings:
     for attr, section in _OVERRIDE_SECTIONS:
         if cp.has_section(section):
             setattr(settings, attr, dict(cp.items(section)))
+    logger.info("settings loaded from %s", path)
     return settings
 
 

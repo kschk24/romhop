@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import io
+import logging
 import os
 import time
 import zipfile
 from pathlib import Path
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 from romhop.library import write_game
 from romhop.mapping_cache import MappingCache, seed_entry
@@ -117,6 +120,7 @@ def download_rom(rom: Rom, client, *, roms_root: Path, cache: MappingCache,
     system_dir.mkdir(parents=True, exist_ok=True)
     part = system_dir / (Path(rom.fs_name).name + ".part")
     limiter = RateLimiter(rate_limit_kbps)
+    logger.info("download start: %s (id=%d) -> %s", rom.fs_name, rom.id, system_dir)
 
     try:
         downloaded = 0
@@ -124,6 +128,7 @@ def download_rom(rom: Rom, client, *, roms_root: Path, cache: MappingCache,
                 client.stream_rom_content(rom.id, rom.fs_name) as (total, chunks):
             for chunk in chunks:
                 if stop_event is not None and stop_event.is_set():
+                    logger.info("download cancelled: %s", rom.fs_name)
                     raise DownloadCancelled
                 f.write(chunk)
                 downloaded += len(chunk)
@@ -156,4 +161,5 @@ def download_rom(rom: Rom, client, *, roms_root: Path, cache: MappingCache,
 
     cache.add(seed_entry(rom.id, system, game_name, cache_files))
     cache.save()
+    logger.info("download done: %s -> %s", rom.fs_name, written)
     return written

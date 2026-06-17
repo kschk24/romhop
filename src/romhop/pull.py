@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import glob
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from romhop.sync import is_state_file
 
@@ -90,6 +93,7 @@ def pull_games(client, entries, settings, *, take_remote: bool = False,
                     if not take_remote:
                         local_mtime = datetime.fromtimestamp(target.stat().st_mtime)
                         if on_conflict is None or not on_conflict(item, target, local_mtime):
+                            logger.info("pull conflict kept local: %s", target)
                             summary["kept"] += 1
                             continue
                 try:

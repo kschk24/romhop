@@ -171,6 +171,15 @@ def run() -> None:
     from romhop.sync import watch_and_push
 
     settings = load_settings()
+
+    from romhop.logging_setup import configure_logging
+    configure_logging(
+        debug=settings.debug_logging,
+        verbose=False,
+        token=get_token() or "",
+        romm_url=settings.romm_url,
+    )
+
     client = RommClient(base_url=settings.romm_url, token=get_token() or "")
     cache_path = Path(platformdirs.user_data_dir("romhop")) / "mapping_cache.json"
     cache = MappingCache(cache_path)
