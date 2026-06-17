@@ -1,17 +1,17 @@
 ---
 id: TASK-002
 title: Frozen install does not expose romhop CLI on PATH
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-06-16 15:03'
-updated_date: '2026-06-16 22:06'
+updated_date: '2026-06-17 13:20'
 labels:
   - bug
   - ready-for-human
 dependencies: []
 priority: medium
-ordinal: 1000
+ordinal: 37000
 ---
 
 ## Description

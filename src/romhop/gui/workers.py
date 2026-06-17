@@ -157,7 +157,7 @@ class UpdateWorker(QThread):
     """Off-UI-thread update check or download+apply. One instance per phase."""
 
     available = Signal(object)      # UpdateInfo | None
-    progress = Signal(int, int)     # bytes_done, bytes_total
+    progress = Signal("qlonglong", "qlonglong")  # bytes_done, bytes_total
     applied = Signal()
     failed = Signal(str)
 

@@ -231,7 +231,9 @@ def run() -> None:
 
     from romhop import update as _update
 
-    if _update.is_update_supported():
+    _updates_supported = _update.is_update_supported()
+
+    if _updates_supported:
         def update_check_fn():
             from romhop import __version__
             return _update.update_check(
@@ -282,7 +284,7 @@ def run() -> None:
     )
     instance.activated.connect(window.show_and_raise)
     window.resize(900, 600)
-    if settings.auto_update_check and _update.is_update_supported():
+    if settings.auto_update_check and _updates_supported:
         window.check_for_updates()
     if not is_configured(settings):
         # Unconfigured: guide the user before trying to talk to RomM. The

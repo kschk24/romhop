@@ -271,8 +271,8 @@ def test_download_and_apply_progress_forwarded(tmp_path):
     assert progress  # at least one progress callback fired
 
 
-def test_download_and_apply_no_sha256sums_skips_verify(tmp_path):
-    """When sha256sums_url is empty, verification is skipped."""
+def test_download_and_apply_no_sha256sums_raises_before_apply(tmp_path):
+    """When sha256sums_url is empty, raise ValueError before apply_fn is called."""
     data = b"installer"
     info = UpdateInfo(
         version=NEWER,
@@ -284,8 +284,9 @@ def test_download_and_apply_no_sha256sums_skips_verify(tmp_path):
     def _fake_get_bytes(url: str, cb) -> bytes:
         return data
 
-    download_and_apply(info, _apply_fn=lambda p: applied.append(p), _gh_get_bytes=_fake_get_bytes)
-    assert len(applied) == 1
+    with pytest.raises(ValueError, match="SHA256SUMS asset is missing"):
+        download_and_apply(info, _apply_fn=lambda p: applied.append(p), _gh_get_bytes=_fake_get_bytes)
+    assert applied == []
 
 
 # ---------------------------------------------------------------------------

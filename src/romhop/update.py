@@ -15,6 +15,7 @@ All callables accept injectable fakes for unit tests (no network required).
 """
 
 import hashlib
+import logging
 import os
 import subprocess
 import sys
@@ -22,6 +23,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+
+logger = logging.getLogger(__name__)
 
 import httpx
 from packaging.version import Version
@@ -122,11 +125,13 @@ def update_check(
 
         if not include_prereleases:
             data = gh_get(f"{_GH_API}/repos/{_OWNER}/{_REPO}/releases/latest")
-            assert isinstance(data, dict)
+            if not isinstance(data, dict):
+                raise TypeError(f"expected dict from /releases/latest, got {type(data)}")
             releases = [data]
         else:
             data = gh_get(f"{_GH_API}/repos/{_OWNER}/{_REPO}/releases")
-            assert isinstance(data, list)
+            if not isinstance(data, list):
+                raise TypeError(f"expected list from /releases, got {type(data)}")
             releases = data
 
         best_version: Version | None = None
@@ -164,8 +169,7 @@ def update_check(
         )
 
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning("Update check failed: %s", exc)
+        logger.warning("Update check failed: %s", exc)
         return None
 
 
@@ -229,6 +233,12 @@ def download_and_apply(
     """
     apply_fn = _apply_fn or _apply_installer
 
+    if not info.sha256sums_url:
+        raise ValueError(
+            "SHA256SUMS asset is missing from this release; "
+            "refusing to apply an unverified installer"
+        )
+
     def _default_get_bytes(url: str, cb: Callable[[int, int], None] | None) -> bytes:
         chunks: list[bytes] = []
         done = 0
@@ -248,10 +258,7 @@ def download_and_apply(
         tmp = Path(tmpdir)
 
         # Fetch SHA256SUMS first (small file)
-        if info.sha256sums_url:
-            sha_content = get_bytes(info.sha256sums_url, None).decode()
-        else:
-            sha_content = ""
+        sha_content = get_bytes(info.sha256sums_url, None).decode()
 
         # Stream installer asset
         part_path = tmp / (info.asset.name + ".part")
@@ -263,8 +270,7 @@ def download_and_apply(
         part_path.rename(final_path)
 
         # Verify
-        if sha_content:
-            _verify_sha256(final_path, sha_content, info.asset.name)
+        _verify_sha256(final_path, sha_content, info.asset.name)
 
         # Apply
         apply_fn(final_path)

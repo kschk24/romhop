@@ -4,12 +4,12 @@ title: 'Risk: download and update flows share progress_bar widget without isolat
 status: To Do
 assignee: []
 created_date: '2026-06-17 13:05'
-updated_date: '2026-06-17 13:09'
+updated_date: '2026-06-17 13:20'
 labels:
   - bug
   - update
   - gui
-  - needs-triage
+  - ready-for-agent
 dependencies: []
 priority: low
 ordinal: 40000

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import logging
+
 from PySide6.QtCore import Signal
 from dataclasses import replace
+
+logger = logging.getLogger(__name__)
 
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
@@ -625,6 +629,5 @@ class MainWindow(QWidget):
             self._relaunch_fn()
 
     def _on_update_failed(self, msg: str) -> None:
-        import logging
-        logging.getLogger(__name__).warning("Update failed: %s", msg)
+        logger.warning("Update failed: %s", msg)
         self.set_sync_status(f"update error: {msg}")

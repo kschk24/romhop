@@ -3,10 +3,11 @@ id: TASK-027
 title: >-
   Cleanup: update.py code quality — logging, asserts, Signal type, duplicate
   guard call
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@kschk24'
 created_date: '2026-06-17 13:05'
-updated_date: '2026-06-17 13:09'
+updated_date: '2026-06-17 13:29'
 labels:
   - cleanup
   - update
@@ -28,9 +29,9 @@ Four small code quality issues found in update.py and main_window.py during code
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 update.py and main_window.py use module-level logger, no import inside except/method
-- [ ] #2 assert isinstance() replaced with explicit if not isinstance(): raise TypeError
-- [ ] #3 UpdateWorker.progress uses Signal('qlonglong','qlonglong') matching DownloadWorker
-- [ ] #4 app.py caches is_update_supported() in one local variable, used in both places
-- [ ] #5 All existing update tests pass
+- [x] #1 update.py and main_window.py use module-level logger, no import inside except/method
+- [x] #2 assert isinstance() replaced with explicit if not isinstance(): raise TypeError
+- [x] #3 UpdateWorker.progress uses Signal('qlonglong','qlonglong') matching DownloadWorker
+- [x] #4 app.py caches is_update_supported() in one local variable, used in both places
+- [x] #5 All existing update tests pass
 <!-- AC:END -->
