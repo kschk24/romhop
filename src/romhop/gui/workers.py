@@ -178,6 +178,29 @@ class UpdateWorker(QThread):
             self.failed.emit(str(exc))
 
 
+class DetailWorker(QThread):
+    """Fetches one rom's detail off the UI thread.
+
+    ``detail_fn()`` returns the detail object. Emits loaded(detail) on
+    success or failed(message) on error so the panel can degrade gracefully.
+    """
+
+    loaded = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, detail_fn: Callable[[], object], parent=None):
+        super().__init__(parent)
+        self._detail_fn = detail_fn
+
+    def run(self) -> None:
+        try:
+            result = self._detail_fn()
+        except Exception as exc:
+            self.failed.emit(str(exc))
+            return
+        self.loaded.emit(result)
+
+
 class SyncWorker(QThread):
     """Runs the sync watch loop until stop() is requested.
 

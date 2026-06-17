@@ -159,6 +159,23 @@ def test_download_worker_progress_survives_files_over_int32(qtbot):
     assert (big, big) in seen  # full size emitted without overflow
 
 
+def test_detail_worker_emits_loaded(qtbot):
+    w = workers.DetailWorker(lambda: {"summary": "hi"})
+    with qtbot.waitSignal(w.loaded, timeout=2000) as blocker:
+        w.start()
+    assert blocker.args == [{"summary": "hi"}]
+
+
+def test_detail_worker_emits_failed(qtbot):
+    def boom():
+        raise RuntimeError("offline")
+
+    w = workers.DetailWorker(boom)
+    with qtbot.waitSignal(w.failed, timeout=2000) as blocker:
+        w.start()
+    assert "offline" in blocker.args[0]
+
+
 def test_download_worker_cancel_stops_batch_without_item_error(qtbot):
     from romhop.download import DownloadCancelled
     roms = [_rom(1, "A"), _rom(2, "B")]
