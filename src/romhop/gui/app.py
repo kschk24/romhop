@@ -82,9 +82,15 @@ def _maybe_uninstall(argv) -> bool:
 
 
 def _maybe_bootstrap(argv) -> bool:
-    """Handle the AppImage first-run install. Returns True if handled (caller exits).
+    """Handle the AppImage first-run install or silent upgrade.
 
-    Extraction/install errors propagate uncaught (no user-facing error UI yet).
+    First install: extract, install desktop shortcut, link CLI, then execv
+    into the installed copy (never returns).
+
+    Upgrade (already installed): extract new version headlessly, link CLI,
+    then return True so the caller exits cleanly.  The update flow in
+    update.py relies on this path returning rather than exec'ing so that
+    subprocess.run() can return and the GUI can show the restart prompt.
     """
     if "--appimage-bootstrap" not in argv:
         return False
@@ -94,12 +100,14 @@ def _maybe_bootstrap(argv) -> bool:
     from romhop import install_bootstrap as ib
     from romhop.gui import launcher_install as li
 
-    if not ib.is_installed():
-        src = Path(_sys.executable).parent  # the onedir we are frozen into
-        launcher = ib.extract_and_install(src)
+    first_install = not ib.is_installed()
+    src = Path(_sys.executable).parent  # the onedir we are frozen into
+    launcher = ib.extract_and_install(src)
+    ib.link_cli()
+    if first_install:
         li.install_linux(exec_path=str(launcher))
-        ib.link_cli()  # expose the CLI as ~/.local/bin/romhop
-    ib.launch_installed()  # execv — does not return
+        ib.launch_installed()  # execv — does not return
+    # Upgrade path: extraction done, exit cleanly for the update caller.
     return True
 
 
@@ -221,6 +229,29 @@ def run() -> None:
         client = RommClient(base_url=new_settings.romm_url, token=get_token() or "")
         apply_settings(new_settings)
 
+    from romhop import update as _update
+
+    if _update.is_update_supported():
+        def update_check_fn():
+            from romhop import __version__
+            return _update.update_check(
+                __version__,
+                include_prereleases=live["settings"].update_include_prereleases,
+            )
+
+        def update_apply_fn(info, progress_cb):
+            _update.download_and_apply(info, progress_cb)
+
+        def relaunch_fn():
+            import os as _os
+            from romhop import install_bootstrap as _ib
+            launcher = str(_ib.installed_launcher())
+            _os.execv(launcher, [launcher])
+    else:
+        update_check_fn = None
+        update_apply_fn = None
+        relaunch_fn = None
+
     app = QApplication(_sys.argv)
     # Hiding the window must not quit the app — the sync worker lives on.
     app.setQuitOnLastWindowClosed(False)
@@ -245,9 +276,14 @@ def run() -> None:
         validate_fn=validate_fn,
         detect_retroarch_fn=detect_retroarch_fn,
         recreate_client=recreate_client,
+        update_check_fn=update_check_fn,
+        update_apply_fn=update_apply_fn,
+        relaunch_fn=relaunch_fn,
     )
     instance.activated.connect(window.show_and_raise)
     window.resize(900, 600)
+    if settings.auto_update_check and _update.is_update_supported():
+        window.check_for_updates()
     if not is_configured(settings):
         # Unconfigured: guide the user before trying to talk to RomM. The
         # wizard's completion handler refreshes the library itself; a cancel

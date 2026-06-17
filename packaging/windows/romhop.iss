@@ -8,6 +8,7 @@
 AppName=RomHop
 AppVersion={#MyVersion}
 AppPublisher=romhop
+AppId={{9A469421-551F-4086-B920-5C6C80AB5C9D}
 DefaultDirName={localappdata}\Programs\romhop
 DefaultGroupName=RomHop
 DisableProgramGroupPage=yes

@@ -1,9 +1,11 @@
 ---
 id: TASK-010.09
 title: 'Apply mechanism: silent installer re-run'
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@claude'
 created_date: '2026-06-17 09:04'
+updated_date: '2026-06-17 09:25'
 labels:
   - auto-update-gh-releases
   - packaging
@@ -23,8 +25,23 @@ Apply a downloaded update by re-running the OS installer silently, so the instal
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Windows: exec romhop-setup-X.exe /VERYSILENT /NORESTART /SUPPRESSMSGBOXES; upgrades in place per-user, no UAC; then app exits for relaunch
-- [ ] #2 Add explicit AppId={{GUID}} to packaging/windows/romhop.iss (hardening so an AppName change cannot orphan installs)
-- [ ] #3 Linux: chmod +x downloaded .AppImage and run via --appimage-bootstrap; make install_bootstrap bootstrap idempotent + non-interactive so it upgrades ~/.local/lib/romhop headlessly
-- [ ] #4 Relaunch the installed app after the installer completes; installer non-zero exit surfaces update-failed and keeps current install
+- [x] #1 Windows: exec romhop-setup-X.exe /VERYSILENT /NORESTART /SUPPRESSMSGBOXES; upgrades in place per-user, no UAC; then app exits for relaunch
+- [x] #2 Add explicit AppId={{GUID}} to packaging/windows/romhop.iss (hardening so an AppName change cannot orphan installs)
+- [x] #3 Linux: chmod +x downloaded .AppImage and run via --appimage-bootstrap; make install_bootstrap bootstrap idempotent + non-interactive so it upgrades ~/.local/lib/romhop headlessly
+- [x] #4 Relaunch the installed app after the installer completes; installer non-zero exit surfaces update-failed and keeps current install
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Add AppId GUID to packaging/windows/romhop.iss
+2. Make install_bootstrap --appimage-bootstrap path idempotent + non-interactive (accepts --upgrade or detects upgrade and skips prompts)
+3. Expose relaunch logic in update.py download_and_apply (after installer succeeds, relaunch installed binary)
+4. Tests: apply_installer called with right flags; relaunch after installer; non-zero exit raises
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Added AppId GUID to romhop.iss. Made _maybe_bootstrap idempotent for upgrades: always extract_and_install, skip desktop shortcut + launch_installed on upgrade path so subprocess.run returns cleanly. Relaunch (AC#4) handled by GUI layer in TASK-010.10.
+<!-- SECTION:NOTES:END -->

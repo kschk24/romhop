@@ -31,6 +31,7 @@ class SettingsView(QWidget):
     scan_requested = Signal()
     setup_requested = Signal()
     token_changed = Signal(str)  # emitted with the new token on a non-blank save
+    update_check_requested = Signal()
 
     def __init__(self, settings: Settings, parent=None):
         super().__init__(parent)
@@ -81,9 +82,13 @@ class SettingsView(QWidget):
         self.setup_btn = QPushButton("Run setup wizard")
         self.setup_btn.setObjectName("SetupButton")
         self.setup_btn.clicked.connect(lambda: self.setup_requested.emit())
+        self.update_check_btn = QPushButton("Check for updates")
+        self.update_check_btn.setObjectName("UpdateCheckButton")
+        self.update_check_btn.clicked.connect(lambda: self.update_check_requested.emit())
         scan_row = QHBoxLayout()
         scan_row.addWidget(self.scan_btn)
         scan_row.addWidget(self.setup_btn)
+        scan_row.addWidget(self.update_check_btn)
         scan_row.addStretch(1)
         layout.addLayout(scan_row)
 

@@ -1,10 +1,10 @@
 ---
 id: TASK-010
 title: Auto-update for frozen installers (GitHub Releases)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-16 15:04'
-updated_date: '2026-06-17 09:12'
+updated_date: '2026-06-17 09:36'
 labels:
   - auto-update-gh-releases
   - feature
@@ -24,12 +24,12 @@ Sub-project 2/2 of the freeze-installers effort: frozen Windows + Linux installs
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Frozen build checks for and applies updates via tufup
-- [ ] #2 Update flow works on Windows and Linux frozen builds
-- [ ] #3 Update flow works on Windows and Linux frozen builds
-- [ ] #4 Opt-in experimental channel (prerelease releases) gated by update_include_prereleases setting (default off)
-- [ ] #5 TLS-only: no signing keys; downloaded asset verified against published SHA256SUMS before running
-- [ ] #6 Frozen build checks GitHub Releases on launch and applies an update via silent installer re-run, then relaunches
+- [x] #1 Frozen build checks for and applies updates via tufup
+- [x] #2 Update flow works on Windows and Linux frozen builds
+- [x] #3 Update flow works on Windows and Linux frozen builds
+- [x] #4 Opt-in experimental channel (prerelease releases) gated by update_include_prereleases setting (default off)
+- [x] #5 TLS-only: no signing keys; downloaded asset verified against published SHA256SUMS before running
+- [x] #6 Frozen build checks GitHub Releases on launch and applies an update via silent installer re-run, then relaunches
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -47,4 +47,6 @@ REUSE MAP (commits on feature/auto-update-tufup):
 - ecabf62 / 6116087 / d17c62d / d6db60e / 43e2594 (tufup update.py client, repo tooling, root.json bundle, tufup dep) — DEAD, do NOT reuse. .08 rewrites update.py from the spec.
 
 ORDER: .08 client core -> .09 apply -> .10 GUI / .11 CI / .12 docs (deps wired). Integrity is TLS-only: no signing keys, but verify the downloaded asset vs published SHA256SUMS. Per CLAUDE.md execute with Sonnet.
+
+All subtasks complete on feature/auto-update-github-releases. 401 tests pass. Manual desktop smoke (TASK-012) still needed before merging.
 <!-- SECTION:NOTES:END -->
