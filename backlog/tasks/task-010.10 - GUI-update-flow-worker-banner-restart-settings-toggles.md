@@ -1,9 +1,11 @@
 ---
 id: TASK-010.10
 title: 'GUI update flow: worker, banner, restart, settings toggles'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-06-17 09:05'
+updated_date: '2026-06-17 09:29'
 labels:
   - auto-update-gh-releases
   - feature
@@ -29,3 +31,13 @@ GUI surface for the GitHub-Releases updater. Reuses the approach-agnostic banner
 - [ ] #3 Update -> progress bar -> modal 'Restart to finish updating' -> relaunch
 - [ ] #4 Settings: 'Check for updates' button + auto-check toggle + 'Include experimental pre-release updates' checkbox; hidden/disabled when is_update_supported() is False
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Add UpdateWorker to workers.py
+2. Add update_check_fn/update_apply_fn/relaunch_fn params to MainWindow + banner row + check_for_updates + apply/restart flow
+3. Add update_check_requested signal + update_check_btn to SettingsView + hide when unsupported
+4. Wire update callables in app.run() + launch check
+5. Write tests/test_gui_update_flow.py covering banner/apply/restart/unsupported
+<!-- SECTION:PLAN:END -->

@@ -153,6 +153,31 @@ class CoverLoader(QThread):
             self.cover_ready.emit(rom.id, image)
 
 
+class UpdateWorker(QThread):
+    """Off-UI-thread update check or download+apply. One instance per phase."""
+
+    available = Signal(object)      # UpdateInfo | None
+    progress = Signal(int, int)     # bytes_done, bytes_total
+    applied = Signal()
+    failed = Signal(str)
+
+    def __init__(self, *, check_fn=None, apply_fn=None, info=None, parent=None):
+        super().__init__(parent)
+        self._check_fn = check_fn
+        self._apply_fn = apply_fn
+        self._info = info
+
+    def run(self) -> None:
+        try:
+            if self._apply_fn is not None:
+                self._apply_fn(self._info, lambda d, t: self.progress.emit(d, t))
+                self.applied.emit()
+            else:
+                self.available.emit(self._check_fn())
+        except Exception as exc:  # noqa: BLE001 - surface, never crash the app
+            self.failed.emit(str(exc))
+
+
 class SyncWorker(QThread):
     """Runs the sync watch loop until stop() is requested.
 

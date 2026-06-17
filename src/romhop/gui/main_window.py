@@ -28,7 +28,7 @@ from romhop.gui.library_view import LibraryView, platforms_from_roms
 from romhop.gui.settings_view import SettingsView
 from romhop.gui.setup_wizard import SetupWizard
 from romhop.gui.scan_result_dialog import ScanResultDialog
-from romhop.gui.workers import CallableWorker, DownloadWorker, SyncWorker
+from romhop.gui.workers import CallableWorker, DownloadWorker, SyncWorker, UpdateWorker
 from romhop.local_index import downloaded_rom_ids
 from romhop.platform_names import display_name
 
@@ -78,7 +78,8 @@ class MainWindow(QWidget):
                  sync_watch_fn=None, persist_settings=None, cover_provider=None,
                  platform_label=None, platform_names=None, apply_token=None,
                  apply_settings=None, quit_fn=None, confirm_no_tray=None,
-                 validate_fn=None, detect_retroarch_fn=None, recreate_client=None):
+                 validate_fn=None, detect_retroarch_fn=None, recreate_client=None,
+                 update_check_fn=None, update_apply_fn=None, relaunch_fn=None):
         super().__init__(parent)
         self._settings = settings
         self._apply_token = apply_token
@@ -93,6 +94,12 @@ class MainWindow(QWidget):
         self._platform_names = platform_names
         self._persist_settings = persist_settings or config.save_settings
         self._scan_action = scan_action
+        self._update_check_fn = update_check_fn
+        self._update_apply_fn = update_apply_fn
+        self._relaunch_fn = relaunch_fn
+        self._pending_update = None
+        self._check_worker = None
+        self._apply_worker = None
         self._download_worker = None
         self._scan_worker = None
         self._sync_worker = None
@@ -133,6 +140,9 @@ class MainWindow(QWidget):
         self.settings_view.scan_requested.connect(self.run_scan)
         self.settings_view.token_changed.connect(self._on_token_changed)
         self.settings_view.setup_requested.connect(self.run_setup_wizard)
+        self.settings_view.update_check_requested.connect(self.check_for_updates)
+        if update_check_fn is None:
+            self.settings_view.update_check_btn.hide()
         self.stack = QStackedWidget()
         self.stack.addWidget(self.library)      # index 0
         self.stack.addWidget(self.settings_view)  # index 1
@@ -195,10 +205,28 @@ class MainWindow(QWidget):
         self.library.selection_changed.connect(self._on_selection)
         self.download_btn.clicked.connect(self.download_selected)
 
+        # Update banner: in-layout, hidden until a newer version is found.
+        self.update_banner = QLabel("")
+        self.update_banner.setObjectName("UpdateBanner")
+        self.update_banner.hide()
+        self._update_btn = QPushButton("Update")
+        self._update_btn.setObjectName("UpdateNow")
+        self._update_btn.clicked.connect(self._on_update_clicked)
+        self._update_btn.hide()
+        self._update_later_btn = QPushButton("Later")
+        self._update_later_btn.clicked.connect(self._hide_update_bar)
+        self._update_later_btn.hide()
+        update_bar_row = QHBoxLayout()
+        update_bar_row.addWidget(self.update_banner)
+        update_bar_row.addWidget(self._update_btn)
+        update_bar_row.addWidget(self._update_later_btn)
+        update_bar_row.addStretch(1)
+
         layout = QVBoxLayout(self)
         layout.addLayout(top)
         layout.addWidget(self.filter_bar)
         layout.addWidget(self.stack, 1)
+        layout.addLayout(update_bar_row)
         layout.addWidget(self.bottom)
 
     # --- search dispatch ---
@@ -545,3 +573,58 @@ class MainWindow(QWidget):
     def _end_progress(self) -> None:
         self.progress_bar.hide()
         self.progress_label.hide()
+
+    # --- update flow ---
+
+    def check_for_updates(self) -> None:
+        if self._update_check_fn is None:
+            return
+        self._check_worker = UpdateWorker(check_fn=self._update_check_fn)
+        self._check_worker.available.connect(self._on_update_available)
+        self._check_worker.failed.connect(self._on_update_failed)
+        self._check_worker.start()
+
+    def _hide_update_bar(self) -> None:
+        self.update_banner.hide()
+        self._update_btn.hide()
+        self._update_later_btn.hide()
+
+    def _on_update_available(self, info) -> None:
+        if info is None:
+            self._hide_update_bar()
+            return
+        self._pending_update = info
+        self.update_banner.setText(f"v{info.version} available")
+        self.update_banner.show()
+        self._update_btn.show()
+        self._update_later_btn.show()
+
+    def _on_update_clicked(self) -> None:
+        self._hide_update_bar()
+        self._apply_worker = UpdateWorker(
+            apply_fn=self._update_apply_fn, info=self._pending_update
+        )
+        self._apply_worker.progress.connect(self._on_update_progress)
+        self._apply_worker.applied.connect(self._on_update_applied)
+        self._apply_worker.failed.connect(self._on_update_failed)
+        self._apply_worker.start()
+
+    def _on_update_progress(self, done: int, total: int) -> None:
+        if total > 0:
+            self.progress_bar.setMaximum(self._PROGRESS_SCALE)
+            self.progress_bar.setValue(int(done * self._PROGRESS_SCALE / total))
+        else:
+            self.progress_bar.setMaximum(0)
+        self.progress_bar.setFormat("Updating…")
+        self.progress_bar.show()
+
+    def _on_update_applied(self) -> None:
+        self.progress_bar.hide()
+        QMessageBox.information(self, "Update ready", "Restart romhop to finish updating.")
+        if self._relaunch_fn is not None:
+            self._relaunch_fn()
+
+    def _on_update_failed(self, msg: str) -> None:
+        import logging
+        logging.getLogger(__name__).warning("Update failed: %s", msg)
+        self.set_sync_status(f"update error: {msg}")
