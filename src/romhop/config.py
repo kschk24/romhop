@@ -28,6 +28,7 @@ class Settings:
     theme: str = "default"
     download_rate_limit_kbps: int = 0  # 0 = unlimited
     auto_update_check: bool = True
+    update_include_prereleases: bool = False
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,9 @@ SCHEMA: list[FieldSpec] = [
     FieldSpec("theme", "behavior", "Theme", "str", "GUI theme name"),
     FieldSpec("auto_update_check", "behavior", "Check for updates on launch", "bool",
               "Look for a new version at startup (frozen installs only)"),
+    FieldSpec("update_include_prereleases", "behavior",
+              "Include experimental pre-release updates", "bool",
+              "Opt in to release-candidate and beta builds (frozen installs only)"),
 ]
 
 

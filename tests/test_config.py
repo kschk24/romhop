@@ -124,7 +124,7 @@ def test_schema_covers_every_scalar_settings_field():
         "sort_saves_by_core", "sort_states_by_core",
         "sync_enabled", "sync_delay_seconds",
         "download_rate_limit_kbps", "theme",
-        "auto_update_check",
+        "auto_update_check", "update_include_prereleases",
     }
     assert schema_keys == expected
     assert "platform_overrides" not in schema_keys

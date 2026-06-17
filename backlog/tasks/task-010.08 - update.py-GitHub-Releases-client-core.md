@@ -1,9 +1,11 @@
 ---
 id: TASK-010.08
 title: update.py GitHub-Releases client core
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-06-17 09:04'
+updated_date: '2026-06-17 09:17'
 labels:
   - auto-update-gh-releases
   - feature
@@ -30,3 +32,18 @@ Qt-free src/romhop/update.py for the GitHub-Releases self-updater (no tufup). Fo
 - [ ] #6 Add update_include_prereleases: bool=False to config.py SCHEMA + default_settings()
 - [ ] #7 GitHub API + apply callables injectable; unit tests use fakes, no network
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Cherry-pick c605620 (auto_update_check config field) onto new branch
+2. Write src/romhop/update.py from scratch per spec (no tufup):
+   - UpdateInfo dataclass
+   - is_update_supported() frozen+writable gate
+   - update_check() /releases/latest (stable) + /releases (experimental)
+   - asset selection by OS pattern
+   - download_and_apply() stream+SHA256SUMS verify+exec silently
+   - injectable callables for unit tests
+3. Add update_include_prereleases to config.py SCHEMA + default_settings()
+4. Write tests/test_update.py (no network, fakes for GH API + apply)
+<!-- SECTION:PLAN:END -->
