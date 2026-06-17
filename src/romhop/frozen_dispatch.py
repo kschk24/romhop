@@ -55,13 +55,21 @@ def main(argv: list[str] | None = None) -> None:
 
         app()
     else:
-        # Prevent the bundled libatk-bridge-2.0 from registering with the
-        # system AT-SPI2 D-Bus service. The bundled Ubuntu 24.04 build of
-        # libatk-bridge can segfault against a different-version system daemon
-        # (Fedora, Arch, newer Ubuntu). NO_AT_BRIDGE=1 skips bridge init while
-        # leaving Qt's own accessibility intact.
+        # Prevent AT-SPI2 bridges from crashing on non-Ubuntu distros.
+        #
+        # NO_AT_BRIDGE=1: stops libatk-bridge-2.0 (GTK side) from registering
+        # with the system AT-SPI2 D-Bus daemon.  The Ubuntu 24.04 build of
+        # libatk-bridge segfaults against the daemon on Arch/Fedora/newer-Ubuntu
+        # due to ABI mismatch.
+        #
+        # QT_ACCESSIBILITY=0: prevents Qt from loading its own AT-SPI2 plugin
+        # (libqatspiplugin.so), which also dlopen's libatspi.so.0 and crashes on
+        # distros that ship a different SONAME.  New installs strip the plugin
+        # from the bundle; this env-var guards existing 0.1.0 installs that still
+        # have it on disk.
         if sys.platform.startswith("linux"):
             os.environ.setdefault("NO_AT_BRIDGE", "1")
+            os.environ.setdefault("QT_ACCESSIBILITY", "0")
         from romhop.gui.app import run
 
         run()

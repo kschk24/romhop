@@ -194,11 +194,23 @@ def _apply_installer(path: Path) -> None:
     """Run the OS installer silently; raises on non-zero exit."""
     if sys.platform == "win32":
         cmd = [str(path), "/VERYSILENT", "/NORESTART", "/SUPPRESSMSGBOXES"]
+        env = None
     else:
         path.chmod(path.stat().st_mode | 0o111)
         cmd = [str(path)]  # AppRun hardcodes --appimage-bootstrap; runtime rejects unknown --appimage-* flags
+        # PyInstaller prepends _internal/ to LD_LIBRARY_PATH so its bundled
+        # libs load.  The installer subprocess inherits this and its /bin/sh
+        # picks up the bundled readline, causing a symbol-lookup error and
+        # exit code 127.  Restore the original LD_LIBRARY_PATH (PyInstaller
+        # saves it as LD_LIBRARY_PATH_ORIG) so the installer sees system libs.
+        env = os.environ.copy()
+        orig = env.pop("LD_LIBRARY_PATH_ORIG", None)
+        if orig is not None:
+            env["LD_LIBRARY_PATH"] = orig
+        else:
+            env.pop("LD_LIBRARY_PATH", None)
 
-    result = subprocess.run(cmd, check=False)
+    result = subprocess.run(cmd, check=False, env=env)
     if result.returncode != 0:
         raise RuntimeError(f"Installer exited with code {result.returncode}")
 
