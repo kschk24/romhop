@@ -196,7 +196,7 @@ def _apply_installer(path: Path) -> None:
         cmd = [str(path), "/VERYSILENT", "/NORESTART", "/SUPPRESSMSGBOXES"]
     else:
         path.chmod(path.stat().st_mode | 0o111)
-        cmd = [str(path), "--appimage-bootstrap"]
+        cmd = [str(path)]  # AppRun hardcodes --appimage-bootstrap; runtime rejects unknown --appimage-* flags
 
     result = subprocess.run(cmd, check=False)
     if result.returncode != 0:
