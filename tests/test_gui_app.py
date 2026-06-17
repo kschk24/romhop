@@ -1,4 +1,5 @@
 from romhop import config
+from romhop.romm_client import Rom, RomDetail
 
 
 def test_main_window_builds_and_applies_theme(qtbot):
@@ -613,6 +614,22 @@ def test_quit_app_stops_sync_then_quits(qtbot, monkeypatch):
         lambda: win._sync_worker is None or win._sync_worker.isFinished(),
         timeout=3000)
     assert quit_called == [True]
+
+
+def test_tile_activation_shows_detail_panel(qtbot):
+    from romhop.gui.main_window import MainWindow
+
+    rom = Rom(id=1, name="Sonic", platform_slug="genesis",
+              fs_name="Sonic.md", fs_name_no_ext="Sonic", file_names=["Sonic.md"])
+    win = MainWindow(settings=config.default_settings(),
+                     rom_provider=lambda: [rom],
+                     detail_provider=lambda r: RomDetail(summary="Fast."))
+    qtbot.addWidget(win)
+    win.load_library()
+    assert win.detail_panel.isHidden()
+    win.library.tile_activated.emit(rom)
+    assert not win.detail_panel.isHidden()
+    assert "Sonic" in win.detail_panel._name_label.text()
 
 
 def test_sigint_handler_installed_and_fires_quit_app(qtbot, monkeypatch):

@@ -31,6 +31,7 @@ from romhop.gui.filter_bar import FilterBar
 from romhop.gui.library_view import LibraryView, platforms_from_roms
 from romhop.gui.settings_view import SettingsView
 from romhop.gui.setup_wizard import SetupWizard
+from romhop.gui.detail_panel import DetailPanel
 from romhop.gui.scan_result_dialog import ScanResultDialog
 from romhop.gui.workers import CallableWorker, DownloadWorker, SyncWorker, UpdateWorker
 from romhop.local_index import downloaded_rom_ids
@@ -84,7 +85,7 @@ class MainWindow(QWidget):
                  apply_settings=None, quit_fn=None, confirm_no_tray=None,
                  validate_fn=None, detect_retroarch_fn=None, recreate_client=None,
                  update_check_fn=None, update_apply_fn=None, relaunch_fn=None,
-                 open_log_dir_fn=None, export_logs_fn=None):
+                 open_log_dir_fn=None, export_logs_fn=None, detail_provider=None):
         super().__init__(parent)
         self._settings = settings
         self._apply_token = apply_token
@@ -102,6 +103,7 @@ class MainWindow(QWidget):
         self._update_check_fn = update_check_fn
         self._update_apply_fn = update_apply_fn
         self._relaunch_fn = relaunch_fn
+        self._detail_provider = detail_provider
         self._pending_update = None
         self._check_worker = None
         self._apply_worker = None
@@ -231,10 +233,16 @@ class MainWindow(QWidget):
         update_bar_row.addWidget(self._update_later_btn)
         update_bar_row.addStretch(1)
 
+        self.detail_panel = DetailPanel(detail_provider=detail_provider)
+        self.library.tile_activated.connect(self._on_tile_activated)
+        content = QHBoxLayout()
+        content.addWidget(self.stack, 1)
+        content.addWidget(self.detail_panel, 0)
+
         layout = QVBoxLayout(self)
         layout.addLayout(top)
         layout.addWidget(self.filter_bar)
-        layout.addWidget(self.stack, 1)
+        layout.addLayout(content, 1)
         layout.addLayout(update_bar_row)
         layout.addWidget(self.bottom)
 
@@ -446,6 +454,10 @@ class MainWindow(QWidget):
         ids = downloaded_rom_ids(roms, self._settings.roms_root,
                                  self._settings.platform_overrides)
         self.library.set_downloaded(ids)
+        self.detail_panel.set_downloaded(ids)
+
+    def _on_tile_activated(self, rom) -> None:
+        self.detail_panel.set_rom(rom)
 
     def run_scan(self) -> None:
         # One scan at a time; ignore re-clicks while a worker is live.
