@@ -4,7 +4,7 @@ title: Auto-update for frozen installers (GitHub Releases)
 status: To Do
 assignee: []
 created_date: '2026-06-16 15:04'
-updated_date: '2026-06-17 09:06'
+updated_date: '2026-06-17 09:12'
 labels:
   - auto-update-gh-releases
   - feature
@@ -32,10 +32,19 @@ Sub-project 2/2 of the freeze-installers effort: frozen Windows + Linux installs
 - [ ] #6 Frozen build checks GitHub Releases on launch and applies an update via silent installer re-run, then relaunches
 <!-- AC:END -->
 
-
-
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Research 2026-06-17 (tufup-example): hosting blocker RESOLVED — metadata_base_url & target_base_url are independent Client args (demo only looks nested due to http.server -d). All tufup filenames flat → single flat tuf-repo release works (metadata_base==target_base==release download URL); split-host (metadata→Pages/raw, targets→Release assets) is config-only fallback. Repo-side = init/add_bundle scripts mapping to update_repo.py init/publish. root.json bundled via spec datas; check_for_updates + download_and_apply_update(progress_hook) confirm update.py surface. See docs/superpowers/specs/2026-06-16-auto-update-tufup-design.md Research findings section. Resume: checkout feature/auto-update-tufup + git stash pop.
+HANDOFF (for fresh session) — verified 2026-06-17 on main:
+
+STATE: No auto-update code exists on main. update.py, auto_update_check, is_update_supported(), and the GUI banner all live ONLY on the abandoned branch feature/auto-update-tufup (never merged). Sub-project-1 seam install_bootstrap.install_dir() IS on main. Design spec (local, gitignored): docs/superpowers/specs/2026-06-17-auto-update-github-releases-design.md — read it first.
+
+BRANCH: start fresh — git checkout -b feature/auto-update-github-releases main. Do NOT resume feature/auto-update-tufup (tufup is dropped).
+
+REUSE MAP (commits on feature/auto-update-tufup):
+- c605620 feat(config): auto_update_check setting — REUSE, near-clean cherry-pick (one SCHEMA field). Then add update_include_prereleases alongside it (TASK-010.08).
+- 2e7d4c3 / 25fb3b7 / ff46d7b (GUI banner, in-layout banner, is_update_supported gate) — REUSE AS REFERENCE ONLY. They are wired to the tufup update.py surface, so a blind cherry-pick will conflict. Re-port the banner/worker/restart UI against the NEW update.py signatures (update_check(current, include_prereleases) / download_and_apply(info, progress_cb)).
+- ecabf62 / 6116087 / d17c62d / d6db60e / 43e2594 (tufup update.py client, repo tooling, root.json bundle, tufup dep) — DEAD, do NOT reuse. .08 rewrites update.py from the spec.
+
+ORDER: .08 client core -> .09 apply -> .10 GUI / .11 CI / .12 docs (deps wired). Integrity is TLS-only: no signing keys, but verify the downloaded asset vs published SHA256SUMS. Per CLAUDE.md execute with Sonnet.
 <!-- SECTION:NOTES:END -->
