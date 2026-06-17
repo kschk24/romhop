@@ -1,7 +1,7 @@
 ---
 id: TASK-030
 title: 'logging core: always-on rotating diagnostic log + redaction + -v'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-06-17 13:29'
