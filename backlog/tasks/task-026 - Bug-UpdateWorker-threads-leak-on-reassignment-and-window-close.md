@@ -1,10 +1,10 @@
 ---
 id: TASK-026
 title: 'Bug: UpdateWorker threads leak on reassignment and window close'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-17 13:05'
-updated_date: '2026-06-17 13:09'
+updated_date: '2026-06-17 14:20'
 labels:
   - bug
   - update
