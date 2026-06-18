@@ -240,9 +240,10 @@ def test_pull_content_404_skips_file_continues_batch(tmp_path):
                          on_error=lambda p, exc: errors.append(p))
 
     assert summary["written"] == 2
-    assert summary["failed"] == 1
-    assert len(errors) == 1
-    assert errors[0].name == "Sonic.state"
+    # Orphan 404 is counted as missing, not failed, and stays off on_error.
+    assert summary["missing"] == 1
+    assert summary["failed"] == 0
+    assert errors == []
 
 
 def test_pull_content_non404_http_error_propagates(tmp_path):

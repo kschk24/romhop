@@ -9,8 +9,10 @@ All notable changes to romhop are documented here. Format loosely follows
 
 - **Pull no longer aborts on orphan save/state rows.** When RomM lists a save or
   state whose content blob is missing (HTTP 404 on `/content`), the file is
-  skipped and counted as failed rather than crashing the entire pull. Auth errors
-  (401/403) and server errors (5xx) still surface as hard failures.
+  skipped rather than crashing the entire pull. These orphans are reported as a
+  separate *Missing on RomM* count — kept distinct from genuine local write
+  *failures* so a server-side orphan no longer looks like the pull broke. Auth
+  errors (401/403) and server errors (5xx) still surface as hard failures.
 
 ### Added
 

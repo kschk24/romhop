@@ -62,9 +62,13 @@ def pull_games(client, entries, settings, *, take_remote: bool = False,
     `on_conflict(item, local_path, local_mtime)` callback returns True, else keep
     local. `on_written(path)` is called for each file written; `on_error(path,
     exc)` for each file that fails to write (the run continues). Returns a summary
-    dict with counts: written / skipped / kept / failed.
+    dict with counts: written / skipped / kept / failed / missing.
+
+    `missing` counts remote rows RomM lists but whose `/content` blob is gone
+    (404) — a server-side orphan, not a local error, so it's kept separate from
+    `failed` (genuine local write errors) and does not fire `on_error`.
     """
-    summary = {"written": 0, "skipped": 0, "kept": 0, "failed": 0}
+    summary = {"written": 0, "skipped": 0, "kept": 0, "failed": 0, "missing": 0}
     fetchers = (
         ("save", client.list_saves, client.download_save_content),
         ("state", client.list_states, client.download_state_content),
@@ -77,10 +81,12 @@ def pull_games(client, entries, settings, *, take_remote: bool = False,
                 except httpx.HTTPStatusError as exc:
                     if exc.response.status_code != 404:
                         raise
-                    # Orphan row: RomM lists it but content blob is gone.
-                    summary["failed"] += 1
-                    if on_error is not None:
-                        on_error(Path(remote["file_name"]), exc)
+                    # Orphan row: RomM lists it but the content blob is gone.
+                    # Benign (nothing wrong locally), so count it apart from
+                    # genuine write failures and don't raise the error callback.
+                    logger.info("pull skipped orphan (404 content): %s",
+                                remote.get("file_name"))
+                    summary["missing"] += 1
                     continue
                 file_name = remote["file_name"]
                 # Route by extension, not by endpoint: a .state* name must land in

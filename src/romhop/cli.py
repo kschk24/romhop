@@ -559,6 +559,8 @@ def pull(name: str = typer.Argument(None, help="Game name (omit and use --all fo
         raise typer.Exit(code=1)
     line = (f"Pulled {summary['written']}, skipped {summary['skipped']} "
             f"(up to date), kept {summary['kept']} local.")
+    if summary.get("missing"):
+        line += f" {summary['missing']} missing on RomM (skipped)."
     if summary.get("failed"):
         line += f" {summary['failed']} failed."
     typer.echo(line)
