@@ -268,6 +268,16 @@ def run() -> None:
         client = RommClient(base_url=new_settings.romm_url, token=get_token() or "")
         apply_settings(new_settings)
 
+    from romhop.pull import pull_games
+
+    def pull_action(rom, on_conflict):
+        class _Shim:
+            def __init__(self, rom_id):
+                self.rom_id = rom_id
+
+        s = live["settings"]
+        return pull_games(client, [_Shim(rom.id)], s, on_conflict=on_conflict)
+
     from romhop.romm_client import romm_game_url
     from romhop.library import local_game_dir
 
@@ -350,6 +360,7 @@ def run() -> None:
         export_logs_fn=export_logs_fn,
         open_in_romm=open_in_romm_fn,
         open_folder=open_folder_fn,
+        pull_action=pull_action,
     )
     instance.activated.connect(window.show_and_raise)
     window.resize(900, 600)

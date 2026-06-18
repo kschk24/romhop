@@ -201,6 +201,46 @@ class DetailWorker(QThread):
         self.loaded.emit(result)
 
 
+class PullWorker(QThread):
+    """Pulls saves+states for one game off the UI thread.
+
+    ``pull_fn(on_conflict) -> dict`` performs the pull; the ``on_conflict``
+    callable it receives blocks the worker thread and marshals to the UI thread
+    via the ``conflict`` signal. Call ``resolve_conflict(take_remote)`` from the
+    UI thread to unblock it. Emits ``done(summary)`` or ``failed(message)``.
+    """
+
+    conflict = Signal(object, object, object)  # item, local_path, local_mtime
+    done = Signal(dict)
+    failed = Signal(str)
+
+    def __init__(self, pull_fn: Callable[..., dict], parent=None):
+        super().__init__(parent)
+        self._pull_fn = pull_fn
+        self._event = threading.Event()
+        self._conflict_result: bool = False
+
+    def resolve_conflict(self, take_remote: bool) -> None:
+        """Called from the UI thread to unblock the worker's on_conflict."""
+        self._conflict_result = take_remote
+        self._event.set()
+
+    def _on_conflict(self, item, local_path, local_mtime) -> bool:
+        self._event.clear()
+        self._conflict_result = False
+        self.conflict.emit(item, local_path, local_mtime)
+        self._event.wait()
+        return self._conflict_result
+
+    def run(self) -> None:
+        try:
+            result = self._pull_fn(self._on_conflict)
+        except Exception as exc:
+            self.failed.emit(str(exc))
+            return
+        self.done.emit(result)
+
+
 class SyncWorker(QThread):
     """Runs the sync watch loop until stop() is requested.
 

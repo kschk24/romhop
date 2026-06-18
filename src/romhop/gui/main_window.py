@@ -33,7 +33,8 @@ from romhop.gui.settings_view import SettingsView
 from romhop.gui.setup_wizard import SetupWizard
 from romhop.gui.detail_panel import DetailPanel
 from romhop.gui.scan_result_dialog import ScanResultDialog
-from romhop.gui.workers import CallableWorker, DownloadWorker, SyncWorker, UpdateWorker
+from romhop.gui.pull_conflict_dialog import PullConflictDialog
+from romhop.gui.workers import CallableWorker, DownloadWorker, PullWorker, SyncWorker, UpdateWorker
 from romhop.local_index import downloaded_rom_ids
 from romhop.platform_names import display_name
 
@@ -86,7 +87,7 @@ class MainWindow(QWidget):
                  validate_fn=None, detect_retroarch_fn=None, recreate_client=None,
                  update_check_fn=None, update_apply_fn=None, relaunch_fn=None,
                  open_log_dir_fn=None, export_logs_fn=None, detail_provider=None,
-                 open_in_romm=None, open_folder=None):
+                 open_in_romm=None, open_folder=None, pull_action=None):
         super().__init__(parent)
         self._settings = settings
         self._apply_token = apply_token
@@ -107,6 +108,8 @@ class MainWindow(QWidget):
         self._detail_provider = detail_provider
         self._open_in_romm_fn = open_in_romm
         self._open_folder_fn = open_folder
+        self._pull_action = pull_action
+        self._pull_workers: set = set()
         self._pending_update = None
         self._check_worker = None
         self._apply_worker = None
@@ -241,6 +244,8 @@ class MainWindow(QWidget):
         self.library.action_requested.connect(self._dispatch_action)
         self.detail_panel.download_requested.connect(
             lambda r: self._dispatch_action("download", r))
+        self.detail_panel.pull_requested.connect(
+            lambda r: self._dispatch_action("pull", r))
         self.detail_panel.open_romm_requested.connect(
             lambda r: self._dispatch_action("open_romm", r))
         self.detail_panel.open_folder_requested.connect(
@@ -551,12 +556,47 @@ class MainWindow(QWidget):
     def _dispatch_action(self, name: str, rom) -> None:
         if name == "download":
             self._start_download([rom])
+        elif name == "pull":
+            self._pull_one(rom)
         elif name == "open_romm":
             if self._open_in_romm_fn is not None:
                 self._open_in_romm_fn(rom)
         elif name == "open_folder":
             if self._open_folder_fn is not None:
                 self._open_folder_fn(rom)
+
+    def _pull_one(self, rom) -> None:
+        if self._pull_action is None:
+            return
+        worker = PullWorker(lambda on_conflict: self._pull_action(rom, on_conflict))
+        worker.conflict.connect(self._on_pull_conflict)
+        worker.done.connect(self._on_pull_done)
+        worker.failed.connect(self._on_pull_failed)
+        worker.finished.connect(lambda w=worker: self._pull_workers.discard(w))
+        self._pull_workers.add(worker)
+        worker.start()
+
+    def _on_pull_conflict(self, item, local_path, local_mtime) -> None:
+        worker = self.sender()
+        take = PullConflictDialog.ask(item.file_name, item.remote_updated,
+                                      local_mtime, self)
+        worker.resolve_conflict(take)
+
+    def _on_pull_done(self, summary: dict) -> None:
+        w = summary.get("written", 0)
+        s = summary.get("skipped", 0)
+        k = summary.get("kept", 0)
+        f = summary.get("failed", 0)
+        m = summary.get("missing", 0)
+        text = f"Written: {w}  Skipped: {s}  Kept: {k}"
+        if m:
+            text += f"  Missing on RomM: {m}"
+        if f:
+            text += f"  Failed: {f}"
+        QMessageBox.information(self, "Pull complete", text)
+
+    def _on_pull_failed(self, message: str) -> None:
+        QMessageBox.critical(self, "Pull failed", message)
 
     # --- download progress UI ---
     def _begin_progress(self) -> None:

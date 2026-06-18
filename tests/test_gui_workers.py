@@ -197,3 +197,84 @@ def test_download_worker_cancel_stops_batch_without_item_error(qtbot):
     assert errors == []                 # cancel is not an error
     assert w.was_cancelled() is True
     assert started == []                # cancelled before the first item ran
+
+
+# --- PullWorker ---
+
+def test_pull_worker_emits_done(qtbot):
+    def pull_fn(on_conflict):
+        return {"written": 1, "skipped": 0, "kept": 0, "failed": 0}
+
+    w = workers.PullWorker(pull_fn)
+    with qtbot.waitSignal(w.done, timeout=2000) as blocker:
+        w.start()
+    assert blocker.args[0] == {"written": 1, "skipped": 0, "kept": 0, "failed": 0}
+
+
+def test_pull_worker_emits_failed_on_exception(qtbot):
+    def pull_fn(on_conflict):
+        raise RuntimeError("network error")
+
+    w = workers.PullWorker(pull_fn)
+    with qtbot.waitSignal(w.failed, timeout=2000) as blocker:
+        w.start()
+    assert "network error" in blocker.args[0]
+
+
+def test_pull_worker_conflict_marshals_and_resolves(qtbot):
+    from dataclasses import dataclass
+    from datetime import datetime
+
+    @dataclass
+    class _Item:
+        file_name: str
+        remote_updated: str | None
+
+    conflicts_seen = []
+
+    def pull_fn(on_conflict):
+        item = _Item("save.srm", "2026-06-17T10:00:00")
+        result = on_conflict(item, "/saves/save.srm", datetime(2026, 6, 16, 9, 0, 0))
+        conflicts_seen.append(result)
+        return {"written": 1 if result else 0, "skipped": 0, "kept": 0, "failed": 0}
+
+    w = workers.PullWorker(pull_fn)
+    conflict_args = []
+
+    def handle_conflict(item, local_path, local_mtime):
+        conflict_args.append((item.file_name, local_path, local_mtime))
+        # Resolve from the "UI thread" (here: the test thread) immediately
+        w.resolve_conflict(True)  # take remote
+
+    w.conflict.connect(handle_conflict)
+    with qtbot.waitSignal(w.done, timeout=2000) as blocker:
+        w.start()
+
+    assert conflict_args[0][0] == "save.srm"
+    assert conflicts_seen == [True]
+    assert blocker.args[0]["written"] == 1
+
+
+def test_pull_worker_conflict_keep_local(qtbot):
+    from dataclasses import dataclass
+    from datetime import datetime
+
+    @dataclass
+    class _Item:
+        file_name: str
+        remote_updated: str | None
+
+    kept = []
+
+    def pull_fn(on_conflict):
+        item = _Item("save.srm", None)
+        result = on_conflict(item, "/saves/save.srm", datetime(2026, 6, 16, 9, 0, 0))
+        kept.append(result)
+        return {"written": 0, "skipped": 0, "kept": 1, "failed": 0}
+
+    w = workers.PullWorker(pull_fn)
+    w.conflict.connect(lambda item, p, m: w.resolve_conflict(False))  # keep local
+    with qtbot.waitSignal(w.done, timeout=2000):
+        w.start()
+
+    assert kept == [False]
