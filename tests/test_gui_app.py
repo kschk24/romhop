@@ -48,29 +48,14 @@ def test_search_filters_settings_when_settings_active(qtbot):
     assert not win.settings_view.is_field_visible("Saves directory")
 
 
-def test_switching_into_settings_applies_current_query(qtbot):
+def test_search_clears_on_view_switch(qtbot):
     from romhop.gui.main_window import MainWindow
 
     win = MainWindow(settings=config.default_settings())
     qtbot.addWidget(win)
-    # Query typed while in the library view...
-    win.search.setText("saves")
-    # ...takes effect on the settings rows once settings opens.
-    win.show_settings()
-    assert win.settings_view.is_field_visible("Saves directory")
-    assert not win.settings_view.is_field_visible("RomM URL")
-
-
-def test_switching_back_to_library_reapplies_query_to_library(qtbot):
-    from romhop.gui.main_window import MainWindow
-
-    win = MainWindow(settings=config.default_settings())
-    qtbot.addWidget(win)
-    win.show_settings()
     win.search.setText("zelda")
-    # Returning to the library re-applies the query to the game list.
-    win.show_library()
-    assert win.library._query == "zelda"
+    win.show_settings()
+    assert win.search.text() == ""
 
 
 def test_cancelling_settings_returns_to_library(qtbot):

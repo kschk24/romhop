@@ -7,6 +7,8 @@ All notable changes to romhop are documented here. Format loosely follows
 
 ### Fixed
 
+- **Search bar clears when switching between library and settings views.** Previously the search text carried over, leaving stale filter state in the newly activated view.
+
 - **Pull no longer aborts on orphan save/state rows.** When RomM lists a save or
   state whose content blob is missing (HTTP 404 on `/content`), the file is
   skipped rather than crashing the entire pull. These orphans are reported as a

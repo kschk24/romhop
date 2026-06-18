@@ -277,17 +277,15 @@ class MainWindow(QWidget):
         self.filter_bar.hide()
         self.uncheck_btn.hide()
         self.download_btn.hide()
+        self.search.clear()
         self.stack.setCurrentIndex(1)
-        # Apply the standing query to the rows now that settings is active.
-        self.settings_view.filter(self.search.text())
 
     def show_library(self) -> None:
         self.filter_bar.show()
         self.uncheck_btn.show()
         self.download_btn.show()
+        self.search.clear()
         self.stack.setCurrentIndex(0)
-        # Re-apply the standing query to the game list.
-        self.library.filter(self.search.text())
 
     def toggle_settings(self) -> None:
         # Gear acts as a toggle: into settings, or back out (discarding edits).
