@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+import httpx
+
 logger = logging.getLogger(__name__)
 
 from romhop.sync import is_state_file
@@ -70,7 +72,16 @@ def pull_games(client, entries, settings, *, take_remote: bool = False,
     for entry in entries:
         for _source, lister, downloader in fetchers:
             for remote in lister(entry.rom_id):
-                data = downloader(remote["id"])
+                try:
+                    data = downloader(remote["id"])
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code != 404:
+                        raise
+                    # Orphan row: RomM lists it but content blob is gone.
+                    summary["failed"] += 1
+                    if on_error is not None:
+                        on_error(Path(remote["file_name"]), exc)
+                    continue
                 file_name = remote["file_name"]
                 # Route by extension, not by endpoint: a .state* name must land in
                 # states_dir even if it came back from /api/saves (legacy uploads

@@ -3,6 +3,41 @@
 All notable changes to romhop are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow semver.
 
+## [Unreleased]
+
+### Fixed
+
+- **Pull no longer aborts on orphan save/state rows.** When RomM lists a save or
+  state whose content blob is missing (HTTP 404 on `/content`), the file is
+  skipped and counted as failed rather than crashing the entire pull. Auth errors
+  (401/403) and server errors (5xx) still surface as hard failures.
+
+### Added
+
+- **Game Detail panel.** Clicking a game tile (body, not the checkbox) opens a
+  Detail panel docked to the right of the library grid. It shows name,
+  platform, and file list instantly, then fills in RomM-fetched metadata
+  (summary, release date, genres, file size) off the UI thread. Results are
+  cached per game so switching between titles is instant. A close button
+  dismisses the panel without affecting the library.
+- **Tile checkbox/body split.** The checkbox now selects only when clicked
+  directly; clicking anywhere else on the tile opens the Detail panel. Batch
+  selection behavior is unchanged.
+- **Per-game actions — context menu and Detail panel buttons.** Right-clicking
+  a tile and the Detail panel both expose the same set of actions:
+  - *Download* (or *Re-download* when already on disk) — single-game download
+    reusing the existing download worker.
+  - *Open in RomM* — opens the game's page in the system browser.
+  - *Open containing folder* — opens the game's on-disk directory in the file
+    manager; disabled when the game is not downloaded.
+- **Per-game Pull savegames.** A *Pull savegames* action in both the context
+  menu and Detail panel downloads saves and savestates for one game from RomM
+  — no need to run a full pull. Works whether or not the game is downloaded
+  locally; files land in the configured saves/states directories. When a local
+  file differs from the RomM copy, a per-file conflict dialog shows both
+  timestamps (remote vs. local) so you can choose to keep the local version or
+  take the remote one.
+
 ## [v0.1.4] — 2026-06-17
 
 ### Added

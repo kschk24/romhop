@@ -1,5 +1,9 @@
 from dataclasses import dataclass
 from pathlib import Path
+from unittest.mock import MagicMock
+
+import httpx
+import pytest
 
 from romhop.pull import PullItem, resolve_target, pull_games
 from romhop.mapping_cache import RomEntry
@@ -207,3 +211,68 @@ def test_state_uses_states_dir_and_flag(tmp_path):
     target = resolve_target(item, tmp_path / "saves", states,
                             sort_saves_by_core=False, sort_states_by_core=True)
     assert target == states / "genesis" / "Sonic.state1"
+
+
+def _http_status_error(status_code: int) -> httpx.HTTPStatusError:
+    response = MagicMock(spec=httpx.Response)
+    response.status_code = status_code
+    return httpx.HTTPStatusError("mock", request=MagicMock(), response=response)
+
+
+def test_pull_content_404_skips_file_continues_batch(tmp_path):
+    # State id=14 returns 404 content; the .srm and .state from saves must still write.
+    class _Client404:
+        def list_saves(self, rom_id):
+            return [
+                {"id": 4, "file_name": "Sonic.srm", "emulator": "mGBA", "updated_at": ""},
+                {"id": 5, "file_name": "Sonic.state", "emulator": "mGBA", "updated_at": ""},
+            ]
+        def list_states(self, rom_id):
+            return [{"id": 14, "file_name": "Sonic.state", "emulator": "mGBA", "updated_at": ""}]
+        def download_save_content(self, sid):
+            return {4: b"SRM", 5: b"STATE"}[sid]
+        def download_state_content(self, sid):
+            raise _http_status_error(404)
+
+    settings = _Settings(tmp_path / "saves", tmp_path / "states")
+    errors = []
+    summary = pull_games(_Client404(), [_entry()], settings,
+                         on_error=lambda p, exc: errors.append(p))
+
+    assert summary["written"] == 2
+    assert summary["failed"] == 1
+    assert len(errors) == 1
+    assert errors[0].name == "Sonic.state"
+
+
+def test_pull_content_non404_http_error_propagates(tmp_path):
+    class _Client403:
+        def list_saves(self, rom_id):
+            return [{"id": 9, "file_name": "Sonic.srm", "emulator": "genesis", "updated_at": ""}]
+        def list_states(self, rom_id):
+            return []
+        def download_save_content(self, sid):
+            raise _http_status_error(403)
+        def download_state_content(self, sid):  # pragma: no cover
+            return b""
+
+    settings = _Settings(tmp_path / "saves", tmp_path / "states")
+    with pytest.raises(httpx.HTTPStatusError):
+        pull_games(_Client403(), [_entry()], settings)
+
+
+def test_one_rom_shim_works_with_pull_games(tmp_path):
+    # Verify the one-rom shim used by pull_action exposes .rom_id so pull_games
+    # can iterate it without touching mapping_cache.
+    class _Shim:
+        def __init__(self, rom_id):
+            self.rom_id = rom_id
+
+    client = FakeClient(
+        saves={42: [{"id": 9, "file_name": "Game.srm", "emulator": "genesis",
+                     "updated_at": "2026-06-17T10:00:00"}]},
+        blobs={("save", 9): b"DATA"})
+    settings = _Settings(tmp_path / "saves", tmp_path / "states")
+    summary = pull_games(client, [_Shim(42)], settings)
+    assert summary["written"] == 1
+    assert (tmp_path / "saves" / "Game.srm").read_bytes() == b"DATA"
