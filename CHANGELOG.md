@@ -7,6 +7,8 @@ All notable changes to romhop are documented here. Format loosely follows
 
 ### Fixed
 
+- **Installer download no longer buffers the full asset in RAM.** `update.py` previously accumulated all 65536-byte chunks into a list before writing to disk, holding a full AppImage/exe in memory. Chunks are now written directly to the `.part` temp file as they arrive, and the SHA-256 digest is computed incrementally during the same pass — eliminating both the in-memory accumulation and the post-write `path.read_bytes()` re-load that doubled peak RAM use. (`TASK-024`)
+
 - **Windows "Installed Apps" now shows "RomHop", not "RomHop version …".** Inno
   was defaulting the uninstall display name to the product name plus the build
   version (which was the raw git ref, e.g. a branch slug like

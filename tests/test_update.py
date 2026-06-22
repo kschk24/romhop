@@ -216,14 +216,29 @@ def _make_info(tmp_path: Path) -> tuple[UpdateInfo, bytes, str]:
     return info, data, sha_content
 
 
+def _make_stream_asset(data: bytes):
+    """Fake _gh_stream_asset: writes data to dest, returns correct digest."""
+    def _fn(url: str, dest: Path, cb) -> str:
+        dest.write_bytes(data)
+        if cb:
+            cb(len(data), len(data))
+        return hashlib.sha256(data).hexdigest()
+    return _fn
+
+
 def test_download_and_apply_calls_apply_on_success(tmp_path):
     info, data, sha_content = _make_info(tmp_path)
     applied: list[Path] = []
 
     def _fake_get_bytes(url: str, cb) -> bytes:
-        return sha_content.encode() if "SHA256SUMS" in url else data
+        return sha_content.encode()
 
-    download_and_apply(info, _apply_fn=lambda p: applied.append(p), _gh_get_bytes=_fake_get_bytes)
+    download_and_apply(
+        info,
+        _apply_fn=lambda p: applied.append(p),
+        _gh_get_bytes=_fake_get_bytes,
+        _gh_stream_asset=_make_stream_asset(data),
+    )
     assert len(applied) == 1
     assert applied[0].name == ASSET_NAME
 
@@ -235,10 +250,15 @@ def test_download_and_apply_sha256_mismatch_aborts(tmp_path):
     applied: list[Path] = []
 
     def _fake_get_bytes(url: str, cb) -> bytes:
-        return sha_content.encode() if "SHA256SUMS" in url else data
+        return sha_content.encode()
 
     with pytest.raises(ValueError, match="SHA-256 mismatch"):
-        download_and_apply(info, _apply_fn=lambda p: applied.append(p), _gh_get_bytes=_fake_get_bytes)
+        download_and_apply(
+            info,
+            _apply_fn=lambda p: applied.append(p),
+            _gh_get_bytes=_fake_get_bytes,
+            _gh_stream_asset=_make_stream_asset(data),
+        )
     assert not applied
 
 
@@ -248,10 +268,15 @@ def test_download_and_apply_sha256_entry_missing_aborts(tmp_path):
     applied: list[Path] = []
 
     def _fake_get_bytes(url: str, cb) -> bytes:
-        return sha_content.encode() if "SHA256SUMS" in url else data
+        return sha_content.encode()
 
     with pytest.raises(ValueError, match="No SHA256SUMS entry"):
-        download_and_apply(info, _apply_fn=lambda p: applied.append(p), _gh_get_bytes=_fake_get_bytes)
+        download_and_apply(
+            info,
+            _apply_fn=lambda p: applied.append(p),
+            _gh_get_bytes=_fake_get_bytes,
+            _gh_stream_asset=_make_stream_asset(data),
+        )
     assert not applied
 
 
@@ -260,14 +285,15 @@ def test_download_and_apply_progress_forwarded(tmp_path):
     progress: list[tuple[int, int]] = []
 
     def _fake_get_bytes(url: str, cb) -> bytes:
-        if "SHA256SUMS" in url:
-            return sha_content.encode()
-        if cb:
-            cb(len(data), len(data))
-        return data
+        return sha_content.encode()
 
-    download_and_apply(info, progress_cb=lambda d, t: progress.append((d, t)),
-                       _apply_fn=lambda p: None, _gh_get_bytes=_fake_get_bytes)
+    download_and_apply(
+        info,
+        progress_cb=lambda d, t: progress.append((d, t)),
+        _apply_fn=lambda p: None,
+        _gh_get_bytes=_fake_get_bytes,
+        _gh_stream_asset=_make_stream_asset(data),
+    )
     assert progress  # at least one progress callback fired
 
 
@@ -281,12 +307,54 @@ def test_download_and_apply_no_sha256sums_raises_before_apply(tmp_path):
     )
     applied: list[Path] = []
 
-    def _fake_get_bytes(url: str, cb) -> bytes:
-        return data
-
     with pytest.raises(ValueError, match="SHA256SUMS asset is missing"):
-        download_and_apply(info, _apply_fn=lambda p: applied.append(p), _gh_get_bytes=_fake_get_bytes)
+        download_and_apply(
+            info,
+            _apply_fn=lambda p: applied.append(p),
+            _gh_stream_asset=_make_stream_asset(data),
+        )
     assert applied == []
+
+
+def test_download_and_apply_multi_chunk_incremental_hash(tmp_path):
+    """Stream asset in multiple chunks: hash correct, no full-buffer accumulation."""
+    chunks = [b"chunk_one", b"chunk_two", b"chunk_three"]
+    data = b"".join(chunks)
+    expected_digest = hashlib.sha256(data).hexdigest()
+    sha_content = f"{expected_digest}  {ASSET_NAME}\n"
+    info = UpdateInfo(
+        version=NEWER,
+        asset=AssetInfo(name=ASSET_NAME, url="https://example.com/asset", size=len(data)),
+        sha256sums_url="https://example.com/SHA256SUMS",
+    )
+
+    wrote_offsets: list[int] = []
+
+    def _chunked_stream_asset(url: str, dest: Path, cb) -> str:
+        hasher = hashlib.sha256()
+        done = 0
+        with dest.open("wb") as fh:
+            for chunk in chunks:
+                fh.write(chunk)
+                hasher.update(chunk)
+                done += len(chunk)
+                wrote_offsets.append(done)
+                if cb:
+                    cb(done, len(data))
+        return hasher.hexdigest()
+
+    applied: list[Path] = []
+    download_and_apply(
+        info,
+        progress_cb=lambda d, t: None,
+        _apply_fn=lambda p: applied.append(p),
+        _gh_get_bytes=lambda url, cb: sha_content.encode(),
+        _gh_stream_asset=_chunked_stream_asset,
+    )
+
+    assert len(applied) == 1
+    # Three separate chunk writes, not one big blob
+    assert wrote_offsets == [9, 18, 29]
 
 
 # ---------------------------------------------------------------------------

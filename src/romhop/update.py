@@ -178,8 +178,8 @@ def update_check(
 # ---------------------------------------------------------------------------
 
 
-def _verify_sha256(path: Path, sha256sums_content: str, asset_name: str) -> None:
-    """Raise ValueError if the file's SHA-256 doesn't match SHA256SUMS entry."""
+def _verify_sha256(digest: str, sha256sums_content: str, asset_name: str) -> None:
+    """Raise ValueError if digest doesn't match the SHA256SUMS entry for asset_name."""
     expected: str | None = None
     for line in sha256sums_content.splitlines():
         parts = line.split(None, 1)
@@ -188,9 +188,7 @@ def _verify_sha256(path: Path, sha256sums_content: str, asset_name: str) -> None
             break
     if expected is None:
         raise ValueError(f"No SHA256SUMS entry for {asset_name!r}")
-
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    if digest != expected:
+    if digest.lower() != expected:
         raise ValueError(f"SHA-256 mismatch for {asset_name}: got {digest}, expected {expected}")
 
 
@@ -225,11 +223,14 @@ def download_and_apply(
     *,
     _apply_fn: Callable[[Path], None] | None = None,
     _gh_get_bytes: Callable[[str, Callable[[int, int], None] | None], bytes] | None = None,
+    _gh_stream_asset: Callable[[str, Path, Callable[[int, int], None] | None], str] | None = None,
 ) -> None:
     """Stream installer asset to temp, verify SHA-256, exec installer silently.
 
     progress_cb(bytes_done, bytes_total) — called during streaming.
-    _apply_fn / _gh_get_bytes: injectable fakes for unit tests.
+    _apply_fn / _gh_get_bytes / _gh_stream_asset: injectable fakes for unit tests.
+    _gh_stream_asset(url, dest_path, cb) -> hex_digest — streams asset to dest_path,
+    computing SHA-256 incrementally; returns hex digest.
     """
     apply_fn = _apply_fn or _apply_installer
 
@@ -240,37 +241,48 @@ def download_and_apply(
         )
 
     def _default_get_bytes(url: str, cb: Callable[[int, int], None] | None) -> bytes:
-        chunks: list[bytes] = []
+        resp = httpx.get(url, timeout=_API_TIMEOUT, follow_redirects=True)
+        resp.raise_for_status()
+        return resp.content
+
+    def _default_stream_asset(
+        url: str,
+        dest: Path,
+        cb: Callable[[int, int], None] | None,
+    ) -> str:
+        hasher = hashlib.sha256()
         done = 0
         with httpx.stream("GET", url, timeout=None, follow_redirects=True) as resp:
             resp.raise_for_status()
             total = int(resp.headers.get("content-length", 0))
-            for chunk in resp.iter_bytes(chunk_size=65536):
-                chunks.append(chunk)
-                done += len(chunk)
-                if cb:
-                    cb(done, total)
-        return b"".join(chunks)
+            with dest.open("wb") as fh:
+                for chunk in resp.iter_bytes(chunk_size=65536):
+                    fh.write(chunk)
+                    hasher.update(chunk)
+                    done += len(chunk)
+                    if cb:
+                        cb(done, total)
+        return hasher.hexdigest()
 
     get_bytes = _gh_get_bytes or _default_get_bytes
+    stream_asset = _gh_stream_asset or _default_stream_asset
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
 
-        # Fetch SHA256SUMS first (small file)
+        # Fetch SHA256SUMS first (small file — buffer ok)
         sha_content = get_bytes(info.sha256sums_url, None).decode()
 
-        # Stream installer asset
+        # Stream installer asset directly to .part file; hash computed during download
         part_path = tmp / (info.asset.name + ".part")
-        asset_data = get_bytes(info.asset.url, progress_cb)
-        part_path.write_bytes(asset_data)
+        digest = stream_asset(info.asset.url, part_path, progress_cb)
 
         # Rename .part → final
         final_path = tmp / info.asset.name
         part_path.rename(final_path)
 
-        # Verify
-        _verify_sha256(final_path, sha_content, info.asset.name)
+        # Verify using pre-computed digest (no full file re-read)
+        _verify_sha256(digest, sha_content, info.asset.name)
 
         # Apply
         apply_fn(final_path)
