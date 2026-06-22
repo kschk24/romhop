@@ -82,7 +82,8 @@ class MainWindow(QWidget):
     def __init__(self, settings: Settings, parent=None, *,
                  rom_provider=None, download_action=None, scan_action=None,
                  sync_watch_fn=None, persist_settings=None, cover_provider=None,
-                 platform_label=None, platform_names=None, apply_token=None,
+                 screenshot_provider=None, platform_label=None, platform_names=None,
+                 apply_token=None,
                  apply_settings=None, quit_fn=None, confirm_no_tray=None,
                  validate_fn=None, detect_retroarch_fn=None, recreate_client=None,
                  update_check_fn=None, update_apply_fn=None, relaunch_fn=None,
@@ -239,7 +240,12 @@ class MainWindow(QWidget):
         update_bar_row.addWidget(self._update_later_btn)
         update_bar_row.addStretch(1)
 
-        self.detail_panel = DetailPanel(detail_provider=detail_provider)
+        self.detail_panel = DetailPanel(
+            detail_provider=detail_provider,
+            cover_provider=cover_provider,
+            screenshot_provider=screenshot_provider,
+            platform_label=platform_label,
+        )
         self.library.tile_activated.connect(self._on_tile_activated)
         self.library.action_requested.connect(self._dispatch_action)
         self.detail_panel.download_requested.connect(

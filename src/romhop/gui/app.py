@@ -199,6 +199,9 @@ def run() -> None:
     def cover_provider(rom):
         return covers.get_cover(rom, client)
 
+    def screenshot_provider(rom):
+        return covers.get_screenshot(rom, client, live["settings"].romm_url)
+
     # Hold settings in a mutable box so the backend closures below always read
     # the current values. MainWindow swaps in a new Settings on save and calls
     # apply_settings, so changes (download limit, roms_root, sync dirs) take
@@ -345,6 +348,7 @@ def run() -> None:
         download_action=download_action,
         sync_watch_fn=sync_watch_fn,
         cover_provider=cover_provider,
+        screenshot_provider=screenshot_provider,
         platform_label=platform_label,
         platform_names=names,
         scan_action=scan_action,

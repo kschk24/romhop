@@ -1,23 +1,106 @@
-from romhop.gui.detail_panel import DetailPanel
+from romhop.gui.detail_panel import DetailPanel, _strip_tags
 from romhop.romm_client import Rom, RomDetail
 
 
-def _rom(rom_id=1, name="Sonic"):
-    return Rom(id=rom_id, name=name, platform_slug="genesis",
-               fs_name=f"{name}.md", fs_name_no_ext=name, file_names=[f"{name}.md"])
+def _rom(rom_id=1, name="Sonic", regions=None, languages=None, tags=None,
+         revision=None, screenshots=None):
+    return Rom(
+        id=rom_id, name=name, platform_slug="genesis",
+        fs_name=f"{name}.md", fs_name_no_ext=name, file_names=[f"{name}.md"],
+        regions=regions or [],
+        languages=languages or [],
+        tags=tags or [],
+        revision=revision,
+        screenshots=screenshots or [],
+    )
 
 
-def test_set_rom_shows_local_fields_immediately(qtbot):
-    panel = DetailPanel(detail_provider=lambda rom: RomDetail())
+def _panel(**kw):
+    return DetailPanel(**kw)
+
+
+# --- unit: _strip_tags ---
+
+def test_strip_tags_removes_parens():
+    assert _strip_tags("Sonic (USA)") == "Sonic"
+
+
+def test_strip_tags_multiple():
+    assert _strip_tags("Sonic (USA) (Rev 1)") == "Sonic"
+
+
+def test_strip_tags_no_parens():
+    assert _strip_tags("Sonic") == "Sonic"
+
+
+def test_strip_tags_nested_not_greedy():
+    # Only strips outer balanced parens groups
+    assert _strip_tags("Game (USA)") == "Game"
+
+
+# --- widget tests ---
+
+def test_set_rom_shows_stripped_title(qtbot):
+    panel = _panel(detail_provider=lambda rom: RomDetail())
     qtbot.addWidget(panel)
-    panel.set_rom(_rom(name="Sonic"))
-    assert "Sonic" in panel._name_label.text()
+    panel.set_rom(_rom(name="Sonic (USA) (Rev 1)"))
+    assert panel._name_label.text() == "Sonic"
+
+
+def test_platform_label_fn_used(qtbot):
+    panel = _panel(
+        detail_provider=lambda rom: RomDetail(),
+        platform_label=lambda rom: "Mega Drive",
+    )
+    qtbot.addWidget(panel)
+    panel.set_rom(_rom())
+    assert panel._platform_display.text() == "Mega Drive"
+
+
+def test_platform_label_fallback(qtbot):
+    panel = _panel(detail_provider=lambda rom: RomDetail())
+    qtbot.addWidget(panel)
+    panel.set_rom(_rom())
+    # falls back to platform_slug
+    assert "genesis" in panel._platform_display.text()
+
+
+def test_chips_region_flag(qtbot):
+    panel = _panel(detail_provider=lambda rom: RomDetail())
+    qtbot.addWidget(panel)
+    panel.set_rom(_rom(regions=["USA"], languages=["En"]))
+    chips = [
+        panel._chips_layout.itemAt(i).widget()
+        for i in range(panel._chips_layout.count())
+    ]
+    texts = [c.text() for c in chips]
+    assert any("🇺🇸" in t for t in texts)
+    assert any("En" in t for t in texts)
+
+
+def test_chips_revision(qtbot):
+    panel = _panel(detail_provider=lambda rom: RomDetail())
+    qtbot.addWidget(panel)
+    panel.set_rom(_rom(revision="Rev 1"))
+    chips = [
+        panel._chips_layout.itemAt(i).widget()
+        for i in range(panel._chips_layout.count())
+    ]
+    assert any("Rev 1" in c.text() for c in chips)
+
+
+def test_chips_cleared_on_rom_switch(qtbot):
+    panel = _panel(detail_provider=lambda rom: RomDetail())
+    qtbot.addWidget(panel)
+    panel.set_rom(_rom(regions=["USA"]))
+    panel.set_rom(_rom(rom_id=2, regions=[]))
+    assert panel._chips_layout.count() == 0
 
 
 def test_detail_fields_fill_in_after_fetch(qtbot):
     detail = RomDetail(summary="Fast.", release_date="1991",
                        genres=["Platform"], file_size=524288)
-    panel = DetailPanel(detail_provider=lambda rom: detail)
+    panel = _panel(detail_provider=lambda rom: detail)
     qtbot.addWidget(panel)
     with qtbot.waitSignal(panel._detail_loaded, timeout=2000):
         panel.set_rom(_rom())
@@ -27,7 +110,7 @@ def test_detail_fields_fill_in_after_fetch(qtbot):
 
 
 def test_buttons_emit_action_signals(qtbot):
-    panel = DetailPanel(detail_provider=lambda rom: RomDetail())
+    panel = _panel(detail_provider=lambda rom: RomDetail())
     qtbot.addWidget(panel)
     rom = _rom()
     panel.set_rom(rom)
@@ -38,7 +121,7 @@ def test_buttons_emit_action_signals(qtbot):
 
 
 def test_open_folder_disabled_until_downloaded(qtbot):
-    panel = DetailPanel(detail_provider=lambda rom: RomDetail())
+    panel = _panel(detail_provider=lambda rom: RomDetail())
     qtbot.addWidget(panel)
     rom = _rom(rom_id=5)
     panel.set_rom(rom)
@@ -52,7 +135,7 @@ def test_fetch_failure_shows_error_note(qtbot):
     def boom(rom):
         raise RuntimeError("no network")
 
-    panel = DetailPanel(detail_provider=boom)
+    panel = _panel(detail_provider=boom)
     qtbot.addWidget(panel)
     with qtbot.waitSignal(panel._detail_loaded, timeout=2000):
         panel.set_rom(_rom())
@@ -66,7 +149,7 @@ def test_cache_hit_skips_second_fetch(qtbot):
         calls.append(rom.id)
         return RomDetail(summary="Cached")
 
-    panel = DetailPanel(detail_provider=provider)
+    panel = _panel(detail_provider=provider)
     qtbot.addWidget(panel)
     rom = _rom()
     with qtbot.waitSignal(panel._detail_loaded, timeout=2000):
@@ -74,3 +157,9 @@ def test_cache_hit_skips_second_fetch(qtbot):
     # Second call must use cache, not re-invoke provider.
     panel.set_rom(rom)
     assert len(calls) == 1
+
+
+def test_no_files_label(qtbot):
+    panel = _panel(detail_provider=lambda rom: RomDetail())
+    qtbot.addWidget(panel)
+    assert not hasattr(panel, "_files_label")

@@ -7,6 +7,8 @@ All notable changes to romhop are documented here. Format loosely follows
 
 ### Fixed
 
+- **DetailPanel sidebar now stays a fixed 300 px wide.** Previously the panel resized with each game selection as word-wrapped labels responded to varying content; long descriptions, summaries, and file lists now scroll inside the panel rather than pushing it wider or taller.
+
 - **Search bar clears when switching between library and settings views.** Previously the search text carried over, leaving stale filter state in the newly activated view.
 
 - **Pull no longer aborts on orphan save/state rows.** When RomM lists a save or
@@ -17,6 +19,13 @@ All notable changes to romhop are documented here. Format loosely follows
   errors (401/403) and server errors (5xx) still surface as hard failures.
 
 ### Added
+
+- **Detail panel redesign.** The Detail panel now shows a rich layout: cover art
+  (200 px image header, with screenshot replacing it once loaded off-thread), a
+  clean title with parenthetical tags stripped, colored tag chips for regions
+  (with flag emojis), languages, revision, and tags in a wrapping FlowLayout,
+  the human-readable platform name, and a scrollable metadata/summary block —
+  with action buttons pinned at the bottom. File list removed.
 
 - **Game Detail panel.** Clicking a game tile (body, not the checkbox) opens a
   Detail panel docked to the right of the library grid. It shows name,

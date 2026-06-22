@@ -21,6 +21,11 @@ class Rom:
     has_multiple_files: bool = False
     url_cover: str | None = None
     platform_name: str | None = None
+    regions: list[str] = field(default_factory=list)
+    languages: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+    revision: str | None = None
+    screenshots: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -101,6 +106,11 @@ class RommClient:
                     has_multiple_files=bool(item.get("has_multiple_files", False)),
                     url_cover=item.get("url_cover"),
                     platform_name=item.get("platform_name"),
+                    regions=item.get("regions") or [],
+                    languages=item.get("languages") or [],
+                    tags=item.get("tags") or [],
+                    revision=item.get("revision"),
+                    screenshots=item.get("merged_screenshots") or [],
                 ))
             offset += limit
             if not items or total is None or offset >= total:
