@@ -7,11 +7,13 @@ All notable changes to romhop are documented here. Format loosely follows
 
 ### Fixed
 
-- **Windows installer now shows a clean version, not a git branch name.** The
-  packaging workflow fed the raw git ref into the Inno installer, so "Installed
-  Apps" listed the build's branch slug (e.g. *packaging-freeze-installers*) as
-  the version. Tag builds now use the clean semver (leading `v` stripped) and
-  manual builds use the package `__version__` with a `-dev` suffix.
+- **Windows "Installed Apps" now shows "RomHop", not "RomHop version …".** Inno
+  was defaulting the uninstall display name to the product name plus the build
+  version (which was the raw git ref, e.g. a branch slug like
+  *packaging-freeze-installers*). The installer now pins the display name to
+  `RomHop`, and the version is reported separately as a clean semver — tag
+  builds strip the leading `v`, manual builds use the package `__version__` with
+  a `-dev` suffix.
 
 - **DetailPanel image header no longer flips or flashes between cover and screenshot.** Both loaders raced for the same slot, so the displayed image was nondeterministic and re-clicking flashed cover→screenshot every time. Games with a screenshot now load only the screenshot (no cover-upgrade flash), and loaded images are cached per game so re-selecting one re-displays it instantly instead of blanking to a placeholder and reloading.
 

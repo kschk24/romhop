@@ -6,6 +6,11 @@
 
 [Setup]
 AppName=RomHop
+; Without AppVerName, Inno's uninstall DisplayName defaults to
+; "RomHop version {AppVersion}" -> version leaks into the program name in
+; Installed Apps. Pin it to the clean product name; AppVersion still feeds the
+; separate DisplayVersion (version column).
+AppVerName=RomHop
 AppVersion={#MyVersion}
 AppPublisher=romhop
 AppId={{9A469421-551F-4086-B920-5C6C80AB5C9D}
