@@ -5,13 +5,13 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-06-16 15:03'
-updated_date: '2026-06-17 13:20'
+updated_date: '2026-06-17 16:43'
 labels:
   - bug
   - ready-for-human
 dependencies: []
 priority: medium
-ordinal: 37000
+ordinal: 38000
 ---
 
 ## Description

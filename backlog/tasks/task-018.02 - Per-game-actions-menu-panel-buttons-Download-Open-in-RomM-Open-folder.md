@@ -1,10 +1,11 @@
 ---
 id: TASK-018.02
 title: 'Per-game actions: menu + panel buttons (Download, Open in RomM, Open folder)'
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@kschk24'
 created_date: '2026-06-16 22:28'
-updated_date: '2026-06-17 14:37'
+updated_date: '2026-06-17 15:26'
 labels:
   - feature
   - game-detail-panel
@@ -32,12 +33,18 @@ Expose a shared per-game action set in BOTH the tile's right-click context menu 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Right-click on a tile shows a context menu with Download, Open in RomM, Open folder; the Detail panel shows the same actions as buttons
-- [ ] #2 Download triggers a single-game download (reuses download_action); label reflects downloaded state
-- [ ] #3 Open in RomM opens {romm_url}/rom/{id} in the browser via an injected callable; URL pattern is a single constant
-- [ ] #4 Open folder opens the game's on-disk folder and is disabled when the game is not downloaded
-- [ ] #5 Actions injected in app.run() (no backend imports in widgets); tests cover menu/button wiring and folder-path resolution
+- [x] #1 Right-click on a tile shows a context menu with Download, Open in RomM, Open folder; the Detail panel shows the same actions as buttons
+- [x] #2 Download triggers a single-game download (reuses download_action); label reflects downloaded state
+- [x] #3 Open in RomM opens {romm_url}/rom/{id} in the browser via an injected callable; URL pattern is a single constant
+- [x] #4 Open folder opens the game's on-disk folder and is disabled when the game is not downloaded
+- [x] #5 Actions injected in app.run() (no backend imports in widgets); tests cover menu/button wiring and folder-path resolution
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented: romm_game_url() in romm_client.py, local_game_dir() in library.py, _dispatch_action + _start_download refactor in main_window.py, open_in_romm/open_folder injection in app.py. 447 tests pass.
+<!-- SECTION:NOTES:END -->
 
 ## Comments
 

@@ -1,16 +1,16 @@
 ---
 id: TASK-012
 title: Manual desktop smoke test of merged-but-unverified GUI features
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-16 15:04'
-updated_date: '2026-06-16 22:07'
+updated_date: '2026-06-17 16:43'
 labels:
   - chore
   - ready-for-human
 dependencies: []
 priority: medium
-ordinal: 12000
+ordinal: 44000
 ---
 
 ## Description

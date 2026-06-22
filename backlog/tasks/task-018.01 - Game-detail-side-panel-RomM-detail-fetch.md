@@ -1,11 +1,11 @@
 ---
 id: TASK-018.01
 title: Game detail side panel + RomM detail fetch
-status: In Progress
+status: Done
 assignee:
   - '@kschk24'
 created_date: '2026-06-16 22:27'
-updated_date: '2026-06-17 14:41'
+updated_date: '2026-06-17 15:12'
 labels:
   - feature
   - game-detail-panel
@@ -30,11 +30,11 @@ Panel shows local Rom fields instantly (cover, name, platform, file list, downlo
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Clicking a tile body opens the Detail panel; checkbox glyph still toggles batch selection without opening the panel
-- [ ] #2 Panel docks right, grid stays visible, updates in place on another tile click, and a close button hides it
-- [ ] #3 RommClient.get_rom(id) returns summary/release date/genres/file size, each tolerant of missing keys
-- [ ] #4 Detail fetched off the UI thread, cached per rom id; local fields shown immediately as fallback; fetch failure shows local fields + an error note
-- [ ] #5 Tests cover get_rom parsing (incl. missing fields) and the click-vs-select split
+- [x] #1 Clicking a tile body opens the Detail panel; checkbox glyph still toggles batch selection without opening the panel
+- [x] #2 Panel docks right, grid stays visible, updates in place on another tile click, and a close button hides it
+- [x] #3 RommClient.get_rom(id) returns summary/release date/genres/file size, each tolerant of missing keys
+- [x] #4 Detail fetched off the UI thread, cached per rom id; local fields shown immediately as fallback; fetch failure shows local fields + an error note
+- [x] #5 Tests cover get_rom parsing (incl. missing fields) and the click-vs-select split
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -46,6 +46,12 @@ Panel shows local Rom fields instantly (cover, name, platform, file list, downlo
 4. Create detail_panel.py with DetailPanel widget + tests (plan Task 6)
 5. Dock DetailPanel in MainWindow, wire tile_activated → panel.set_rom + test (plan Task 7)
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+All 5 plan tasks implemented. 436/436 tests pass. Committed as 4 discrete commits on main (5933ed0..f87cec3). get_rom field names (first_release_date_string, fs_size_bytes) still unverified against live server — parser degrades gracefully when absent.
+<!-- SECTION:NOTES:END -->
 
 ## Comments
 
@@ -88,3 +94,9 @@ Clicking a tile's body (cover image or name label, but NOT the checkbox glyph) o
 - Full-window 'store page' view
 ---
 <!-- COMMENTS:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Added RomDetail+get_rom (romm_client), DetailWorker (workers), tile body-click+context-menu split (library_view), DetailPanel widget (detail_panel.py), and docked panel in MainWindow. All 5 AC met, 436 tests green.
+<!-- SECTION:FINAL_SUMMARY:END -->

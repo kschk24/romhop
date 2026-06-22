@@ -58,3 +58,23 @@ _Avoid_: link out, view online.
 **Open containing folder**:
 Open the downloaded game's on-disk folder in the OS file manager. Available only
 when the game is downloaded.
+
+### Diagnostics
+
+**Diagnostic log**:
+The rotating log file romhop always writes, capturing INFO-level events so a
+remote user can send it when reporting a setup-specific problem. The user never
+turns it on; they only retrieve and share it.
+_Avoid_: debug output, console log, trace.
+
+**Detailed logging**:
+The opt-in mode that raises the Diagnostic log from INFO to DEBUG. Persisted as a
+setting (a GUI checkbox) so a non-technical user can be talked through enabling it,
+reproduce, then export. The CLI equivalent is a per-run `-v` flag.
+_Avoid_: verbose mode, trace mode (in user-facing copy).
+
+**Redaction**:
+The rule that certain values never appear in the Diagnostic log regardless of
+level: the RomM API token (never), the RomM host (masked), and the user's home
+directory in paths (abbreviated). Because exported logs are effectively shared.
+_Avoid_: scrubbing, sanitizing, masking (pick one term: redaction).

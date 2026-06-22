@@ -1,10 +1,11 @@
 ---
 id: TASK-018.03
 title: Per-game Pull savegames + conflict prompt
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@kschk24'
 created_date: '2026-06-16 22:30'
-updated_date: '2026-06-17 14:37'
+updated_date: '2026-06-17 15:34'
 labels:
   - feature
   - game-detail-panel
@@ -30,12 +31,28 @@ Run pull off the UI thread (worker). On a local file that differs from RomM's, p
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Pull savegames action pulls saves+states for one game using a one-rom shim over pull_games (Rom.id only)
-- [ ] #2 Pull runs off the UI thread and works whether or not the game is downloaded
-- [ ] #3 Differing local file prompts per conflict with both timestamps; keep-local and take-remote both honored
-- [ ] #4 Conflict prompt marshals from worker thread to UI thread without freezing/crashing
-- [ ] #5 A summary of written/skipped/kept/failed is shown after the pull; tests cover the shim and conflict resolution paths
+- [x] #1 Pull savegames action pulls saves+states for one game using a one-rom shim over pull_games (Rom.id only)
+- [x] #2 Pull runs off the UI thread and works whether or not the game is downloaded
+- [x] #3 Differing local file prompts per conflict with both timestamps; keep-local and take-remote both honored
+- [x] #4 Conflict prompt marshals from worker thread to UI thread without freezing/crashing
+- [x] #5 A summary of written/skipped/kept/failed is shown after the pull; tests cover the shim and conflict resolution paths
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Add PullWorker to workers.py (conflict signal + threading.Event blocking + resolve_conflict)
+2. Create gui/pull_conflict_dialog.py (modal dialog, PullConflictDialog.ask class method)
+3. Update main_window.py: pull_action param, _pull_workers set, _pull_one, _on_pull_conflict/done/failed, wire pull_requested in __init__, handle 'pull' in _dispatch_action
+4. Update app.py: pull_action closure (one-rom shim + pull_games), inject into MainWindow
+5. Tests: PullWorker conflict/done/failed in test_gui_workers.py; shim test in test_pull.py
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented: PullWorker (workers.py), PullConflictDialog (pull_conflict_dialog.py), _pull_one/_on_pull_conflict/_on_pull_done/_on_pull_failed in MainWindow, pull_action closure in app.py. All 5 ACs met. 452 tests pass.
+<!-- SECTION:NOTES:END -->
 
 ## Comments
 

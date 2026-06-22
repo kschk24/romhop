@@ -4,11 +4,12 @@ title: Add Pull button to GUI
 status: To Do
 assignee: []
 created_date: '2026-06-16 15:04'
-updated_date: '2026-06-16 22:07'
+updated_date: '2026-06-17 16:43'
 labels:
   - feature
   - ready-for-agent
-dependencies: []
+dependencies:
+  - TASK-035
 priority: medium
 ordinal: 8000
 ---

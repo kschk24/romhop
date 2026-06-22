@@ -1,7 +1,7 @@
 ---
 id: TASK-036
 title: 'Bug: DetailPanel layout bare and title unformatted'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-06-17 15:54'
