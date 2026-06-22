@@ -7,6 +7,8 @@ All notable changes to romhop are documented here. Format loosely follows
 
 ### Fixed
 
+- **Installer download no longer buffers the full asset in RAM.** `update.py` previously accumulated all 65536-byte chunks into a list before writing to disk, holding a full AppImage/exe in memory. Chunks are now written directly to the `.part` temp file as they arrive, and the SHA-256 digest is computed incrementally during the same pass — eliminating both the in-memory accumulation and the post-write `path.read_bytes()` re-load that doubled peak RAM use. (`TASK-024`)
+
 - **DetailPanel image header no longer flips or flashes between cover and screenshot.** Both loaders raced for the same slot, so the displayed image was nondeterministic and re-clicking flashed cover→screenshot every time. Games with a screenshot now load only the screenshot (no cover-upgrade flash), and loaded images are cached per game so re-selecting one re-displays it instantly instead of blanking to a placeholder and reloading.
 
 - **DetailPanel sidebar now stays a fixed 300 px wide.** Previously the panel resized with each game selection as word-wrapped labels responded to varying content; long descriptions, summaries, and file lists now scroll inside the panel rather than pushing it wider or taller.
