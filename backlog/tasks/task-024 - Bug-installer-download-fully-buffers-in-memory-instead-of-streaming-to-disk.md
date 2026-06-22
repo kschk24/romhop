@@ -1,10 +1,11 @@
 ---
 id: TASK-024
 title: 'Bug: installer download fully buffers in memory instead of streaming to disk'
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@claude'
 created_date: '2026-06-17 13:02'
-updated_date: '2026-06-22 16:53'
+updated_date: '2026-06-22 17:07'
 labels:
   - bug
   - update
