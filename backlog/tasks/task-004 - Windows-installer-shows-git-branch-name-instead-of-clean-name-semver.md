@@ -1,10 +1,10 @@
 ---
 id: TASK-004
 title: Windows installer shows git branch name instead of clean name/semver
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-16 15:03'
-updated_date: '2026-06-16 22:06'
+updated_date: '2026-06-22 16:53'
 labels:
   - bug
   - ready-for-agent
@@ -21,6 +21,6 @@ Installed Apps lists 'RomHop version packaging-freeze-installers' and version eq
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Installed Apps shows clean product name (RomHop)
-- [ ] #2 Version field shows the release semver, not a branch slug
+- [x] #1 Installed Apps shows clean product name (RomHop)
+- [x] #2 Version field shows the release semver, not a branch slug
 <!-- AC:END -->

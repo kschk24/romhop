@@ -63,9 +63,21 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: packaging\dist\romhop\romhop.exe --smoke-exit
+      - name: Compute version
+        id: ver
+        shell: bash
+        run: |
+          # Tag push -> clean semver (strip leading 'v'); manual/branch run ->
+          # package __version__ + '-dev' so the installer never shows a branch slug.
+          if [ '${{ github.ref_type }}' = 'tag' ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/romhop/__init__.py)-dev"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Build installer
         env:
-          ROMHOP_VERSION: ${{ github.ref_name }}
+          ROMHOP_VERSION: ${{ steps.ver.outputs.version }}
         run: |
           choco install innosetup --no-progress -y
           iscc packaging\windows\romhop.iss

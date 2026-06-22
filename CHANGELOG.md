@@ -7,6 +7,12 @@ All notable changes to romhop are documented here. Format loosely follows
 
 ### Fixed
 
+- **Windows installer now shows a clean version, not a git branch name.** The
+  packaging workflow fed the raw git ref into the Inno installer, so "Installed
+  Apps" listed the build's branch slug (e.g. *packaging-freeze-installers*) as
+  the version. Tag builds now use the clean semver (leading `v` stripped) and
+  manual builds use the package `__version__` with a `-dev` suffix.
+
 - **DetailPanel image header no longer flips or flashes between cover and screenshot.** Both loaders raced for the same slot, so the displayed image was nondeterministic and re-clicking flashed cover→screenshot every time. Games with a screenshot now load only the screenshot (no cover-upgrade flash), and loaded images are cached per game so re-selecting one re-displays it instantly instead of blanking to a placeholder and reloading.
 
 - **DetailPanel sidebar now stays a fixed 300 px wide.** Previously the panel resized with each game selection as word-wrapped labels responded to varying content; long descriptions, summaries, and file lists now scroll inside the panel rather than pushing it wider or taller.
