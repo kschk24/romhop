@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -123,7 +124,8 @@ def _format_help_with_frog(*, obj, ctx, markup_mode) -> None:
     art_w = max(len(line) for line in art)
     gap = 3
     left_pad = 1
-    body_w = max(24, console.width - art_w - gap - left_pad)
+    term_w = shutil.get_terminal_size(fallback=(console.width, 24)).columns
+    body_w = max(24, term_w - art_w - gap - left_pad)
 
     # Capture typer's normal help body (everything below the usage line) at the
     # reduced width so the panels wrap into the right-hand column.
