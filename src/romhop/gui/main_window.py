@@ -35,6 +35,7 @@ from romhop.gui.detail_panel import DetailPanel
 from romhop.gui.scan_result_dialog import ScanResultDialog
 from romhop.gui.pull_conflict_dialog import PullConflictDialog
 from romhop.gui.activity_hub import ActivityHub
+from romhop.gui.activity_log import ActivityLogView
 from romhop.gui.toast import ToastManager
 from romhop.gui.workers import CallableWorker, DownloadWorker, PullWorker, SyncWorker, UpdateWorker
 from romhop.local_index import downloaded_rom_ids
@@ -120,6 +121,7 @@ class MainWindow(QWidget):
         self._scan_worker = None
         self._sync_worker = None
         self._activity_hub = ActivityHub(self)
+        self._activity_log_connected = False
         self._toast_manager = ToastManager(self)
         self._activity_hub.event.connect(self._toast_manager.post)
         self._activity_hub.event.connect(self._on_activity_desktop_notify)
@@ -167,9 +169,11 @@ class MainWindow(QWidget):
         self.settings_view.update_check_requested.connect(self.check_for_updates)
         if update_check_fn is None:
             self.settings_view.update_check_btn.hide()
+        self.activity_log = ActivityLogView()
         self.stack = QStackedWidget()
-        self.stack.addWidget(self.library)      # index 0
+        self.stack.addWidget(self.library)        # index 0
         self.stack.addWidget(self.settings_view)  # index 1
+        self.stack.addWidget(self.activity_log)   # index 2
 
         # Bottom bar: selection count + download + sync status.
         self.bottom = QFrame()
@@ -201,6 +205,9 @@ class MainWindow(QWidget):
         self.sync_button.toggled.connect(self._on_sync_toggled)
         self.uncheck_btn = QPushButton("Uncheck")
         self.uncheck_btn.clicked.connect(self.library.clear_selection)
+        self.activity_btn = QPushButton("Activity")
+        self.activity_btn.setObjectName("ActivityButton")
+        self.activity_btn.clicked.connect(self.toggle_activity_log)
         bottom_row = QHBoxLayout(self.bottom)
         bottom_row.addWidget(self._sel_label)
         bottom_row.addWidget(self.uncheck_btn)
@@ -209,6 +216,7 @@ class MainWindow(QWidget):
         bottom_row.addWidget(self.progress_bar)
         bottom_row.addWidget(self.progress_label)
         bottom_row.addStretch(1)
+        bottom_row.addWidget(self.activity_btn)
         bottom_row.addWidget(self.sync_button)
         # Paint the dot grey for the initial idle state.
         self.set_sync_status(self._sync_state)
@@ -287,6 +295,7 @@ class MainWindow(QWidget):
     # --- view switching (named for testability) ---
     def show_settings(self) -> None:
         # Drop any stale edits from a previous visit before showing the form.
+        self._disconnect_activity_log()
         self.settings_view.reset()
         self.settings_view.setFocus()
         self.filter_bar.hide()
@@ -296,11 +305,28 @@ class MainWindow(QWidget):
         self.stack.setCurrentIndex(1)
 
     def show_library(self) -> None:
+        self._disconnect_activity_log()
         self.filter_bar.show()
         self.uncheck_btn.show()
         self.download_btn.show()
         self.search.clear()
         self.stack.setCurrentIndex(0)
+
+    def show_activity_log(self) -> None:
+        self.activity_log.load(self._activity_hub.history())
+        if not self._activity_log_connected:
+            self._activity_hub.event.connect(self.activity_log.append_event)
+            self._activity_log_connected = True
+        self.filter_bar.hide()
+        self.uncheck_btn.hide()
+        self.download_btn.hide()
+        self.search.clear()
+        self.stack.setCurrentIndex(2)
+
+    def _disconnect_activity_log(self) -> None:
+        if self._activity_log_connected:
+            self._activity_hub.event.disconnect(self.activity_log.append_event)
+            self._activity_log_connected = False
 
     def toggle_settings(self) -> None:
         # Gear acts as a toggle: into settings, or back out (discarding edits).
@@ -310,8 +336,19 @@ class MainWindow(QWidget):
         else:
             self.show_settings()
 
+    def toggle_activity_log(self) -> None:
+        if self.current_view_name() == "activity":
+            self.show_library()
+        else:
+            self.show_activity_log()
+
     def current_view_name(self) -> str:
-        return "library" if self.stack.currentIndex() == 0 else "settings"
+        idx = self.stack.currentIndex()
+        if idx == 0:
+            return "library"
+        if idx == 1:
+            return "settings"
+        return "activity"
 
     # --- bottom bar state ---
     def sync_status_text(self) -> str:

@@ -34,6 +34,8 @@ All notable changes to romhop are documented here. Format loosely follows
 
 ### Added
 
+- **In-app Activity log panel (TASK-013.03).** New `gui/activity_log.py` adds `ActivityLogView`: a `QListWidget`-backed panel showing sync/download/error events newest-first, with timestamps and error rows highlighted in red. Accessible via an "Activity" button in the bottom bar; toggling it opens/closes the panel as a third page in the central `QStackedWidget`. On open it populates from `ActivityHub`'s 200-event ring buffer and live-appends new events while visible. Session-only — nothing written to disk.
+
 - **Opt-in OS desktop notifications for activity events (TASK-013.02).** New `desktop_notifications` bool setting (Behavior group, default off) fires `tray.showMessage` for sync pushes, completed downloads, and errors. Focus-gated: suppressed when romhop is the active window so the toast already covers it. The toggle is shown disabled with a hint when no system tray is available.
 
 - **Toast notifications for sync/download/error activity (TASK-013.01).** New `gui/toast.py` adds a `ToastWidget` (frameless child overlay, word-wrapped message, ×-dismiss button) and `ToastManager` (capped stack of 3 above the bottom bar, bottom-right). Info toasts auto-dismiss after 4 s; error toasts are sticky until clicked. `MainWindow` subscribes `ActivityHub.event` to `ToastManager.post` and repositions the stack on resize. Fires for all three activity kinds.
