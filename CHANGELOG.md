@@ -7,6 +7,8 @@ All notable changes to romhop are documented here. Format loosely follows
 
 ### Fixed
 
+- **DetailPanel image header no longer flips between cover and screenshot on repeated clicks.** Both loaders wrote to the same slot and whichever finished last won. Screenshot is now authoritative — a late-arriving cover is ignored once a screenshot has been applied for the current game.
+
 - **DetailPanel sidebar now stays a fixed 300 px wide.** Previously the panel resized with each game selection as word-wrapped labels responded to varying content; long descriptions, summaries, and file lists now scroll inside the panel rather than pushing it wider or taller.
 
 - **Search bar clears when switching between library and settings views.** Previously the search text carried over, leaving stale filter state in the newly activated view.
