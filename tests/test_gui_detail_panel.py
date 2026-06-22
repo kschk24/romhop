@@ -212,3 +212,68 @@ def test_rom_switch_resets_shown_source(qtbot):
     panel._shown_source = "screenshot"
     panel.set_rom(rom2)
     assert panel._shown_source == "none"
+
+
+def test_only_screenshot_loaded_when_screenshot_exists(qtbot):
+    """A rom with a screenshot must not start a cover loader (avoids flash)."""
+    calls = []
+
+    def screenshot_provider(rom):
+        calls.append(("ss", rom.id))
+        return None
+
+    def cover_provider(rom):
+        calls.append(("cover", rom.id))
+        return None
+
+    panel = DetailPanel(
+        detail_provider=lambda r: RomDetail(),
+        cover_provider=cover_provider,
+        screenshot_provider=screenshot_provider,
+    )
+    qtbot.addWidget(panel)
+    rom = _rom(screenshots=["s.jpg"])
+    panel.set_rom(rom)
+    qtbot.waitUntil(lambda: len(panel._cover_loaders) == 0, timeout=2000)
+    assert ("cover", rom.id) not in calls
+    assert ("ss", rom.id) in calls
+
+
+def test_cached_image_reapplied_without_reload(qtbot):
+    """Re-clicking a rom whose screenshot is cached must not start a new loader."""
+    from PySide6.QtGui import QImage
+    ss_img = QImage(1, 1, QImage.Format.Format_RGB32)
+    ss_img.fill(0x00FF00)
+
+    panel = DetailPanel(detail_provider=lambda r: RomDetail())
+    qtbot.addWidget(panel)
+    rom = _rom(screenshots=["s.jpg"])
+    panel.set_rom(rom)
+    # prime the cache as if the screenshot finished loading
+    panel._on_image_ready(rom.id, ss_img, rom, "screenshot")
+
+    panel.set_rom(rom)
+    assert panel._shown_source == "screenshot"
+    assert len(panel._cover_loaders) == 0
+
+
+def test_repeat_click_no_placeholder_flash(qtbot):
+    """Re-clicking the same rom before its image loads keeps the current image."""
+    from PySide6.QtGui import QImage
+    cover_img = QImage(1, 1, QImage.Format.Format_RGB32)
+    cover_img.fill(0x0000FF)
+
+    panel = DetailPanel(
+        detail_provider=lambda r: RomDetail(),
+        cover_provider=lambda r: None,
+    )
+    qtbot.addWidget(panel)
+    rom = _rom()  # no screenshot -> cover path
+    panel.set_rom(rom)
+    panel._on_image_ready(rom.id, cover_img, rom, "cover")
+    before = panel._image_label.pixmap().toImage()
+
+    # re-click same rom; cache holds the cover, so it must be re-applied
+    panel.set_rom(rom)
+    assert panel._image_label.pixmap().toImage() == before
+    assert panel._shown_source == "cover"

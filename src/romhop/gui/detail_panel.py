@@ -101,6 +101,7 @@ class DetailPanel(QWidget):
         self._workers: set = set()
         self._cover_loaders: set = set()
         self._shown_source: str = "none"  # "none" | "cover" | "screenshot"
+        self._image_cache: dict[int, dict[str, QImage]] = {}
 
         self.setFixedWidth(300)
 
@@ -200,6 +201,7 @@ class DetailPanel(QWidget):
         self._image_label.setPixmap(scaled)
 
     def set_rom(self, rom) -> None:
+        same_rom = self._rom is not None and self._rom.id == rom.id
         self._rom = rom
         downloaded = rom.id in self._downloaded_ids
 
@@ -222,8 +224,7 @@ class DetailPanel(QWidget):
         self.show()
 
         # cover image
-        self._reset_image_placeholder()
-        self._start_cover_load(rom)
+        self._start_cover_load(rom, same_rom)
 
         # detail fetch
         cached = self._cache.get(rom.id)
@@ -266,36 +267,50 @@ class DetailPanel(QWidget):
 
         self._chips_widget.updateGeometry()
 
-    def _start_cover_load(self, rom) -> None:
+    def _start_cover_load(self, rom, same_rom: bool = False) -> None:
         # cancel any in-flight cover/screenshot loaders for the previous rom
         for loader in list(self._cover_loaders):
             loader.requestInterruption()
         self._cover_loaders.clear()
+
+        has_screenshot = bool(getattr(rom, "screenshots", None))
+        cache = self._image_cache.get(rom.id, {})
+
+        # apply the best already-cached image instantly — no placeholder flash,
+        # no reload. screenshot is authoritative when present.
+        if "screenshot" in cache:
+            self._shown_source = "screenshot"
+            self._apply_pixmap(cache["screenshot"])
+            return
+        if "cover" in cache and not has_screenshot:
+            self._shown_source = "cover"
+            self._apply_pixmap(cache["cover"])
+            return
+
+        # nothing usable cached. only blank to placeholder when actually switching
+        # roms — a repeat click on the same rom keeps whatever's already shown.
         self._shown_source = "none"
+        if not same_rom:
+            self._reset_image_placeholder()
 
-        # cover first
-        if self._cover_provider is not None:
-            loader = CoverLoader([rom], self._cover_provider)
-            loader.cover_ready.connect(
-                lambda rid, img, r=rom: self._on_image_ready(rid, img, r, "cover")
-            )
-            loader.finished.connect(lambda lo=loader: self._cover_loaders.discard(lo))
-            self._cover_loaders.add(loader)
-            loader.start()
+        # when a screenshot exists, load ONLY the screenshot (single loader, no
+        # cover->screenshot upgrade flash). otherwise fall back to the cover.
+        if has_screenshot and self._screenshot_provider is not None:
+            self._start_loader(rom, self._screenshot_provider, "screenshot")
+        elif self._cover_provider is not None:
+            self._start_loader(rom, self._cover_provider, "cover")
 
-        # screenshot provider (replaces cover once ready, but never downgraded back)
-        if self._screenshot_provider is not None and getattr(rom, "screenshots", None):
-            ss_loader = CoverLoader([rom], self._screenshot_provider)
-            ss_loader.cover_ready.connect(
-                lambda rid, img, r=rom: self._on_image_ready(rid, img, r, "screenshot")
-            )
-            ss_loader.finished.connect(
-                lambda lo=ss_loader: self._cover_loaders.discard(lo)
-            )
-            self._cover_loaders.add(ss_loader)
-            ss_loader.start()
+    def _start_loader(self, rom, provider, kind: str) -> None:
+        loader = CoverLoader([rom], provider)
+        loader.cover_ready.connect(
+            lambda rid, img, r=rom, k=kind: self._on_image_ready(rid, img, r, k)
+        )
+        loader.finished.connect(lambda lo=loader: self._cover_loaders.discard(lo))
+        self._cover_loaders.add(loader)
+        loader.start()
 
     def _on_image_ready(self, rom_id: int, image: QImage, rom, kind: str = "cover") -> None:
+        self._image_cache.setdefault(rom_id, {})[kind] = image
         if self._rom is None or self._rom.id != rom_id:
             return
         # screenshot wins; never downgrade back to cover once screenshot shown
