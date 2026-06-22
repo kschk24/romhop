@@ -219,7 +219,7 @@ def run() -> None:
             )
         live["settings"] = new_settings
 
-    def download_action(rom, on_progress=None, stop_event=None):
+    def download_action(rom, on_progress=None, stop_event=None, on_event=None):
         s = live["settings"]
         try:
             return download_rom(
@@ -232,16 +232,18 @@ def run() -> None:
                 # Callable cap: read live each chunk so a limit change re-throttles
                 # the in-flight download, not just the next rom in the batch.
                 rate_limit_kbps=lambda: live["settings"].download_rate_limit_kbps,
+                on_event=on_event,
             )
         except DownloadCancelled:
             raise  # let the worker classify this as a cancel, not an error
         except Exception as exc:  # surface a clear, actionable reason in the UI
             raise RuntimeError(friendly_download_error(rom.name, rom.id, exc)) from exc
 
-    def sync_watch_fn(stop_event):
+    def sync_watch_fn(stop_event, on_event=None):
         s = live["settings"]
         watch_and_push(
             [s.saves_dir, s.states_dir], cache, client,
+            on_event=on_event,
             debounce_seconds=s.sync_delay_seconds,
             core_overrides=s.core_overrides,
             stop_event=stop_event,

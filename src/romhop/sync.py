@@ -9,6 +9,7 @@ from watchfiles import watch
 
 logger = logging.getLogger(__name__)
 
+from romhop.activity import ActivityEvent, ActivityKind
 from romhop.mapping_cache import MappingCache
 from romhop.platform_map import system_for_core
 
@@ -101,4 +102,4 @@ def watch_and_push(dirs: list[Path], cache: MappingCache, client,
                 core_overrides=core_overrides, on_ambiguous=on_ambiguous,
             ):
                 if on_event:
-                    on_event(path)
+                    on_event(ActivityEvent(ActivityKind.SYNC_PUSH, f"Synced {path.name}"))

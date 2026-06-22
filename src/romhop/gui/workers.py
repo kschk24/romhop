@@ -47,6 +47,7 @@ class DownloadWorker(QThread):
       item_started(index, count, name) - 1-based position in the batch
       item_progress(downloaded, total, speed) - total is -1 when unknown
       item_error(name, message)        - one job failed; the batch continues
+      activity(ActivityEvent)          - DOWNLOAD_DONE on success, ERROR on failure
       finished (built-in)              - whole batch done
     """
 
@@ -55,6 +56,7 @@ class DownloadWorker(QThread):
     # exceed a signed 32-bit int, which a plain `int` signal silently clamps.
     item_progress = Signal("qlonglong", "qlonglong", float)
     item_error = Signal(str, str)
+    activity = Signal(object)
 
     # Don't emit more often than this between non-terminal updates (seconds).
     _MIN_INTERVAL = 0.1
@@ -96,6 +98,7 @@ class DownloadWorker(QThread):
         return on_progress
 
     def run(self) -> None:
+        from romhop.activity import ActivityEvent, ActivityKind
         count = len(self._jobs)
         for index, rom in enumerate(self._jobs, start=1):
             if self._cancel.is_set():
@@ -103,12 +106,14 @@ class DownloadWorker(QThread):
                 break
             self.item_started.emit(index, count, rom.name)
             try:
-                self._action(rom, self._make_on_progress(), self._cancel)
+                self._action(rom, self._make_on_progress(), self._cancel,
+                             on_event=self.activity.emit)
             except DownloadCancelled:
                 self._cancelled = True
                 break
             except Exception as exc:  # one failure must not abort the queue
                 self.item_error.emit(rom.name, str(exc))
+                self.activity.emit(ActivityEvent(ActivityKind.ERROR, str(exc)))
 
 
 class CoverLoader(QThread):
@@ -244,15 +249,18 @@ class PullWorker(QThread):
 class SyncWorker(QThread):
     """Runs the sync watch loop until stop() is requested.
 
-    watch_fn receives a ``threading.Event`` and must return promptly once it is
-    set (pass it through to ``watch_and_push(stop_event=...)``). status(text)
-    reports state to the bottom bar.
+    watch_fn receives a ``threading.Event`` and an ``on_event`` callable; it
+    must return promptly once the event is set (pass through to
+    ``watch_and_push(stop_event=...)``). status(text) reports state to the
+    bottom bar. activity(ActivityEvent) forwards SYNC_PUSH events.
     """
 
     status = Signal(str)
     error = Signal(str)
+    activity = Signal(object)
 
-    def __init__(self, watch_fn: Callable[[threading.Event], None], parent=None):
+    def __init__(self, watch_fn: Callable[[threading.Event, Callable], None],
+                 parent=None):
         super().__init__(parent)
         self._watch_fn = watch_fn
         self._stop_event = threading.Event()
@@ -263,7 +271,7 @@ class SyncWorker(QThread):
     def run(self) -> None:
         self.status.emit("watching")
         try:
-            self._watch_fn(self._stop_event)
+            self._watch_fn(self._stop_event, self.activity.emit)
         except Exception as exc:
             self.error.emit(str(exc))
             return

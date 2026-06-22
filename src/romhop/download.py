@@ -11,6 +11,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+from romhop.activity import ActivityEvent, ActivityKind
 from romhop.library import write_game
 from romhop.mapping_cache import MappingCache, seed_entry
 from romhop.platform_map import esde_system_for_slug
@@ -104,7 +105,8 @@ def _is_multi_disc_head(rom: Rom, head: bytes) -> bool:
 
 def download_rom(rom: Rom, client, *, roms_root: Path, cache: MappingCache,
                  overrides: dict[str, str], is_multi_file: bool | None = None,
-                 on_progress=None, stop_event=None, rate_limit_kbps=0) -> Path:
+                 on_progress=None, stop_event=None, rate_limit_kbps=0,
+                 on_event=None) -> Path:
     """Download a rom into the ES-DE layout and record a cache entry.
 
     Streams the rom to a ``.part`` temp file in the destination platform dir,
@@ -162,4 +164,6 @@ def download_rom(rom: Rom, client, *, roms_root: Path, cache: MappingCache,
     cache.add(seed_entry(rom.id, system, game_name, cache_files))
     cache.save()
     logger.info("download done: %s -> %s", rom.fs_name, written)
+    if on_event is not None:
+        on_event(ActivityEvent(ActivityKind.DOWNLOAD_DONE, f"Downloaded {rom.fs_name}"))
     return written

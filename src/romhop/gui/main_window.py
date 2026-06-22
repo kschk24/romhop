@@ -34,6 +34,7 @@ from romhop.gui.setup_wizard import SetupWizard
 from romhop.gui.detail_panel import DetailPanel
 from romhop.gui.scan_result_dialog import ScanResultDialog
 from romhop.gui.pull_conflict_dialog import PullConflictDialog
+from romhop.gui.activity_hub import ActivityHub
 from romhop.gui.workers import CallableWorker, DownloadWorker, PullWorker, SyncWorker, UpdateWorker
 from romhop.local_index import downloaded_rom_ids
 from romhop.platform_names import display_name
@@ -117,6 +118,7 @@ class MainWindow(QWidget):
         self._download_worker = None
         self._scan_worker = None
         self._sync_worker = None
+        self._activity_hub = ActivityHub(self)
         self._progress_name = ""
         self._progress_pos = ""
         self.tray = None
@@ -408,6 +410,8 @@ class MainWindow(QWidget):
         worker = SyncWorker(self._sync_watch_fn)
         worker.status.connect(self.set_sync_status)
         worker.error.connect(lambda msg: self.set_sync_status(f"error: {msg}"))
+        from PySide6.QtCore import Qt
+        worker.activity.connect(self._activity_hub.post, Qt.QueuedConnection)
         worker.finished.connect(self._on_sync_finished)
         self._sync_worker = worker
         worker.start()
@@ -539,10 +543,12 @@ class MainWindow(QWidget):
         self.cancel_btn.setEnabled(True)
         self.cancel_btn.setText("Cancel")
         self._begin_progress()
+        from PySide6.QtCore import Qt
         worker = DownloadWorker(roms, self._download_action)
         worker.item_started.connect(self._on_item_started)
         worker.item_progress.connect(self._on_item_progress)
         worker.item_error.connect(self._on_item_error)
+        worker.activity.connect(self._activity_hub.post, Qt.QueuedConnection)
         worker.finished.connect(self._on_batch_finished)
         self._download_worker = worker
         worker.start()

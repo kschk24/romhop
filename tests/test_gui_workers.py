@@ -31,7 +31,7 @@ def test_download_worker_runs_jobs_sequentially(qtbot):
     roms = [_rom(1, "A"), _rom(2, "B")]
     order = []
 
-    def action(rom, on_progress, stop_event):
+    def action(rom, on_progress, stop_event, on_event=None):
         on_progress(100, 100)
         order.append(rom.name)
         return rom.name
@@ -49,7 +49,7 @@ def test_download_worker_runs_jobs_sequentially(qtbot):
 def test_download_worker_reports_progress_with_speed(qtbot):
     roms = [_rom(1, "A")]
 
-    def action(rom, on_progress, stop_event):
+    def action(rom, on_progress, stop_event, on_event=None):
         on_progress(50, 100)
         on_progress(100, 100)
         return rom.name
@@ -72,7 +72,7 @@ def test_download_worker_continues_past_item_error(qtbot):
     roms = [_rom(1, "A"), _rom(2, "B")]
     done = []
 
-    def action(rom, on_progress, stop_event):
+    def action(rom, on_progress, stop_event, on_event=None):
         if rom.name == "A":
             raise ValueError("boom A")
         done.append(rom.name)
@@ -117,11 +117,11 @@ def test_cover_loader_emits_only_for_roms_with_covers(qtbot, tmp_path):
 
 
 def test_sync_worker_watches_then_stops(qtbot):
-    # watch_fn receives a threading.Event and blocks until it is set; stop()
-    # sets it so the worker can return (mirrors watch_and_push + stop_event).
+    # watch_fn receives a threading.Event and on_event; stop() sets the event
+    # so the worker can return (mirrors watch_and_push + stop_event).
     started = []
 
-    def watch_fn(stop_event):
+    def watch_fn(stop_event, on_event=None):
         started.append(True)
         stop_event.wait(timeout=2)
 
@@ -144,7 +144,7 @@ def test_download_worker_progress_survives_files_over_int32(qtbot):
     big = 4294967295  # 2**32 - 1
     roms = [_rom(1, "Bravely Default")]
 
-    def action(rom, on_progress, stop_event):
+    def action(rom, on_progress, stop_event, on_event=None):
         on_progress(big // 2, big)
         on_progress(big, big)
         return rom.name
@@ -181,7 +181,7 @@ def test_download_worker_cancel_stops_batch_without_item_error(qtbot):
     roms = [_rom(1, "A"), _rom(2, "B")]
     started = []
 
-    def action(rom, on_progress, stop_event):
+    def action(rom, on_progress, stop_event, on_event=None):
         started.append(rom.name)
         if rom.name == "A":
             raise DownloadCancelled  # first item cancelled mid-stream

@@ -512,7 +512,7 @@ def sync():
     typer.echo("Watching for save changes (Ctrl-C to stop)...")
     watch_and_push(
         [settings.saves_dir, settings.states_dir], cache, client,
-        on_event=lambda p: typer.echo(f"Pushed {p.name}"),
+        on_event=lambda e: typer.echo(e.message),
         debounce_seconds=settings.sync_delay_seconds,
         core_overrides=settings.core_overrides,
         on_ambiguous=lambda p, cands: typer.echo(

@@ -34,6 +34,8 @@ All notable changes to romhop are documented here. Format loosely follows
 
 ### Added
 
+- **Activity event model + hub foundation (TASK-013.04).** New Qt-free `activity.py` module defines `ActivityKind` (`SYNC_PUSH`, `DOWNLOAD_DONE`, `ERROR`) and a frozen `ActivityEvent` dataclass with pre-rendered message and tz-aware timestamp. `sync.py` now emits `SYNC_PUSH` events via `on_event`; `download.py` emits `DOWNLOAD_DONE` on successful write. `ActivityHub` QObject (owned by `MainWindow`) aggregates events from all worker threads via queued signals into a capped 200-event ring buffer — the shared source all three activity renderers (toast/.01, desktop notif/.02, log/.03) will read from.
+
 - **Detail panel redesign.** The Detail panel now shows a rich layout: cover art
   (200 px image header, with screenshot replacing it once loaded off-thread), a
   clean title with parenthetical tags stripped, colored tag chips for regions

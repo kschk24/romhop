@@ -91,7 +91,7 @@ def test_download_selected_invokes_action(qtbot):
     win = MainWindow(
         settings=config.default_settings(),
         rom_provider=lambda: roms,
-        download_action=lambda rom, on_progress, stop_event: called.append(rom.name),
+        download_action=lambda rom, on_progress, stop_event, on_event=None: called.append(rom.name),
     )
     qtbot.addWidget(win)
     win.load_library()
@@ -135,7 +135,7 @@ def test_download_selected_drives_progress_and_recovers(qtbot):
     roms = [Rom(id=1, name="Sonic", platform_slug="genesis",
                 fs_name="Sonic.md", fs_name_no_ext="Sonic", file_names=["Sonic.md"])]
 
-    def action(rom, on_progress, stop_event):
+    def action(rom, on_progress, stop_event, on_event=None):
         on_progress(40, 100)
         on_progress(100, 100)
         return rom.name
@@ -159,7 +159,7 @@ def test_download_selected_drives_progress_and_recovers(qtbot):
 def test_sync_toggle_starts_and_stops_worker(qtbot):
     from romhop.gui.main_window import MainWindow
 
-    def watch_fn(stop_event):
+    def watch_fn(stop_event, on_event=None):
         stop_event.wait(timeout=2)
 
     persisted = []
@@ -185,7 +185,7 @@ def test_sync_toggle_starts_and_stops_worker(qtbot):
 def test_sync_button_dot_reflects_running_state(qtbot):
     from romhop.gui.main_window import MainWindow
 
-    def watch_fn(stop_event):
+    def watch_fn(stop_event, on_event=None):
         stop_event.wait(timeout=2)
 
     win = MainWindow(
@@ -210,7 +210,7 @@ def test_sync_enabled_on_startup_starts_worker(qtbot):
     from dataclasses import replace
     from romhop.gui.main_window import MainWindow
 
-    def watch_fn(stop_event):
+    def watch_fn(stop_event, on_event=None):
         stop_event.wait(timeout=2)
 
     # Persisted sync_enabled=True: the dot must go green without any user toggle.
@@ -495,7 +495,7 @@ def test_cancel_button_hidden_until_download_then_cancels(qtbot):
                 fs_name_no_ext="A", file_names=["A.gba"])]
     gate = threading.Event()
 
-    def action(rom, on_progress, stop_event):
+    def action(rom, on_progress, stop_event, on_event=None):
         gate.wait(timeout=2)               # hold until cancel fires
         return rom.name
 
@@ -647,7 +647,7 @@ def test_dispatch_download_starts_worker(qtbot):
     from romhop.gui.main_window import MainWindow
 
     called = []
-    def fake_download(rom, on_progress=None, stop_event=None):
+    def fake_download(rom, on_progress=None, stop_event=None, on_event=None):
         called.append(rom.id)
 
     win = MainWindow(settings=config.default_settings(), download_action=fake_download)
