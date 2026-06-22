@@ -21,6 +21,7 @@ from romhop.config import SCHEMA, CATEGORY_ORDER, CATEGORY_LABELS, Settings
 SYNC_LABEL = "Enable save sync"  # the label of the sync_enabled FieldSpec
 TOKEN_LABEL = "API token"  # keyring-stored, not a SCHEMA field
 TOKEN_CATEGORY = "connection"  # group the token row lives under
+DESKTOP_NOTIF_LABEL = "Desktop notifications"  # the label of the desktop_notifications FieldSpec
 
 
 class SettingsView(QWidget):
@@ -164,6 +165,15 @@ class SettingsView(QWidget):
 
     def focus_sync(self) -> None:
         self.sync_check.setFocus()
+
+    def set_desktop_notifications_available(self, available: bool, hint: str = "") -> None:
+        """Disable the desktop notifications toggle with a hint when no tray is available."""
+        widget = self._edits.get(DESKTOP_NOTIF_LABEL)
+        if widget is None:
+            return
+        widget.setEnabled(available)
+        if not available and hint:
+            widget.setToolTip(hint)
 
     # --- host integration ---
     def current_settings(self) -> Settings:

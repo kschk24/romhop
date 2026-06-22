@@ -122,6 +122,7 @@ class MainWindow(QWidget):
         self._activity_hub = ActivityHub(self)
         self._toast_manager = ToastManager(self)
         self._activity_hub.event.connect(self._toast_manager.post)
+        self._activity_hub.event.connect(self._on_activity_desktop_notify)
         self._progress_name = ""
         self._progress_pos = ""
         self.tray = None
@@ -224,6 +225,9 @@ class MainWindow(QWidget):
             self.tray.show()
         if settings.sync_enabled:
             self._reconcile_sync(True)
+        if self.tray is None:
+            self.settings_view.set_desktop_notifications_available(
+                False, "No system tray available — OS notifications cannot be shown")
 
         self.library.selection_changed.connect(self._on_selection)
         self.download_btn.clicked.connect(self.download_selected)
@@ -351,6 +355,18 @@ class MainWindow(QWidget):
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._toast_manager.reposition()
+
+    def _on_activity_desktop_notify(self, activity_event) -> None:
+        if not self._settings.desktop_notifications:
+            return
+        if self.tray is None:
+            return
+        if QApplication.activeWindow() is self and self.isVisible():
+            return
+        title = "romhop — Error" if activity_event.is_error else "romhop"
+        icon = (QSystemTrayIcon.MessageIcon.Critical if activity_event.is_error
+                else QSystemTrayIcon.MessageIcon.Information)
+        self.tray.showMessage(title, activity_event.message, icon, 4000)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         # A real quit (via the tray) flows through here with _quitting set.

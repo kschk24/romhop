@@ -33,6 +33,7 @@ class Settings:
     auto_update_check: bool = True
     update_include_prereleases: bool = False
     debug_logging: bool = False
+    desktop_notifications: bool = False
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,8 @@ SCHEMA: list[FieldSpec] = [
               "Opt in to release-candidate and beta builds (frozen installs only)"),
     FieldSpec("debug_logging", "behavior", "Detailed logging (debug)", "bool",
               "Write DEBUG-level entries to the log file (default: INFO only)"),
+    FieldSpec("desktop_notifications", "behavior", "Desktop notifications", "bool",
+              "Show OS notifications for sync, downloads, and errors when romhop is in the background (requires system tray)"),
 ]
 
 
