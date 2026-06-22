@@ -163,3 +163,52 @@ def test_no_files_label(qtbot):
     panel = _panel(detail_provider=lambda rom: RomDetail())
     qtbot.addWidget(panel)
     assert not hasattr(panel, "_files_label")
+
+
+def test_screenshot_wins_over_late_cover(qtbot):
+    """Cover arriving after screenshot must not downgrade the image."""
+    from PySide6.QtGui import QImage
+    cover_img = QImage(1, 1, QImage.Format.Format_RGB32)
+    cover_img.fill(0xFF0000)
+    ss_img = QImage(1, 1, QImage.Format.Format_RGB32)
+    ss_img.fill(0x00FF00)
+
+    panel = DetailPanel(detail_provider=lambda r: RomDetail())
+    qtbot.addWidget(panel)
+    rom = _rom(screenshots=["fake.jpg"])
+    panel.set_rom(rom)
+
+    # simulate screenshot arriving first
+    panel._on_image_ready(rom.id, ss_img, rom, "screenshot")
+    assert panel._shown_source == "screenshot"
+    pix_after_ss = panel._image_label.pixmap()
+
+    # now cover arrives late — must be ignored
+    panel._on_image_ready(rom.id, cover_img, rom, "cover")
+    assert panel._shown_source == "screenshot"
+    assert panel._image_label.pixmap().toImage() == pix_after_ss.toImage()
+
+
+def test_cover_applied_when_no_screenshot(qtbot):
+    from PySide6.QtGui import QImage
+    cover_img = QImage(1, 1, QImage.Format.Format_RGB32)
+    cover_img.fill(0x0000FF)
+
+    panel = DetailPanel(detail_provider=lambda r: RomDetail())
+    qtbot.addWidget(panel)
+    rom = _rom()
+    panel.set_rom(rom)
+
+    panel._on_image_ready(rom.id, cover_img, rom, "cover")
+    assert panel._shown_source == "cover"
+
+
+def test_rom_switch_resets_shown_source(qtbot):
+    panel = DetailPanel(detail_provider=lambda r: RomDetail())
+    qtbot.addWidget(panel)
+    rom1 = _rom(rom_id=1, screenshots=["s.jpg"])
+    rom2 = _rom(rom_id=2)
+    panel.set_rom(rom1)
+    panel._shown_source = "screenshot"
+    panel.set_rom(rom2)
+    assert panel._shown_source == "none"

@@ -100,6 +100,7 @@ class DetailPanel(QWidget):
         self._worker = None
         self._workers: set = set()
         self._cover_loaders: set = set()
+        self._shown_source: str = "none"  # "none" | "cover" | "screenshot"
 
         self.setFixedWidth(300)
 
@@ -270,22 +271,23 @@ class DetailPanel(QWidget):
         for loader in list(self._cover_loaders):
             loader.requestInterruption()
         self._cover_loaders.clear()
+        self._shown_source = "none"
 
         # cover first
         if self._cover_provider is not None:
             loader = CoverLoader([rom], self._cover_provider)
             loader.cover_ready.connect(
-                lambda rid, img, r=rom: self._on_image_ready(rid, img, r)
+                lambda rid, img, r=rom: self._on_image_ready(rid, img, r, "cover")
             )
             loader.finished.connect(lambda lo=loader: self._cover_loaders.discard(lo))
             self._cover_loaders.add(loader)
             loader.start()
 
-        # screenshot provider (replaces cover once ready)
+        # screenshot provider (replaces cover once ready, but never downgraded back)
         if self._screenshot_provider is not None and getattr(rom, "screenshots", None):
             ss_loader = CoverLoader([rom], self._screenshot_provider)
             ss_loader.cover_ready.connect(
-                lambda rid, img, r=rom: self._on_image_ready(rid, img, r)
+                lambda rid, img, r=rom: self._on_image_ready(rid, img, r, "screenshot")
             )
             ss_loader.finished.connect(
                 lambda lo=ss_loader: self._cover_loaders.discard(lo)
@@ -293,9 +295,14 @@ class DetailPanel(QWidget):
             self._cover_loaders.add(ss_loader)
             ss_loader.start()
 
-    def _on_image_ready(self, rom_id: int, image: QImage, rom) -> None:
-        if self._rom is not None and self._rom.id == rom_id:
-            self._apply_pixmap(image)
+    def _on_image_ready(self, rom_id: int, image: QImage, rom, kind: str = "cover") -> None:
+        if self._rom is None or self._rom.id != rom_id:
+            return
+        # screenshot wins; never downgrade back to cover once screenshot shown
+        if kind == "cover" and self._shown_source == "screenshot":
+            return
+        self._shown_source = kind
+        self._apply_pixmap(image)
 
     def _on_loaded(self, rom_id: int, detail) -> None:
         self._cache[rom_id] = detail
