@@ -4,12 +4,12 @@ title: API key has to be re-set after a failed Pull
 status: Done
 assignee: []
 created_date: '2026-06-18 00:25'
-updated_date: '2026-06-22 16:17'
+updated_date: '2026-06-22 17:06'
 labels:
   - bug
 dependencies: []
 priority: high
-ordinal: 49000
+ordinal: 50000
 ---
 
 ## Description

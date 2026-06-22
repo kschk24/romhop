@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-06-17 15:54'
-updated_date: '2026-06-22 15:50'
+updated_date: '2026-06-22 17:06'
 labels:
   - bug
   - gui
@@ -13,7 +13,7 @@ labels:
   - detail-panel-redesign
 dependencies: []
 priority: medium
-ordinal: 47000
+ordinal: 48000
 ---
 
 ## Description

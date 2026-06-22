@@ -7,12 +7,12 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-06-22 15:54'
-updated_date: '2026-06-22 16:33'
+updated_date: '2026-06-22 17:06'
 labels:
   - bug
   - ready-for-agent
 dependencies: []
-ordinal: 50000
+ordinal: 51000
 ---
 
 ## Description

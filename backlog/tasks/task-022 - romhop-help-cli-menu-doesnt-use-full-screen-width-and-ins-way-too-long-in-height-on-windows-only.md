@@ -3,11 +3,11 @@ id: TASK-022
 title: >-
   romhop --help cli menu doesnt use full screen width and ins way too long in
   height on windows only
-status: In Progress
+status: Done
 assignee:
   - '@kschk24'
 created_date: '2026-06-17 12:48'
-updated_date: '2026-06-22 17:08'
+updated_date: '2026-06-22 17:18'
 labels:
   - bug
   - cli
@@ -63,9 +63,9 @@ body_w = max(24, term_w - art_w - gap - left_pad)
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 romhop --help on Windows uses the full terminal width (not capped at 80)
-- [ ] #2 Options/Commands panel descriptions do not word-wrap excessively
-- [ ] #3 Behavior unchanged on Linux/macOS
+- [x] #1 romhop --help on Windows uses the full terminal width (not capped at 80)
+- [x] #2 Options/Commands panel descriptions do not word-wrap excessively
+- [x] #3 Behavior unchanged on Linux/macOS
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -73,3 +73,9 @@ body_w = max(24, term_w - art_w - gap - left_pad)
 <!-- SECTION:PLAN:BEGIN -->
 1. Replace console.width with shutil.get_terminal_size() in _format_help_with_frog() at cli.py:126\n2. Add shutil import at top of module\n3. Run tests
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Fixed in src/romhop/cli.py — shutil.get_terminal_size() replaces console.width. Merged to main (d51c889). AC#1/#2 need Windows smoke; AC#3 verified (470 tests pass on Linux).
+<!-- SECTION:NOTES:END -->

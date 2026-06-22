@@ -4,13 +4,13 @@ title: Manual desktop smoke test of merged-but-unverified GUI features
 status: Done
 assignee: []
 created_date: '2026-06-16 15:04'
-updated_date: '2026-06-17 16:43'
+updated_date: '2026-06-22 17:06'
 labels:
   - chore
   - ready-for-human
 dependencies: []
 priority: medium
-ordinal: 44000
+ordinal: 45000
 ---
 
 ## Description

@@ -4,14 +4,14 @@ title: 'Enhancement: game screenshot in DetailPanel from RomM API'
 status: Done
 assignee: []
 created_date: '2026-06-17 23:49'
-updated_date: '2026-06-18 01:22'
+updated_date: '2026-06-22 17:06'
 labels:
   - enhancement
   - gui
   - detail-panel
 dependencies: []
 priority: low
-ordinal: 48000
+ordinal: 49000
 ---
 
 ## Description

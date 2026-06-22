@@ -5,12 +5,12 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-06-17 15:40'
-updated_date: '2026-06-22 15:57'
+updated_date: '2026-06-22 17:06'
 labels:
   - bug
 dependencies: []
 priority: high
-ordinal: 45000
+ordinal: 46000
 ---
 
 ## Implementation Plan

@@ -7,14 +7,14 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-06-17 15:47'
-updated_date: '2026-06-18 00:35'
+updated_date: '2026-06-22 17:06'
 labels:
   - bug
   - release-blocker
   - ready-for-agent
 dependencies: []
 priority: high
-ordinal: 46000
+ordinal: 47000
 ---
 
 ## Description

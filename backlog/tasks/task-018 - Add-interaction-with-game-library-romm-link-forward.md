@@ -1,10 +1,10 @@
 ---
 id: TASK-018
 title: 'Add interaction with game library, romm link forward'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-16 15:58'
-updated_date: '2026-06-16 22:47'
+updated_date: '2026-06-22 17:06'
 labels:
   - feature
   - game-detail-panel
@@ -12,7 +12,7 @@ dependencies: []
 references:
   - docs/superpowers/plans/2026-06-17-game-detail-panel.md
 priority: low
-ordinal: 21000
+ordinal: 52000
 ---
 
 ## Description
