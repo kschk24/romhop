@@ -59,6 +59,34 @@ _Avoid_: link out, view online.
 Open the downloaded game's on-disk folder in the OS file manager. Available only
 when the game is downloaded.
 
+### Activity feedback
+
+**Activity event**:
+A single user-meaningful thing romhop did while running: a save synced up, a
+download finished, or an operation failed. Typed and timestamped, with a
+human-readable message. One stream of these is emitted by the core; the GUI
+renders the same stream three ways — a transient Toast, an opt-in Desktop
+notification, and a persistent Activity log.
+_Avoid_: notification (as the generic term — that names one renderer), message,
+status update.
+
+**Toast**:
+A transient, self-dismissing in-app banner (bottom-right of the main window)
+rendering an Activity event. Always on; the lightest-weight renderer.
+_Avoid_: popup, snackbar, alert.
+
+**Desktop notification**:
+An opt-in, OS-level notification (delivered through the system tray) rendering an
+Activity event when romhop is not focused or is minimized to tray. Off by default;
+toggled in settings.
+_Avoid_: OS toast, system alert, push.
+
+**Activity log**:
+The in-app, scrollable panel listing recent Activity events so the user can review
+what romhop has done this session. Distinct from the Diagnostic log (a file for
+remote troubleshooting); the Activity log is user-facing history, not a log file.
+_Avoid_: history, event log, console.
+
 ### Diagnostics
 
 **Diagnostic log**:

@@ -35,6 +35,7 @@ from romhop.gui.detail_panel import DetailPanel
 from romhop.gui.scan_result_dialog import ScanResultDialog
 from romhop.gui.pull_conflict_dialog import PullConflictDialog
 from romhop.gui.activity_hub import ActivityHub
+from romhop.gui.toast import ToastManager
 from romhop.gui.workers import CallableWorker, DownloadWorker, PullWorker, SyncWorker, UpdateWorker
 from romhop.local_index import downloaded_rom_ids
 from romhop.platform_names import display_name
@@ -119,6 +120,8 @@ class MainWindow(QWidget):
         self._scan_worker = None
         self._sync_worker = None
         self._activity_hub = ActivityHub(self)
+        self._toast_manager = ToastManager(self)
+        self._activity_hub.event.connect(self._toast_manager.post)
         self._progress_name = ""
         self._progress_pos = ""
         self.tray = None
@@ -344,6 +347,10 @@ class MainWindow(QWidget):
             "No system tray is available on this desktop. The window will hide "
             "and keep syncing in the background. Relaunch `romhop gui` to bring "
             "it back.")
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._toast_manager.reposition()
 
     def closeEvent(self, event: QCloseEvent) -> None:
         # A real quit (via the tray) flows through here with _quitting set.
