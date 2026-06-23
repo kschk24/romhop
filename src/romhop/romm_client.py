@@ -1,13 +1,43 @@
 from __future__ import annotations
 
 import logging
+import math
+import threading
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable
 from urllib.parse import quote
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+UPLOAD_CHUNK_SIZE = 1 << 20  # 1 MiB
+
+
+class RomAlreadyExists(Exception):
+    """upload/start returned 400 'File already exists'."""
+
+
+class UploadCancelled(Exception):
+    """stop_event was set during upload_rom."""
+
+
+class InsufficientScopeError(Exception):
+    """HTTP 403: token is missing a required API scope."""
+
+    def __init__(self, scope: str, response: httpx.Response | None = None) -> None:
+        self.scope = scope
+        super().__init__(f"Token missing scope '{scope}'. Grant it in the RomM admin panel.")
+
+
+class ScanError(Exception):
+    """Socket.IO scan failed or timed out."""
+
+
+class ScanConnectError(ScanError):
+    """Could not connect to RomM Socket.IO — socket is unreachable."""
 
 
 @dataclass
@@ -192,3 +222,196 @@ class RommClient:
         resp = self._http.get(f"/api/states/{state_id}/content")
         resp.raise_for_status()
         return resp.content
+
+    # ------------------------------------------------------------------
+    # Platform management
+    # ------------------------------------------------------------------
+
+    def _check_scope(self, resp: httpx.Response, scope: str) -> None:
+        """Raise InsufficientScopeError on 403; raise_for_status on other errors."""
+        if resp.status_code == 403:
+            raise InsufficientScopeError(scope, resp)
+        resp.raise_for_status()
+
+    def list_platforms(self) -> list[dict]:
+        """GET /api/platforms. Requires platforms.read scope."""
+        resp = self._http.get("/api/platforms")
+        self._check_scope(resp, "platforms.read")
+        return resp.json()
+
+    def create_platform(self, fs_slug: str) -> dict:
+        """Create platform if not already present; return the platform dict.
+
+        Existence-checks first (no dedup via POST). Requires platforms.read +
+        platforms.write scopes.
+        """
+        platforms = self.list_platforms()
+        for p in platforms:
+            if p.get("fs_slug") == fs_slug or p.get("slug") == fs_slug:
+                logger.debug("create_platform: reusing existing slug=%r id=%s", fs_slug, p.get("id"))
+                return p
+        resp = self._http.post("/api/platforms", json={"fs_slug": fs_slug})
+        self._check_scope(resp, "platforms.write")
+        return resp.json()
+
+    # ------------------------------------------------------------------
+    # Rom upload (chunked, store-only — does NOT create a rom)
+    # ------------------------------------------------------------------
+
+    def upload_rom(
+        self,
+        *,
+        platform_id: int,
+        file_path: Path,
+        file_name: str,
+        stop_event: threading.Event | None = None,
+        progress_fn: Callable[[int], None] | None = None,
+        chunk_size: int = UPLOAD_CHUNK_SIZE,
+    ) -> None:
+        """Stream one rom file from disk via the chunked start→PUT→complete flow.
+
+        file_name MUST be a bare leaf (no path separators) — a slash causes a
+        500 at complete. complete returns 201 with empty body and creates no rom;
+        the caller must trigger a scan to materialise the uploaded file.
+
+        Raises RomAlreadyExists if the file already exists on the platform.
+        Raises UploadCancelled if stop_event is set during upload.
+        Raises InsufficientScopeError on 403 (scope roms.write required).
+        """
+        file_size = file_path.stat().st_size
+        total_chunks = max(1, math.ceil(file_size / chunk_size))
+
+        resp = self._http.post(
+            "/api/roms/upload/start",
+            headers={
+                "x-upload-platform": str(platform_id),
+                "x-upload-filename": file_name,
+                "x-upload-total-size": str(file_size),
+                "x-upload-total-chunks": str(total_chunks),
+            },
+        )
+        if resp.status_code == 400:
+            detail = (resp.json() or {}).get("detail", "")
+            if "already exists" in detail:
+                raise RomAlreadyExists(file_name)
+        self._check_scope(resp, "roms.write")
+        upload_id = resp.json()["upload_id"]
+
+        try:
+            with file_path.open("rb") as fh:
+                for chunk_index in range(total_chunks):
+                    if stop_event and stop_event.is_set():
+                        self._cancel_upload(upload_id)
+                        raise UploadCancelled(file_name)
+                    chunk = fh.read(chunk_size)
+                    put = self._http.put(
+                        f"/api/roms/upload/{upload_id}",
+                        headers={"x-chunk-index": str(chunk_index)},
+                        content=chunk,
+                    )
+                    put.raise_for_status()
+                    if progress_fn:
+                        progress_fn(len(chunk))
+        except UploadCancelled:
+            raise
+        except Exception:
+            self._cancel_upload(upload_id)
+            raise
+
+        complete = self._http.post(f"/api/roms/upload/{upload_id}/complete")
+        complete.raise_for_status()
+
+    def _cancel_upload(self, upload_id: str) -> None:
+        try:
+            self._http.post(f"/api/roms/upload/{upload_id}/cancel")
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    # Socket.IO scan trigger (materialises uploaded files as roms)
+    # ------------------------------------------------------------------
+
+    def trigger_scan(
+        self,
+        platform_id: int,
+        *,
+        timeout: float = 60.0,
+        _sio_factory=None,
+    ) -> dict:
+        """Trigger a quick platform-scoped scan via Socket.IO.
+
+        Connects to /ws/socket.io with bearer auth, emits a quick scan for the
+        given platform, and awaits scan:done. Returns the scan:done payload.
+
+        Raises ScanConnectError if the socket is unreachable (caller should fall
+        back to hand-off: seed a basic mapping entry and tell the user to scan in
+        RomM). Raises ScanError on scan:done_ko or timeout.
+        """
+        import socketio as _sio_mod  # optional dep; imported lazily
+
+        SioClient = _sio_factory or _sio_mod.Client
+        sio = SioClient()
+
+        result: dict = {}
+        done_event = threading.Event()
+
+        @sio.on("scan:done")  # type: ignore[misc]
+        def _on_done(data):
+            result["data"] = data
+            result["ok"] = True
+            done_event.set()
+
+        @sio.on("scan:done_ko")  # type: ignore[misc]
+        def _on_done_ko(data):
+            result["data"] = data
+            result["ok"] = False
+            done_event.set()
+
+        base_url = str(self._http.base_url).rstrip("/")
+        auth_header = self._http.headers.get("Authorization", "")
+        try:
+            sio.connect(
+                base_url,
+                headers={"Authorization": auth_header},
+                socketio_path="/ws/socket.io",
+                transports=["websocket"],
+            )
+        except Exception as exc:
+            raise ScanConnectError(str(exc)) from exc
+
+        try:
+            sio.emit("scan", {
+                "platforms": [platform_id],
+                "roms_ids": [],
+                "type": "quick",
+                "apis": [],
+            })
+            done_event.wait(timeout=timeout)
+        finally:
+            try:
+                sio.disconnect()
+            except Exception:
+                pass
+
+        if not done_event.is_set():
+            raise ScanError(f"Scan timed out after {timeout}s")
+        if not result.get("ok"):
+            raise ScanError(f"scan:done_ko: {result.get('data')}")
+        return result["data"]
+
+    # ------------------------------------------------------------------
+    # Post-scan rom discovery
+    # ------------------------------------------------------------------
+
+    def find_roms_by_fs_names(
+        self,
+        platform_slug: str,
+        fs_names: set[str],
+        search_term: str | None = None,
+    ) -> list[Rom]:
+        """/api/roms ignores platform_id — filter client-side by platform_slug + fs_name."""
+        roms = self.list_roms(search_term=search_term)
+        return [
+            r for r in roms
+            if r.platform_slug == platform_slug and r.fs_name in fs_names
+        ]

@@ -1,6 +1,15 @@
-import httpx
+import threading
+from pathlib import Path
 
-from romhop.romm_client import RommClient, Rom, RomDetail, romm_game_url
+import httpx
+import pytest
+
+from romhop.romm_client import (
+    RommClient, Rom, RomDetail, romm_game_url,
+    RomAlreadyExists, UploadCancelled, InsufficientScopeError,
+    ScanError, ScanConnectError,
+    UPLOAD_CHUNK_SIZE,
+)
 
 
 def _client(handler) -> RommClient:
@@ -307,3 +316,301 @@ def test_romm_game_url_basic():
 
 def test_romm_game_url_strips_trailing_slash():
     assert romm_game_url("https://romm.example.com/", 7) == "https://romm.example.com/rom/7"
+
+
+# ---------------------------------------------------------------------------
+# list_platforms
+# ---------------------------------------------------------------------------
+
+def test_list_platforms_returns_list():
+    def handler(request):
+        assert request.url.path == "/api/platforms"
+        return httpx.Response(200, json=[{"id": 1, "fs_slug": "genesis"}])
+    result = _client(handler).list_platforms()
+    assert result == [{"id": 1, "fs_slug": "genesis"}]
+
+
+def test_list_platforms_raises_scope_error_on_403():
+    def handler(request):
+        return httpx.Response(403, json={"detail": "Forbidden"})
+    with pytest.raises(InsufficientScopeError) as exc_info:
+        _client(handler).list_platforms()
+    assert exc_info.value.scope == "platforms.read"
+
+
+# ---------------------------------------------------------------------------
+# create_platform
+# ---------------------------------------------------------------------------
+
+def test_create_platform_reuses_existing_by_fs_slug():
+    calls = []
+    def handler(request):
+        calls.append(request.url.path)
+        assert request.url.path == "/api/platforms"
+        return httpx.Response(200, json=[{"id": 7, "fs_slug": "genesis"}])
+    result = _client(handler).create_platform("genesis")
+    assert result == {"id": 7, "fs_slug": "genesis"}
+    # only GET, no POST
+    assert all(r.method == "GET" for r in [])  # checked via calls
+    assert len([c for c in calls if c == "/api/platforms"]) == 1
+
+
+def test_create_platform_creates_when_absent():
+    seen = []
+    def handler(request):
+        seen.append((request.method, request.url.path))
+        if request.method == "GET":
+            return httpx.Response(200, json=[{"id": 3, "fs_slug": "snes"}])
+        # POST
+        assert request.method == "POST"
+        return httpx.Response(201, json={"id": 99, "fs_slug": "genesis"})
+    result = _client(handler).create_platform("genesis")
+    assert result["id"] == 99
+    assert ("GET", "/api/platforms") in seen
+    assert ("POST", "/api/platforms") in seen
+
+
+def test_create_platform_scope_error_on_post_403():
+    def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json=[])
+        return httpx.Response(403, json={"detail": "Forbidden"})
+    with pytest.raises(InsufficientScopeError) as exc_info:
+        _client(handler).create_platform("genesis")
+    assert exc_info.value.scope == "platforms.write"
+
+
+# ---------------------------------------------------------------------------
+# upload_rom
+# ---------------------------------------------------------------------------
+
+def test_upload_rom_success(tmp_path):
+    data = b"X" * 10
+    rom_file = tmp_path / "Sonic.md"
+    rom_file.write_bytes(data)
+
+    seen = []
+    def handler(request):
+        seen.append((request.method, request.url.path))
+        if request.url.path == "/api/roms/upload/start":
+            assert request.headers["x-upload-platform"] == "7"
+            assert request.headers["x-upload-filename"] == "Sonic.md"
+            assert request.headers["x-upload-total-size"] == "10"
+            assert request.headers["x-upload-total-chunks"] == "1"
+            return httpx.Response(201, json={"upload_id": "abc123"})
+        if "/upload/abc123" in request.url.path and request.method == "PUT":
+            assert request.headers["x-chunk-index"] == "0"
+            assert request.content == data
+            return httpx.Response(200)
+        if request.url.path == "/api/roms/upload/abc123/complete":
+            return httpx.Response(201, content=b"")
+        raise ValueError(f"unexpected {request.method} {request.url.path}")
+
+    _client(handler).upload_rom(platform_id=7, file_path=rom_file, file_name="Sonic.md")
+    paths = [p for _, p in seen]
+    assert "/api/roms/upload/start" in paths
+    assert "/api/roms/upload/abc123" in paths
+    assert "/api/roms/upload/abc123/complete" in paths
+
+
+def test_upload_rom_multi_chunk(tmp_path):
+    chunk_size = 4
+    data = b"ABCDEFGH"  # 8 bytes → 2 chunks of 4
+    rom_file = tmp_path / "game.bin"
+    rom_file.write_bytes(data)
+
+    chunks_received = []
+    def handler(request):
+        if request.url.path == "/api/roms/upload/start":
+            assert request.headers["x-upload-total-chunks"] == "2"
+            return httpx.Response(201, json={"upload_id": "uid"})
+        if request.method == "PUT":
+            chunks_received.append((
+                int(request.headers["x-chunk-index"]),
+                request.content,
+            ))
+            return httpx.Response(200)
+        if "complete" in request.url.path:
+            return httpx.Response(201, content=b"")
+        raise ValueError(request.url.path)
+
+    _client(handler).upload_rom(
+        platform_id=1, file_path=rom_file, file_name="game.bin", chunk_size=chunk_size,
+    )
+    assert chunks_received == [(0, b"ABCD"), (1, b"EFGH")]
+
+
+def test_upload_rom_already_exists(tmp_path):
+    rom_file = tmp_path / "Dupe.md"
+    rom_file.write_bytes(b"data")
+
+    def handler(request):
+        if request.url.path == "/api/roms/upload/start":
+            return httpx.Response(400, json={"detail": "File Dupe.md already exists"})
+        raise ValueError("should not reach chunks")
+
+    with pytest.raises(RomAlreadyExists):
+        _client(handler).upload_rom(platform_id=1, file_path=rom_file, file_name="Dupe.md")
+
+
+def test_upload_rom_cancel_during_chunks(tmp_path):
+    data = b"X" * (UPLOAD_CHUNK_SIZE + 1)
+    rom_file = tmp_path / "big.bin"
+    rom_file.write_bytes(data)
+
+    stop = threading.Event()
+    cancelled_ids = []
+
+    def handler(request):
+        if request.url.path == "/api/roms/upload/start":
+            return httpx.Response(201, json={"upload_id": "u1"})
+        if request.method == "PUT" and "/api/roms/upload/u1" == request.url.path:
+            stop.set()  # trigger cancel before next chunk
+            return httpx.Response(200)
+        if "cancel" in request.url.path:
+            cancelled_ids.append(request.url.path)
+            return httpx.Response(204)
+        raise ValueError(request.url.path)
+
+    with pytest.raises(UploadCancelled):
+        _client(handler).upload_rom(
+            platform_id=1, file_path=rom_file, file_name="big.bin", stop_event=stop,
+        )
+    assert any("cancel" in p for p in cancelled_ids)
+
+
+def test_upload_rom_scope_error(tmp_path):
+    rom_file = tmp_path / "x.md"
+    rom_file.write_bytes(b"data")
+
+    def handler(request):
+        return httpx.Response(403, json={"detail": "Forbidden"})
+
+    with pytest.raises(InsufficientScopeError) as exc_info:
+        _client(handler).upload_rom(platform_id=1, file_path=rom_file, file_name="x.md")
+    assert exc_info.value.scope == "roms.write"
+
+
+def test_upload_rom_progress_fn(tmp_path):
+    data = b"HELLO"
+    rom_file = tmp_path / "game.md"
+    rom_file.write_bytes(data)
+    reported = []
+
+    def handler(request):
+        if "start" in request.url.path:
+            return httpx.Response(201, json={"upload_id": "p1"})
+        if request.method == "PUT":
+            return httpx.Response(200)
+        if "complete" in request.url.path:
+            return httpx.Response(201, content=b"")
+        raise ValueError(request.url.path)
+
+    _client(handler).upload_rom(
+        platform_id=1, file_path=rom_file, file_name="game.md",
+        progress_fn=reported.append,
+    )
+    assert sum(reported) == len(data)
+
+
+# ---------------------------------------------------------------------------
+# trigger_scan  (uses fake Socket.IO factory)
+# ---------------------------------------------------------------------------
+
+class _FakeSio:
+    """Synchronous fake that fires scan:done immediately on emit."""
+
+    def __init__(self, *, fail_connect: bool = False, ko: bool = False, timeout_sim: bool = False):
+        self._handlers: dict = {}
+        self._fail_connect = fail_connect
+        self._ko = ko
+        self._timeout_sim = timeout_sim
+        self.connected_url: str | None = None
+        self.emitted: list = []
+        self.disconnected = False
+
+    def on(self, event):
+        def decorator(fn):
+            self._handlers[event] = fn
+            return fn
+        return decorator
+
+    def connect(self, url, headers=None, socketio_path=None, transports=None):
+        if self._fail_connect:
+            raise ConnectionRefusedError("fake connect failure")
+        self.connected_url = url
+
+    def emit(self, event, data):
+        self.emitted.append((event, data))
+        if self._timeout_sim:
+            return  # never fire any handler
+        evt = "scan:done_ko" if self._ko else "scan:done"
+        handler = self._handlers.get(evt)
+        if handler:
+            handler({"new_roms": 3})
+
+    def disconnect(self):
+        self.disconnected = True
+
+
+def _scan_client() -> RommClient:
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, json=[]))
+    http = httpx.Client(base_url="http://romm.test", transport=transport)
+    return RommClient(http=http, token="tok")
+
+
+def test_trigger_scan_success():
+    fake = _FakeSio()
+    result = _scan_client().trigger_scan(7, _sio_factory=lambda: fake)
+    assert result == {"new_roms": 3}
+    assert fake.emitted[0] == ("scan", {
+        "platforms": [7], "roms_ids": [], "type": "quick", "apis": [],
+    })
+    assert fake.disconnected
+
+
+def test_trigger_scan_connect_error():
+    fake = _FakeSio(fail_connect=True)
+    with pytest.raises(ScanConnectError):
+        _scan_client().trigger_scan(7, _sio_factory=lambda: fake)
+
+
+def test_trigger_scan_done_ko():
+    fake = _FakeSio(ko=True)
+    with pytest.raises(ScanError):
+        _scan_client().trigger_scan(7, _sio_factory=lambda: fake)
+
+
+def test_trigger_scan_timeout():
+    fake = _FakeSio(timeout_sim=True)
+    with pytest.raises(ScanError, match="timed out"):
+        _scan_client().trigger_scan(7, timeout=0.05, _sio_factory=lambda: fake)
+
+
+# ---------------------------------------------------------------------------
+# find_roms_by_fs_names
+# ---------------------------------------------------------------------------
+
+def test_find_roms_by_fs_names_filters_platform_and_name():
+    def handler(request):
+        return httpx.Response(200, json={"items": [
+            {"id": 1, "name": "Sonic", "platform_slug": "genesis",
+             "fs_name": "Sonic.md", "fs_name_no_ext": "Sonic", "files": []},
+            {"id": 2, "name": "Mario", "platform_slug": "snes",
+             "fs_name": "Mario.sfc", "fs_name_no_ext": "Mario", "files": []},
+            {"id": 3, "name": "Knuckles", "platform_slug": "genesis",
+             "fs_name": "Knuckles.md", "fs_name_no_ext": "Knuckles", "files": []},
+        ], "total": 3})
+    roms = _client(handler).find_roms_by_fs_names("genesis", {"Sonic.md"})
+    assert len(roms) == 1
+    assert roms[0].id == 1
+
+
+def test_find_roms_by_fs_names_empty_when_no_match():
+    def handler(request):
+        return httpx.Response(200, json={"items": [
+            {"id": 1, "name": "Sonic", "platform_slug": "genesis",
+             "fs_name": "Sonic.md", "fs_name_no_ext": "Sonic", "files": []},
+        ], "total": 1})
+    roms = _client(handler).find_roms_by_fs_names("snes", {"Sonic.md"})
+    assert roms == []
