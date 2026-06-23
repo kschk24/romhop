@@ -8,6 +8,7 @@ from enum import Enum
 class ActivityKind(Enum):
     SYNC_PUSH = "sync_push"
     DOWNLOAD_DONE = "download_done"
+    UPLOAD_DONE = "upload_done"
     ERROR = "error"
 
 

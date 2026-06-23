@@ -12,6 +12,7 @@ dependencies = [
     "platformdirs>=4.0",
     "keyring>=24.0",
     "python-socketio[client]>=5.11",
+    "InquirerPy>=0.3.4",
 ]
 
 [project.optional-dependencies]

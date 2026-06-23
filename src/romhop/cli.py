@@ -568,9 +568,10 @@ def pull(name: str = typer.Argument(None, help="Game name (omit and use --all fo
     typer.echo(line)
 
 
-def _run_scan(settings, *, assume_yes: bool) -> None:
+def _run_scan(settings, *, assume_yes: bool):
     """Match local games to RomM roms and seed the cache. Preview then confirm
-    unless assume_yes. Assumes roms_root is configured and login is valid."""
+    unless assume_yes. Assumes roms_root is configured and login is valid.
+    Returns the MatchResult so callers can act on unmatched games."""
     client = _client()
     try:
         roms = client.list_roms()
@@ -597,10 +598,10 @@ def _run_scan(settings, *, assume_yes: bool) -> None:
 
     if not result.matched:
         typer.echo("Nothing to map.")
-        return
+        return result
     if not assume_yes and not typer.confirm(f"Write {len(result.matched)} mappings?", default=False):
         typer.echo("Aborted; cache unchanged.")
-        return
+        return result
 
     cache = MappingCache(_cache_path())
     for local, rom in result.matched:
@@ -609,16 +610,151 @@ def _run_scan(settings, *, assume_yes: bool) -> None:
         cache.add(seed_entry(rom.id, local.system, rom.fs_name_no_ext, local.file_names))
     cache.save()
     typer.echo(f"Wrote {len(result.matched)} mappings to {_cache_path()}")
+    return result
+
+
+def _run_upload_unmatched(settings, unmatched, *, assume_yes: bool) -> None:
+    """Upload resolvable unmatched games to RomM after a scan."""
+    from romhop.platform_resolve import invert_to_slugs, resolve_platform
+    from romhop.upload import upload_game
+
+    client = _client()
+    cache = MappingCache(_cache_path())
+
+    # Fetch platform list once.
+    try:
+        romm_platforms = client.list_platforms()
+    except Exception as exc:
+        typer.echo(f"Could not fetch RomM platforms: {exc}", err=True)
+        return
+
+    # Resolve / categorize games.
+    resolvable: list = []
+    missing_platform: list = []
+    unresolvable: list = []
+
+    for game in unmatched:
+        from romhop.platform_resolve import resolve_platform as _resolve
+        platform = _resolve(game.system, romm_platforms, settings.platform_overrides)
+        if platform is not None:
+            resolvable.append((game, platform))
+        else:
+            slugs = invert_to_slugs(game.system, settings.platform_overrides)
+            if slugs:
+                missing_platform.append((game, slugs[0]))
+            else:
+                unresolvable.append(game)
+
+    if unresolvable:
+        typer.echo("Cannot upload (no RomM slug derivable):")
+        for g in unresolvable:
+            typer.echo(f"  {g.system}/{g.game_name}")
+
+    # Select games to upload (interactive or flag).
+    all_candidates = [(g, p["id"], p.get("slug") or p.get("fs_slug", g.system))
+                      for g, p in resolvable]
+
+    if missing_platform:
+        typer.echo("Platforms missing in RomM:")
+        for game, slug in missing_platform:
+            typer.echo(f"  {game.system}/{game.game_name}  → would create '{slug}'")
+        if assume_yes or typer.confirm("Create missing platforms and include those games?", default=False):
+            for game, slug in missing_platform:
+                try:
+                    new_platform = client.create_platform(slug)
+                    pid = new_platform["id"]
+                    pslug = new_platform.get("slug") or new_platform.get("fs_slug", slug)
+                    all_candidates.append((game, pid, pslug))
+                    typer.echo(f"Created platform '{slug}' (id {pid})")
+                except Exception as exc:
+                    typer.echo(f"  Failed to create '{slug}': {exc}", err=True)
+
+    if not all_candidates:
+        typer.echo("No games to upload.")
+        return
+
+    # Interactive selection via InquirerPy (falls back to --yes / prompt if not available).
+    selected = _select_games_for_upload(all_candidates, assume_yes=assume_yes)
+    if not selected:
+        typer.echo("No games selected.")
+        return
+
+    # Summary + confirm.
+    typer.echo(f"Will upload {len(selected)} game(s):")
+    for game, pid, pslug in selected:
+        typer.echo(f"  {game.system}/{game.game_name}  ({len(game.file_names)} file(s))")
+
+    if not assume_yes and not typer.confirm("Proceed?", default=True):
+        typer.echo("Aborted.")
+        return
+
+    # Upload each game.
+    for game, platform_id, platform_slug in selected:
+        typer.echo(f"Uploading {game.game_name}…")
+        try:
+            result = upload_game(
+                game, client,
+                platform_id=platform_id,
+                platform_slug=platform_slug,
+                roms_root=settings.roms_root,
+                cache=cache,
+                scan_timeout=float(settings.scan_timeout_seconds),
+                on_event=lambda e: typer.echo(f"  {e.message}"),
+            )
+            if result.fallback:
+                typer.echo(f"  Uploaded (scan skipped — run a Scan in RomM to finish importing)")
+            else:
+                n_up = len(result.uploaded_files)
+                n_sk = len(result.skipped_files)
+                typer.echo(f"  Done: {n_up} uploaded, {n_sk} skipped (already existed)")
+        except Exception as exc:
+            typer.echo(f"  Failed: {exc}", err=True)
+
+
+def _select_games_for_upload(candidates: list, *, assume_yes: bool) -> list:
+    """Interactive multi-select via InquirerPy; falls back to all-or-prompt."""
+    if assume_yes:
+        return candidates
+
+    if not sys.stdin.isatty():
+        return candidates  # non-TTY: upload all resolvable
+
+    try:
+        from InquirerPy import inquirer
+        choices = [
+            {"name": f"{g.system}/{g.game_name}", "value": (g, pid, pslug), "enabled": False}
+            for g, pid, pslug in candidates
+        ]
+        selected = inquirer.checkbox(
+            message="Select games to upload (space to toggle, enter to confirm):",
+            choices=choices,
+        ).execute()
+        return selected
+    except ImportError:
+        pass
+
+    # Fallback: confirm all.
+    if typer.confirm(f"Upload all {len(candidates)} resolvable games?", default=False):
+        return candidates
+    return []
 
 
 @app.command()
-def scan(yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt.")):
+def scan(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts."),
+    upload_unmatched: bool = typer.Option(
+        False, "--upload-unmatched",
+        help="After scanning, upload all resolvable unmatched local games to RomM.",
+    ),
+):
     """Match games already in your ROMs folder to RomM and seed the save-sync cache."""
     settings = config.load_settings()
     if not config.roms_root_configured(settings):
         typer.echo("ROMs folder not set. Run: romhop setup  (or: romhop config set roms_root <path>)", err=True)
         raise typer.Exit(code=1)
-    _run_scan(settings, assume_yes=yes)
+    result = _run_scan(settings, assume_yes=yes)
+    if upload_unmatched and result is not None and result.unmatched:
+        _run_upload_unmatched(settings, result.unmatched, assume_yes=yes)
 
 
 @app.command()

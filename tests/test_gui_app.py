@@ -443,7 +443,7 @@ def test_run_scan_invokes_action_and_shows_dialog(qtbot, monkeypatch):
     shown = {}
 
     class FakeDialog:
-        def __init__(self, res, parent=None):
+        def __init__(self, res, parent=None, **kwargs):
             shown["result"] = res
         def exec(self):
             shown["execed"] = True

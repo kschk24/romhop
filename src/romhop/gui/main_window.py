@@ -91,7 +91,8 @@ class MainWindow(QWidget):
                  validate_fn=None, detect_retroarch_fn=None, recreate_client=None,
                  update_check_fn=None, update_apply_fn=None, relaunch_fn=None,
                  open_log_dir_fn=None, export_logs_fn=None, detail_provider=None,
-                 open_in_romm=None, open_folder=None, pull_action=None):
+                 open_in_romm=None, open_folder=None, pull_action=None,
+                 upload_action=None, list_platforms_fn=None, create_platform_fn=None):
         super().__init__(parent)
         self._settings = settings
         self._apply_token = apply_token
@@ -113,6 +114,9 @@ class MainWindow(QWidget):
         self._open_in_romm_fn = open_in_romm
         self._open_folder_fn = open_folder
         self._pull_action = pull_action
+        self._upload_action = upload_action
+        self._list_platforms_fn = list_platforms_fn
+        self._create_platform_fn = create_platform_fn
         self._pull_workers: set = set()
         self._bulk_pull_worker = None
         self._pending_update = None
@@ -590,7 +594,13 @@ class MainWindow(QWidget):
 
     def _on_scan_done(self, result) -> None:
         self.settings_view.set_scanning(False)
-        ScanResultDialog(result, self).exec()
+        ScanResultDialog(
+            result, self,
+            upload_action=self._upload_action,
+            list_platforms_fn=self._list_platforms_fn,
+            create_platform_fn=self._create_platform_fn,
+            overrides=self._settings.platform_overrides,
+        ).exec()
 
     def _on_scan_error(self, message: str) -> None:
         self.settings_view.set_scanning(False)

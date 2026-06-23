@@ -252,6 +252,27 @@ def run() -> None:
     def scan_action(settings):
         return run_scan(client, cache, names, settings)
 
+    def list_platforms_fn():
+        return client.list_platforms()
+
+    def create_platform_fn(slug: str) -> dict:
+        return client.create_platform(slug)
+
+    def upload_action(game, platform_id, platform_slug, on_progress, stop_event, on_event=None):
+        from romhop.upload import upload_game
+        s = live["settings"]
+        return upload_game(
+            game, client,
+            platform_id=platform_id,
+            platform_slug=platform_slug,
+            roms_root=s.roms_root,
+            cache=cache,
+            scan_timeout=float(s.scan_timeout_seconds),
+            stop_event=stop_event,
+            progress_fn=on_progress,
+            on_event=on_event,
+        )
+
     def validate_fn(url, token):
         # Throwaway client: base_url is baked into httpx.Client at construction,
         # so testing arbitrary creds means a fresh client, not the live one.
@@ -368,6 +389,9 @@ def run() -> None:
         open_in_romm=open_in_romm_fn,
         open_folder=open_folder_fn,
         pull_action=pull_action,
+        upload_action=upload_action,
+        list_platforms_fn=list_platforms_fn,
+        create_platform_fn=create_platform_fn,
     )
     instance.activated.connect(window.show_and_raise)
     window.resize(900, 600)

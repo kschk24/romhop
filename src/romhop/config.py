@@ -34,6 +34,7 @@ class Settings:
     update_include_prereleases: bool = False
     debug_logging: bool = False
     desktop_notifications: bool = False
+    scan_timeout_seconds: int = 120
 
 
 @dataclass(frozen=True)
@@ -85,6 +86,8 @@ SCHEMA: list[FieldSpec] = [
               "Write DEBUG-level entries to the log file (default: INFO only)"),
     FieldSpec("desktop_notifications", "behavior", "Desktop notifications", "bool",
               "Show OS notifications for sync, downloads, and errors when romhop is in the background (requires system tray)"),
+    FieldSpec("scan_timeout_seconds", "behavior", "Upload scan timeout (seconds)", "int",
+              "How long to wait for RomM to finish importing an uploaded game (0 = skip scan trigger)"),
 ]
 
 

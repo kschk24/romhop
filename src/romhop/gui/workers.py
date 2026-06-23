@@ -8,6 +8,7 @@ from PySide6.QtCore import QThread, Qt, Signal
 from PySide6.QtGui import QImage
 
 from romhop.download import DownloadCancelled
+from romhop.romm_client import UploadCancelled
 
 
 class CallableWorker(QThread):
@@ -113,6 +114,80 @@ class DownloadWorker(QThread):
                 break
             except Exception as exc:  # one failure must not abort the queue
                 self.item_error.emit(rom.name, str(exc))
+                self.activity.emit(ActivityEvent(ActivityKind.ERROR, str(exc)))
+
+
+class UploadWorker(QThread):
+    """Runs a batch of uploads sequentially, mirroring DownloadWorker.
+
+    Each job is a tuple ``(game, platform_id, platform_slug)`` where ``game``
+    is a ``LocalGame``. ``action(game, platform_id, platform_slug,
+    on_progress, stop_event, on_event)`` performs one upload and returns an
+    ``UploadResult``.
+
+    Signals:
+      item_started(index, count, name) - 1-based position in the batch
+      item_progress(bytes_uploaded, speed) - bytes sent so far + bytes/sec
+      item_error(name, message)        - one job failed; batch continues
+      activity(ActivityEvent)          - UPLOAD_DONE or ERROR
+      finished (built-in)              - whole batch done
+    """
+
+    item_started = Signal(int, int, str)
+    item_progress = Signal("qlonglong", float)
+    item_error = Signal(str, str)
+    activity = Signal(object)
+
+    _MIN_INTERVAL = 0.1
+
+    def __init__(self, jobs: Sequence, action: Callable[..., object], parent=None):
+        super().__init__(parent)
+        self._jobs = list(jobs)
+        self._action = action
+        self._cancel = threading.Event()
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancel.set()
+
+    def was_cancelled(self) -> bool:
+        return self._cancelled
+
+    def _make_on_progress(self):
+        state = {"t0": None, "last_t": 0.0, "last_b": 0, "emitted": False}
+
+        def on_progress(fname: str, bytes_sent: int) -> None:
+            now = time.monotonic()
+            if state["t0"] is None:
+                state.update(t0=now, last_t=now, last_b=0)
+            elapsed = now - state["last_t"]
+            if state["emitted"] and elapsed < self._MIN_INTERVAL:
+                return
+            dt = now - state["last_t"]
+            db = bytes_sent - state["last_b"]
+            speed = db / dt if dt > 0 else 0.0
+            self.item_progress.emit(bytes_sent, max(speed, 0.0))
+            state.update(last_t=now, last_b=bytes_sent, emitted=True)
+
+        return on_progress
+
+    def run(self) -> None:
+        from romhop.activity import ActivityEvent, ActivityKind
+        count = len(self._jobs)
+        for index, (game, platform_id, platform_slug) in enumerate(self._jobs, start=1):
+            if self._cancel.is_set():
+                self._cancelled = True
+                break
+            self.item_started.emit(index, count, game.game_name)
+            try:
+                self._action(game, platform_id, platform_slug,
+                             self._make_on_progress(), self._cancel,
+                             on_event=self.activity.emit)
+            except UploadCancelled:
+                self._cancelled = True
+                break
+            except Exception as exc:
+                self.item_error.emit(game.game_name, str(exc))
                 self.activity.emit(ActivityEvent(ActivityKind.ERROR, str(exc)))
 
 
