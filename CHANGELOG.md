@@ -7,6 +7,8 @@ All notable changes to romhop are documented here. Format loosely follows
 
 ### Added
 
+- **`RommClient` gains upload, platform-create, and scan-trigger capability (TASK-044).** `upload_rom` streams a rom file from disk via the chunked `start→PUT→complete` flow (no whole-file RAM), surfaces a `RomAlreadyExists` dedup signal on 400, and accepts a `stop_event` for cancellation. `create_platform` existence-checks before posting so no duplicate platforms are created. `trigger_scan` connects to RomM's Socket.IO endpoint (`/ws/socket.io`) and emits a platform-scoped quick scan, raising `ScanConnectError` on failure so callers can fall back to a hand-off. `find_roms_by_fs_names` locates materialized roms client-side after a scan. All write operations raise `InsufficientScopeError` on HTTP 403 naming the missing scope. Added `python-socketio[client]` dependency.
+
 - **`local_index` is now disc-aware: flat `.cue`+`.bin` and `.m3u`+`.cue`+`.bin` layouts coalesce into one `LocalGame`.** Previously a flat single-disc PS1 game split into a `.cue` "game" plus orphan `.bin` "games" in the scan Unmatched report. `local_index` now parses `.cue` sheets for their referenced track files and `.m3u` playlists for their disc descriptors, coalescing the descriptor and all referenced files into a single `LocalGame`. Missing referenced files emit a warning rather than crashing. The coalesced `file_names` field carries every real rom file (`.cue`+`.bin`), excluding ES-DE artifacts (`.m3u`, `.txt`). (`TASK-045`)
 
 - **Bulk "Pull saves" button in the GUI.** The library bottom bar now has a Pull
