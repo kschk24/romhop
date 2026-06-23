@@ -5,6 +5,13 @@ All notable changes to romhop are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- **Bulk "Pull saves" button in the GUI.** The library bottom bar now has a Pull
+  button that restores saves/states for every selected game in one pass (off the
+  UI thread), streaming the same per-file conflict prompt the CLI uses so local
+  files are never overwritten without confirmation. (`TASK-008`)
+
 ### Fixed
 
 - **Installer download no longer buffers the full asset in RAM.** `update.py` previously accumulated all 65536-byte chunks into a list before writing to disk, holding a full AppImage/exe in memory. Chunks are now written directly to the `.part` temp file as they arrive, and the SHA-256 digest is computed incrementally during the same pass — eliminating both the in-memory accumulation and the post-write `path.read_bytes()` re-load that doubled peak RAM use. (`TASK-024`)

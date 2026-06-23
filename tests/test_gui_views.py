@@ -1,3 +1,5 @@
+from PySide6.QtCore import QObject, Signal
+
 from romhop.gui import library_view
 from romhop.gui.library_view import LibraryView
 from romhop.romm_client import Rom
@@ -470,3 +472,77 @@ def test_settings_export_logs_no_op_when_cancelled(qtbot, monkeypatch):
     )
     view.export_logs_btn.click()
     assert received == []
+
+
+# --- bulk Pull button (TASK-008) ---
+
+class _FakePullWorker(QObject):
+    """Runs the pull_fn synchronously on start() so the bulk-pull dispatch can
+    be tested without a live QThread or modal conflict dialog."""
+
+    conflict = Signal(object, object, object)
+    done = Signal(dict)
+    failed = Signal(str)
+    finished = Signal()
+
+    def __init__(self, pull_fn, parent=None):
+        super().__init__(parent)
+        self._pull_fn = pull_fn
+
+    def start(self):
+        try:
+            result = self._pull_fn(lambda *a: False)
+        except Exception as exc:  # mirror PullWorker.run
+            self.failed.emit(str(exc))
+        else:
+            self.done.emit(result)
+        self.finished.emit()
+
+
+def _make_main_window(qtbot, monkeypatch, pull_action):
+    from romhop import config
+    from romhop.gui import main_window
+    from romhop.gui.main_window import MainWindow
+    monkeypatch.setattr(main_window, "PullWorker", _FakePullWorker)
+    monkeypatch.setattr(main_window.QMessageBox, "information", lambda *a, **kw: None)
+    w = MainWindow(settings=config.default_settings(),
+                   persist_settings=lambda s: None, pull_action=pull_action)
+    qtbot.addWidget(w)
+    return w
+
+
+def test_pull_btn_dispatches_all_selected(qtbot, monkeypatch):
+    captured = []
+
+    def pull_action(roms, on_conflict):
+        captured.append(list(roms))
+        return {"written": 0, "skipped": 0, "kept": 0, "failed": 0, "missing": 0}
+
+    w = _make_main_window(qtbot, monkeypatch, pull_action)
+    a, b, c = _rom("Sonic", "genesis"), _rom("Mario", "nes"), _rom("Zelda", "nes")
+    w.library.set_roms([a, b, c])
+    for check, rom in w.library._checks.values():
+        if rom.name in ("Sonic", "Zelda"):
+            check.setChecked(True)
+    w.pull_btn.click()
+    assert len(captured) == 1
+    assert sorted(r.name for r in captured[0]) == ["Sonic", "Zelda"]
+
+
+def test_pull_btn_noop_when_nothing_selected(qtbot, monkeypatch):
+    captured = []
+    w = _make_main_window(qtbot, monkeypatch,
+                          lambda roms, oc: captured.append(list(roms)) or {})
+    w.library.set_roms([_rom("Sonic", "genesis")])
+    w.pull_btn.click()
+    assert captured == []
+
+
+def test_pull_btn_view_parity(qtbot, monkeypatch):
+    w = _make_main_window(qtbot, monkeypatch, lambda roms, oc: {})
+    w.show_settings()
+    assert w.pull_btn.isHidden()
+    w.show_activity_log()
+    assert w.pull_btn.isHidden()
+    w.show_library()
+    assert not w.pull_btn.isHidden()

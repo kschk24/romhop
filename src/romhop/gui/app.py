@@ -275,13 +275,14 @@ def run() -> None:
 
     from romhop.pull import pull_games
 
-    def pull_action(rom, on_conflict):
+    def pull_action(roms, on_conflict):
         class _Shim:
             def __init__(self, rom_id):
                 self.rom_id = rom_id
 
         s = live["settings"]
-        return pull_games(client, [_Shim(rom.id)], s, on_conflict=on_conflict)
+        shims = [_Shim(rom.id) for rom in roms]
+        return pull_games(client, shims, s, on_conflict=on_conflict)
 
     from romhop.romm_client import romm_game_url
     from romhop.library import local_game_dir

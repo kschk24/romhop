@@ -114,6 +114,7 @@ class MainWindow(QWidget):
         self._open_folder_fn = open_folder
         self._pull_action = pull_action
         self._pull_workers: set = set()
+        self._bulk_pull_worker = None
         self._pending_update = None
         self._check_worker = None
         self._apply_worker = None
@@ -180,6 +181,7 @@ class MainWindow(QWidget):
         self.bottom.setObjectName("BottomBar")
         self._sel_label = QLabel("0 selected")
         self.download_btn = QPushButton("Download")
+        self.pull_btn = QPushButton("Pull saves")
         self.cancel_btn = QPushButton("Cancel")
         self.cancel_btn.setObjectName("CancelDownload")
         self.cancel_btn.hide()
@@ -212,6 +214,7 @@ class MainWindow(QWidget):
         bottom_row.addWidget(self._sel_label)
         bottom_row.addWidget(self.uncheck_btn)
         bottom_row.addWidget(self.download_btn)
+        bottom_row.addWidget(self.pull_btn)
         bottom_row.addWidget(self.cancel_btn)
         bottom_row.addWidget(self.progress_bar)
         bottom_row.addWidget(self.progress_label)
@@ -239,6 +242,7 @@ class MainWindow(QWidget):
 
         self.library.selection_changed.connect(self._on_selection)
         self.download_btn.clicked.connect(self.download_selected)
+        self.pull_btn.clicked.connect(self._pull_selected)
 
         # Update banner: in-layout, hidden until a newer version is found.
         self.update_banner = QLabel("")
@@ -301,6 +305,7 @@ class MainWindow(QWidget):
         self.filter_bar.hide()
         self.uncheck_btn.hide()
         self.download_btn.hide()
+        self.pull_btn.hide()
         self.search.clear()
         self.stack.setCurrentIndex(1)
 
@@ -309,6 +314,7 @@ class MainWindow(QWidget):
         self.filter_bar.show()
         self.uncheck_btn.show()
         self.download_btn.show()
+        self.pull_btn.show()
         self.search.clear()
         self.stack.setCurrentIndex(0)
 
@@ -320,6 +326,7 @@ class MainWindow(QWidget):
         self.filter_bar.hide()
         self.uncheck_btn.hide()
         self.download_btn.hide()
+        self.pull_btn.hide()
         self.search.clear()
         self.stack.setCurrentIndex(2)
 
@@ -638,13 +645,41 @@ class MainWindow(QWidget):
     def _pull_one(self, rom) -> None:
         if self._pull_action is None:
             return
-        worker = PullWorker(lambda on_conflict: self._pull_action(rom, on_conflict))
+        worker = PullWorker(lambda on_conflict: self._pull_action([rom], on_conflict))
         worker.conflict.connect(self._on_pull_conflict)
         worker.done.connect(self._on_pull_done)
         worker.failed.connect(self._on_pull_failed)
         worker.finished.connect(lambda w=worker: self._pull_workers.discard(w))
         self._pull_workers.add(worker)
         worker.start()
+
+    def _pull_selected(self) -> None:
+        if self._pull_action is None:
+            return
+        # Ignore the click while a bulk pull is already running: the button is
+        # the only entry point, so one live bulk worker is enough of a guard.
+        if self._bulk_pull_worker is not None:
+            return
+        selected = self.library.selected_roms()
+        if not selected:
+            return
+        self.pull_btn.setText("Pulling…")
+        self.pull_btn.setEnabled(False)
+        worker = PullWorker(
+            lambda on_conflict: self._pull_action(selected, on_conflict))
+        worker.conflict.connect(self._on_pull_conflict)
+        worker.done.connect(self._on_pull_done)
+        worker.failed.connect(self._on_pull_failed)
+        worker.finished.connect(lambda w=worker: self._on_bulk_pull_finished(w))
+        self._pull_workers.add(worker)
+        self._bulk_pull_worker = worker
+        worker.start()
+
+    def _on_bulk_pull_finished(self, worker) -> None:
+        self._pull_workers.discard(worker)
+        self._bulk_pull_worker = None
+        self.pull_btn.setText("Pull saves")
+        self.pull_btn.setEnabled(True)
 
     def _on_pull_conflict(self, item, local_path, local_mtime) -> None:
         worker = self.sender()
