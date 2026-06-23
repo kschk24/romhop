@@ -211,3 +211,136 @@ def test_downloaded_rom_ids_matches_multi_disc_subfolder(tmp_path):
               fs_name="Final Fantasy VII.m3u", fs_name_no_ext="Final Fantasy VII",
               file_names=["disc1.bin", "disc2.bin"])
     assert downloaded_rom_ids([rom], tmp_path, {}) == {7}
+
+
+# ---------------------------------------------------------------------------
+# Disc-aware: flat .cue+.bin and .m3u coalescing (TASK-045)
+# ---------------------------------------------------------------------------
+
+_CUE_SINGLE = b'FILE "Crash Bandicoot (USA) (Track 1).bin" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\nFILE "Crash Bandicoot (USA) (Track 2).bin" BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n'
+_CUE_DISC1 = b'FILE "Metal Gear Solid (USA) (Disc 1) (Track 1).bin" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n'
+_CUE_DISC2 = b'FILE "Metal Gear Solid (USA) (Disc 2) (Track 1).bin" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n'
+_M3U_MULTI = b"Metal Gear Solid (USA) (Disc 1).cue\nMetal Gear Solid (USA) (Disc 2).cue\n"
+
+
+def test_flat_cue_bin_single_disc_coalesces(tmp_path):
+    """AC#1, #3, #4: flat .cue + .bin files collapse into one LocalGame."""
+    sys_dir = tmp_path / "psx"
+    _touch(sys_dir / "Crash Bandicoot (USA).cue", _CUE_SINGLE)
+    _touch(sys_dir / "Crash Bandicoot (USA) (Track 1).bin", b"\x00")
+    _touch(sys_dir / "Crash Bandicoot (USA) (Track 2).bin", b"\x00")
+
+    games = index_local_library(tmp_path, overrides={})
+    assert len(games) == 1
+    g = games[0]
+    assert g.system == "psx"
+    assert g.game_name == "Crash Bandicoot (USA)"
+    assert g.match_key == "crash bandicoot (usa)"
+    assert sorted(g.file_names) == [
+        "Crash Bandicoot (USA) (Track 1).bin",
+        "Crash Bandicoot (USA) (Track 2).bin",
+        "Crash Bandicoot (USA).cue",
+    ]
+
+
+def test_flat_m3u_multi_disc_coalesces(tmp_path):
+    """AC#2, #3, #5: flat .m3u referencing two .cue files (each with .bin) → one LocalGame."""
+    sys_dir = tmp_path / "psx"
+    _touch(sys_dir / "Metal Gear Solid (USA).m3u", _M3U_MULTI)
+    _touch(sys_dir / "Metal Gear Solid (USA) (Disc 1).cue", _CUE_DISC1)
+    _touch(sys_dir / "Metal Gear Solid (USA) (Disc 1) (Track 1).bin", b"\x00")
+    _touch(sys_dir / "Metal Gear Solid (USA) (Disc 2).cue", _CUE_DISC2)
+    _touch(sys_dir / "Metal Gear Solid (USA) (Disc 2) (Track 1).bin", b"\x00")
+
+    games = index_local_library(tmp_path, overrides={})
+    assert len(games) == 1
+    g = games[0]
+    assert g.game_name == "Metal Gear Solid (USA)"
+    assert g.match_key == "metal gear solid (usa)"
+    # .m3u itself excluded (ES-DE artifact); both .cue and .bin files included
+    assert sorted(g.file_names) == [
+        "Metal Gear Solid (USA) (Disc 1) (Track 1).bin",
+        "Metal Gear Solid (USA) (Disc 1).cue",
+        "Metal Gear Solid (USA) (Disc 2) (Track 1).bin",
+        "Metal Gear Solid (USA) (Disc 2).cue",
+    ]
+    assert "Metal Gear Solid (USA).m3u" not in g.file_names
+
+
+def test_flat_cue_bin_match_key_matches_rom(tmp_path):
+    """AC#4 + match: flat .cue game match_key hits rom via fs_name_no_ext."""
+    sys_dir = tmp_path / "psx"
+    _touch(sys_dir / "Crash Bandicoot (USA).cue", _CUE_SINGLE)
+    _touch(sys_dir / "Crash Bandicoot (USA) (Track 1).bin", b"\x00")
+    _touch(sys_dir / "Crash Bandicoot (USA) (Track 2).bin", b"\x00")
+
+    rom = _rom(1, "Crash Bandicoot", "psx",
+               "Crash Bandicoot (USA).cue", "Crash Bandicoot (USA)")
+    games = index_local_library(tmp_path, overrides={})
+    result = match_to_roms(games, [rom], overrides={})
+    assert len(result.matched) == 1
+    assert result.unmatched == []
+
+
+def test_flat_cue_missing_track_warns_not_crash(tmp_path, caplog):
+    """AC#6: missing .bin referenced by .cue → warning emitted, game still created."""
+    import logging
+    sys_dir = tmp_path / "psx"
+    _touch(sys_dir / "Crash Bandicoot (USA).cue", _CUE_SINGLE)
+    # Tracks intentionally absent
+
+    with caplog.at_level(logging.WARNING, logger="romhop.local_index"):
+        games = index_local_library(tmp_path, overrides={})
+
+    assert len(games) == 1
+    g = games[0]
+    assert g.game_name == "Crash Bandicoot (USA)"
+    # Only the .cue itself in file_names (tracks are missing)
+    assert g.file_names == ["Crash Bandicoot (USA).cue"]
+    assert any("Track 1" in r.message or "Track 2" in r.message for r in caplog.records)
+
+
+def test_flat_m3u_missing_disc_warns_not_crash(tmp_path, caplog):
+    """AC#6: .m3u references a .cue that doesn't exist → warning, game still created."""
+    import logging
+    sys_dir = tmp_path / "psx"
+    _touch(sys_dir / "Metal Gear Solid (USA).m3u", _M3U_MULTI)
+    # No .cue or .bin files present
+
+    with caplog.at_level(logging.WARNING, logger="romhop.local_index"):
+        games = index_local_library(tmp_path, overrides={})
+
+    assert len(games) == 1
+    g = games[0]
+    assert g.game_name == "Metal Gear Solid (USA)"
+    assert g.file_names == []
+    assert caplog.records  # at least one warning
+
+
+def test_flat_cue_excludes_es_de_txt_artifacts(tmp_path):
+    """AC#5: noload.txt and other .txt in system dir never appear in file_names."""
+    sys_dir = tmp_path / "psx"
+    _touch(sys_dir / "Crash Bandicoot (USA).cue", _CUE_SINGLE)
+    _touch(sys_dir / "Crash Bandicoot (USA) (Track 1).bin", b"\x00")
+    _touch(sys_dir / "Crash Bandicoot (USA) (Track 2).bin", b"\x00")
+    _touch(sys_dir / "noload.txt", b"")
+    _touch(sys_dir / "systeminfo.txt", b"")
+
+    games = index_local_library(tmp_path, overrides={})
+    assert len(games) == 1
+    for fn in games[0].file_names:
+        assert not fn.endswith(".txt")
+
+
+def test_flat_cue_m3u_not_in_file_names(tmp_path):
+    """AC#5: .m3u is an ES-DE artifact and must not appear in file_names."""
+    sys_dir = tmp_path / "psx"
+    _touch(sys_dir / "Metal Gear Solid (USA).m3u", _M3U_MULTI)
+    _touch(sys_dir / "Metal Gear Solid (USA) (Disc 1).cue", _CUE_DISC1)
+    _touch(sys_dir / "Metal Gear Solid (USA) (Disc 1) (Track 1).bin", b"\x00")
+    _touch(sys_dir / "Metal Gear Solid (USA) (Disc 2).cue", _CUE_DISC2)
+    _touch(sys_dir / "Metal Gear Solid (USA) (Disc 2) (Track 1).bin", b"\x00")
+
+    games = index_local_library(tmp_path, overrides={})
+    assert len(games) == 1
+    assert all(not fn.endswith(".m3u") for fn in games[0].file_names)

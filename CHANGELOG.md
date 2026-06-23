@@ -7,6 +7,8 @@ All notable changes to romhop are documented here. Format loosely follows
 
 ### Added
 
+- **`local_index` is now disc-aware: flat `.cue`+`.bin` and `.m3u`+`.cue`+`.bin` layouts coalesce into one `LocalGame`.** Previously a flat single-disc PS1 game split into a `.cue` "game" plus orphan `.bin` "games" in the scan Unmatched report. `local_index` now parses `.cue` sheets for their referenced track files and `.m3u` playlists for their disc descriptors, coalescing the descriptor and all referenced files into a single `LocalGame`. Missing referenced files emit a warning rather than crashing. The coalesced `file_names` field carries every real rom file (`.cue`+`.bin`), excluding ES-DE artifacts (`.m3u`, `.txt`). (`TASK-045`)
+
 - **Bulk "Pull saves" button in the GUI.** The library bottom bar now has a Pull
   button that restores saves/states for every selected game in one pass (off the
   UI thread), streaming the same per-file conflict prompt the CLI uses so local

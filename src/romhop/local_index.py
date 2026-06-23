@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -7,6 +9,28 @@ from pathlib import Path
 from romhop.library import candidate_basenames, norm
 from romhop.platform_map import esde_system_for_slug
 from romhop.romm_client import Rom
+
+_log = logging.getLogger(__name__)
+
+_CUE_FILE_RE = re.compile(r'^\s*FILE\s+"([^"]+)"', re.MULTILINE | re.IGNORECASE)
+
+
+def _parse_cue(path: Path) -> list[str]:
+    """Return bare filenames referenced by FILE lines in a .cue sheet."""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    return [Path(m.group(1)).name for m in _CUE_FILE_RE.finditer(text)]
+
+
+def _parse_m3u(path: Path) -> list[str]:
+    """Return non-blank, non-comment lines from an .m3u playlist."""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    return [ln.strip() for ln in text.splitlines() if ln.strip() and not ln.startswith("#")]
 
 
 @dataclass
@@ -57,27 +81,81 @@ def index_local_library(roms_root: Path, overrides: dict[str, str],
                 file_names=file_names,
                 match_key=norm(sub.name),
             ))
-        # Flat files + orphan .m3u files directly in <system>/.
+        # Flat files directly in <system>/: collect first, then process in passes
+        # to coalesce .cue+.bin and .m3u+.cue+.bin into single LocalGames.
+        flat_files: dict[str, Path] = {}  # filename → path
         for f in sorted(p for p in system_dir.iterdir() if p.is_file()):
-            # A .txt is never a rom or a save (ES-DE systeminfo.txt, noload.txt,
-            # readme/promo sidecars) — skip it everywhere.
-            if f.suffix.lower() == ".txt":
+            if f.suffix.lower() != ".txt":
+                flat_files[f.name] = f
+
+        suppressed: set[str] = set()  # filenames absorbed into a coalesced LocalGame
+
+        # Pass 1: .m3u files — either pair with a subfolder (suppress) or parse
+        # as an orphan multi-disc descriptor that references flat .cue files.
+        for fname, fpath in sorted(flat_files.items()):
+            if fpath.suffix.lower() != ".m3u":
                 continue
-            if f.suffix.lower() == ".m3u":
-                # Pairs with a subfolder we already emitted; only emit if orphaned.
-                if f.stem not in subfolder_names:
-                    games.append(LocalGame(
-                        system=system,
-                        game_name=f.stem,
-                        file_names=[],
-                        match_key=norm(f.stem),
-                    ))
+            if fpath.stem in subfolder_names:
+                suppressed.add(fname)  # already emitted as part of the subfolder game
+                continue
+            disc_refs = _parse_m3u(fpath)
+            file_names_out: list[str] = []
+            for disc_ref in disc_refs:
+                disc_name = Path(disc_ref).name
+                if disc_name not in flat_files:
+                    _log.warning("local_index: %s references missing file %r", fpath, disc_ref)
+                    continue
+                disc_path = flat_files[disc_name]
+                suppressed.add(disc_name)
+                if disc_path.suffix.lower() == ".cue":
+                    file_names_out.append(disc_name)
+                    for track_ref in _parse_cue(disc_path):
+                        track_name = Path(track_ref).name
+                        if track_name not in flat_files:
+                            _log.warning("local_index: %s references missing file %r",
+                                         disc_path, track_ref)
+                            continue
+                        file_names_out.append(track_name)
+                        suppressed.add(track_name)
+                else:
+                    file_names_out.append(disc_name)
+            suppressed.add(fname)  # .m3u is an ES-DE artifact, not a real rom file
+            games.append(LocalGame(
+                system=system,
+                game_name=fpath.stem,
+                file_names=sorted(set(file_names_out)),
+                match_key=norm(fpath.stem),
+            ))
+
+        # Pass 2: remaining .cue files (single-disc flat layout: .cue + .bin tracks).
+        for fname, fpath in sorted(flat_files.items()):
+            if fpath.suffix.lower() != ".cue" or fname in suppressed:
+                continue
+            file_names_out = [fname]
+            suppressed.add(fname)
+            for track_ref in _parse_cue(fpath):
+                track_name = Path(track_ref).name
+                if track_name not in flat_files:
+                    _log.warning("local_index: %s references missing file %r", fpath, track_ref)
+                    continue
+                file_names_out.append(track_name)
+                suppressed.add(track_name)
+            games.append(LocalGame(
+                system=system,
+                game_name=fpath.stem,
+                file_names=sorted(set(file_names_out)),
+                match_key=norm(fpath.stem),
+            ))
+
+        # Pass 3: all remaining flat files (cartridges, .chd, etc.).
+        for fname, fpath in sorted(flat_files.items()):
+            if fname in suppressed:
                 continue
             games.append(LocalGame(
                 system=system,
-                game_name=f.name,
-                file_names=[f.name],
-                match_key=norm(f.name),
+                game_name=fname,
+                file_names=[fname],
+                match_key=norm(fname),
             ))
     return games
 
