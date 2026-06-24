@@ -127,3 +127,11 @@ def test_load_active_theme_default_uses_bundled(tmp_path, monkeypatch):
     loaded = theme.load_active_theme("default")
     assert loaded.name == "default"
     assert "{{" not in loaded.qss
+
+
+def test_base_qss_styles_progress_bar():
+    qss = theme.render_qss(theme.base_qss(), {})
+    assert "QProgressBar" in qss
+    assert "QProgressBar::chunk" in qss
+    # tokens must be substituted, not left as raw placeholders
+    assert "{{" not in qss
