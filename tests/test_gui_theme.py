@@ -168,3 +168,19 @@ def test_scheme_theme_dir():
     from romhop.gui import theme
     assert theme.scheme_theme_dir("light").name == "light"
     assert theme.scheme_theme_dir("dark").name == "default"
+
+
+def test_base_qss_styles_dialog_and_wizard():
+    from romhop.gui import theme
+    qss = theme.render_qss(theme.base_qss(), {})
+    assert "QDialog" in qss
+    assert "QWizard" in qss
+    assert "QDialogButtonBox" in qss
+
+
+def test_light_theme_dir_renders_without_placeholders():
+    from romhop.gui import theme
+    loaded = theme.load_theme_dir(theme.scheme_theme_dir("light"))
+    assert loaded.name == "light"
+    assert "{{" not in loaded.qss
+    assert "QProgressBar::chunk" in loaded.qss

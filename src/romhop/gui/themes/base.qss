@@ -46,3 +46,15 @@ QProgressBar::chunk {
     background-color: {{accent}};
     border-radius: 3px;
 }
+QDialog {
+    background-color: {{bg}};
+}
+QWizard {
+    background-color: {{bg}};
+}
+QWizard QFrame {
+    background-color: {{bg}};
+}
+QDialogButtonBox {
+    background-color: {{bg}};
+}
