@@ -197,6 +197,9 @@ class SetupWizard(QWizard):
     def __init__(self, *, validate_fn, detect_retroarch_fn, persist=None,
                  initial_settings=None, parent=None):
         super().__init__(parent)
+        # Force ClassicStyle: Windows defaults to Aero/Modern, whose native
+        # header/footer bands ignore the dark QSS and render light (TASK-006).
+        self.setWizardStyle(QWizard.WizardStyle.ClassicStyle)
         self.setWindowTitle("romhop setup")
         self._detect_retroarch_fn = detect_retroarch_fn
         import romhop.config as config

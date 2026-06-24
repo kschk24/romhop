@@ -187,6 +187,15 @@ def test_finish_blank_token_keeps_existing(qtbot, monkeypatch, tmp_path):
     assert calls == []  # blank token -> set_token never called
 
 
+def test_wizard_uses_classic_style(qtbot):
+    from PySide6.QtWidgets import QWizard
+
+    wiz = SetupWizard(validate_fn=lambda u, t: None, detect_retroarch_fn=_noop_detect,
+                      persist=lambda s: None)
+    qtbot.addWidget(wiz)
+    assert wiz.wizardStyle() == QWizard.WizardStyle.ClassicStyle
+
+
 def test_main_window_run_setup_wizard_refreshes(qtbot, monkeypatch, tmp_path):
     import romhop.config as config
     from romhop.config import default_settings
