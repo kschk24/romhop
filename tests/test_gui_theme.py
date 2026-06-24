@@ -184,3 +184,32 @@ def test_light_theme_dir_renders_without_placeholders():
     assert loaded.name == "light"
     assert "{{" not in loaded.qss
     assert "QProgressBar::chunk" in loaded.qss
+
+
+def test_apply_theme_forces_scheme_and_sets_app_stylesheet(qtbot):
+    from dataclasses import replace
+    from unittest.mock import patch
+
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+
+    from romhop import config
+    from romhop.gui import theme
+
+    app = QApplication.instance() or QApplication([])
+    hints = app.styleHints()
+
+    dark = replace(config.default_settings(), theme_mode="dark")
+    with patch.object(hints, "setColorScheme") as mock_sc:
+        theme.apply_theme(app, dark)
+        mock_sc.assert_called_once_with(Qt.ColorScheme.Dark)
+    qss_dark = app.styleSheet()
+    assert qss_dark
+    assert "{{" not in qss_dark
+    assert "QWizard" in qss_dark
+
+    light = replace(config.default_settings(), theme_mode="light")
+    with patch.object(hints, "setColorScheme") as mock_sc:
+        theme.apply_theme(app, light)
+        mock_sc.assert_called_once_with(Qt.ColorScheme.Light)
+    assert app.styleSheet() != qss_dark

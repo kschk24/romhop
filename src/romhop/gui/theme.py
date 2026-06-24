@@ -129,6 +129,28 @@ def load_active_theme(name: str) -> LoadedTheme:
     return _render_dir(bundled_default_dir())
 
 
+def apply_theme(app, settings) -> None:
+    """Apply themed stylesheet to the whole application.
+
+    Drives native chrome (incl. Windows title bar) via setColorScheme and
+    sets the QSS at QApplication level so every top-level window is themed.
+    """
+    from PySide6.QtCore import Qt
+
+    mode = settings.theme_mode
+    hints = app.styleHints()
+    if mode == "light":
+        hints.setColorScheme(Qt.ColorScheme.Light)
+    elif mode == "dark":
+        hints.setColorScheme(Qt.ColorScheme.Dark)
+    else:
+        hints.setColorScheme(Qt.ColorScheme.Unknown)
+
+    scheme = resolve_scheme(mode, app)
+    loaded = load_theme_dir(scheme_theme_dir(scheme))
+    app.setStyleSheet(loaded.qss)
+
+
 def install_theme(zip_path: Path) -> str:
     """Extract a .romhop-theme zip into the themes dir. Returns its name."""
     with zipfile.ZipFile(zip_path) as zf:
