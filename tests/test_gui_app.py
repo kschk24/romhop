@@ -128,6 +128,19 @@ def test_progress_slots_update_bottom_bar(qtbot):
     assert win.progress_label.isHidden()
 
 
+def test_progress_label_does_not_clip(qtbot):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QSizePolicy
+
+    from romhop.gui.main_window import MainWindow
+
+    win = MainWindow(settings=config.default_settings())
+    qtbot.addWidget(win)
+    policy = win.progress_label.sizePolicy().horizontalPolicy()
+    assert policy in (QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
+    assert win.progress_label.alignment() & Qt.AlignmentFlag.AlignLeft
+
+
 def test_download_selected_drives_progress_and_recovers(qtbot):
     from romhop.gui.main_window import MainWindow
     from romhop.romm_client import Rom

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from dataclasses import replace
 
 logger = logging.getLogger(__name__)
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QStackedWidget,
     QSystemTrayIcon,
     QVBoxLayout,
@@ -199,6 +200,12 @@ class MainWindow(QWidget):
         self.progress_bar.hide()
         self.progress_label = QLabel("")
         self.progress_label.setObjectName("StatusDim")
+        self.progress_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        # Don't let the fallback style's font metrics under-allocate width and
+        # clip the leading characters of the game name (frozen-build TASK-005).
+        self.progress_label.setSizePolicy(
+            QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred
+        )
         self.progress_label.hide()
         # Single sync control: one button toggles sync on/off and its leading
         # dot reports the live worker state (grey idle → green watching → red
