@@ -74,15 +74,17 @@ def test_core_overrides_defaults_empty(tmp_path):
     assert config.default_settings().core_overrides == {}
 
 
-def test_settings_theme_defaults_and_roundtrips(tmp_path):
+def test_settings_theme_mode_defaults_and_roundtrips(tmp_path):
     from romhop import config
     s = config.default_settings()
-    assert s.theme == "default"
-    s.theme = "neon"
+    assert s.theme_mode == "system"
+    s.theme_mode = "dark"
     path = tmp_path / "settings.ini"
     config.save_settings(s, path)
     loaded = config.load_settings(path)
-    assert loaded.theme == "neon"
+    assert loaded.theme_mode == "dark"
+    # theme attr is reserved but not persisted via SCHEMA
+    assert s.theme == "default"
 
 
 def test_sort_flags_round_trip(tmp_path):
@@ -123,7 +125,7 @@ def test_schema_covers_every_scalar_settings_field():
         "romm_url", "roms_root", "saves_dir", "states_dir",
         "sort_saves_by_core", "sort_states_by_core",
         "sync_enabled", "sync_delay_seconds",
-        "download_rate_limit_kbps", "theme",
+        "download_rate_limit_kbps", "theme_mode",
         "auto_update_check", "update_include_prereleases",
         "debug_logging", "desktop_notifications",
         "scan_timeout_seconds", "upload_chunk_size_mb",
@@ -138,7 +140,7 @@ def test_schema_categories_are_known_and_ordered():
     assert config.CATEGORY_ORDER == ["connection", "paths", "behavior"]
     for f in config.SCHEMA:
         assert f.category in config.CATEGORY_ORDER
-        assert f.type in {"str", "path", "int", "float", "bool"}
+        assert f.type in {"str", "path", "int", "float", "bool", "choice"}
         assert f.label  # non-empty
 
 
@@ -153,6 +155,8 @@ def test_coerce_value_by_type():
     assert config.coerce_value("bool", "FALSE") is False
     assert config.coerce_value("bool", "1") is True
     assert config.coerce_value("bool", "off") is False
+    assert config.coerce_value("choice", "dark") == "dark"
+    assert config.coerce_value("choice", "system") == "system"
 
 
 def test_coerce_value_raises_on_bad_number():
@@ -204,7 +208,7 @@ def test_load_missing_key_keeps_default(tmp_path):
     p.write_text("[connection]\nromm_url = http://x\n")
     loaded = config.load_settings(p)
     assert loaded.romm_url == "http://x"
-    assert loaded.theme == "default"  # untouched key keeps its default
+    assert loaded.theme_mode == "system"  # untouched key keeps its default
 
 
 def test_override_sections_preserve_case_and_round_trip(tmp_path):
@@ -230,7 +234,7 @@ def test_corrupt_file_returns_defaults(tmp_path):
 def test_missing_file_returns_defaults(tmp_path):
     from romhop import config
     loaded = config.load_settings(tmp_path / "nope.ini")
-    assert loaded.theme == "default"
+    assert loaded.theme_mode == "system"
 
 
 def test_migrates_legacy_json_when_ini_absent(tmp_path):
