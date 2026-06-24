@@ -135,3 +135,36 @@ def test_base_qss_styles_progress_bar():
     assert "QProgressBar::chunk" in qss
     # tokens must be substituted, not left as raw placeholders
     assert "{{" not in qss
+
+
+def test_resolve_scheme_forced_modes():
+    from romhop.gui import theme
+    assert theme.resolve_scheme("light", app=None) == "light"
+    assert theme.resolve_scheme("dark", app=None) == "dark"
+
+
+def test_resolve_scheme_system_reads_os(qtbot):
+    from PySide6.QtCore import Qt
+    from romhop.gui import theme
+
+    class FakeHints:
+        def __init__(self, scheme):
+            self._s = scheme
+        def colorScheme(self):
+            return self._s
+
+    class FakeApp:
+        def __init__(self, scheme):
+            self._h = FakeHints(scheme)
+        def styleHints(self):
+            return self._h
+
+    assert theme.resolve_scheme("system", FakeApp(Qt.ColorScheme.Light)) == "light"
+    assert theme.resolve_scheme("system", FakeApp(Qt.ColorScheme.Dark)) == "dark"
+    assert theme.resolve_scheme("system", FakeApp(Qt.ColorScheme.Unknown)) == "dark"
+
+
+def test_scheme_theme_dir():
+    from romhop.gui import theme
+    assert theme.scheme_theme_dir("light").name == "light"
+    assert theme.scheme_theme_dir("dark").name == "default"
