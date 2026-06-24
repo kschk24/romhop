@@ -1,11 +1,11 @@
 ---
 id: TASK-013.03
 title: Activity log panel (session history)
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-06-16 15:04'
-updated_date: '2026-06-22 18:09'
+updated_date: '2026-06-22 18:10'
 labels:
   - feature
   - ready-for-agent
@@ -32,8 +32,6 @@ Persistent in-app Activity log panel for the unified Activity stream. Spec: docs
 - [x] #5 Session-only/in-memory; nothing written to disk; no filters/search in v1
 <!-- AC:END -->
 
-
-
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
@@ -41,3 +39,15 @@ Persistent in-app Activity log panel for the unified Activity stream. Spec: docs
 2. Update main_window.py: add ActivityLogView to stack (index 2), add Activity bottom-bar button, show_activity_log/toggle_activity_log, connect/disconnect hub.event, update current_view_name
 3. Write tests/test_gui_activity_log.py covering all 5 ACs
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+503 tests pass (13 new in test_gui_activity_log.py). No warnings. Committed 5a9ef9f.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+ActivityLogView (gui/activity_log.py): QListWidget, newest-first, error rows red. MainWindow: stack index 2, Activity bottom-bar button, show/toggle/disconnect wired to hub. 503 tests pass.
+<!-- SECTION:FINAL_SUMMARY:END -->

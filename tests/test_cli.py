@@ -407,6 +407,75 @@ def test_scan_preview_aborts_without_confirm(monkeypatch, tmp_path):
     assert "1 matched" in result.output
 
 
+class _FakeScanResult:
+    matched: list = []
+    collisions: list = []
+
+    def __init__(self, n_unmatched):
+        self.unmatched = [object() for _ in range(n_unmatched)]
+
+
+def test_scan_offers_upload_when_interactive_and_accepted(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli.config, "roms_root_configured", lambda s: True)
+    monkeypatch.setattr(cli, "_run_scan", lambda s, *, assume_yes: _FakeScanResult(2))
+    monkeypatch.setattr(cli, "_stdin_isatty", lambda: True)
+    called = {}
+    monkeypatch.setattr(
+        cli, "_run_upload_unmatched",
+        lambda s, unmatched, *, assume_yes: called.update(n=len(unmatched), yes=assume_yes),
+    )
+
+    result = runner.invoke(cli.app, ["scan"], input="y\n")
+    assert result.exit_code == 0, result.output
+    assert "Upload 2 unmatched" in result.output
+    assert called == {"n": 2, "yes": False}
+
+
+def test_scan_offer_declined_does_not_upload(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli.config, "roms_root_configured", lambda s: True)
+    monkeypatch.setattr(cli, "_run_scan", lambda s, *, assume_yes: _FakeScanResult(3))
+    monkeypatch.setattr(cli, "_stdin_isatty", lambda: True)
+    called = {"n": 0}
+    monkeypatch.setattr(cli, "_run_upload_unmatched",
+                        lambda *a, **k: called.__setitem__("n", called["n"] + 1))
+
+    result = runner.invoke(cli.app, ["scan"], input="n\n")
+    assert result.exit_code == 0
+    assert called["n"] == 0
+
+
+def test_scan_no_offer_when_non_tty(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli.config, "roms_root_configured", lambda s: True)
+    monkeypatch.setattr(cli, "_run_scan", lambda s, *, assume_yes: _FakeScanResult(2))
+    monkeypatch.setattr(cli, "_stdin_isatty", lambda: False)
+    called = {"n": 0}
+    monkeypatch.setattr(cli, "_run_upload_unmatched",
+                        lambda *a, **k: called.__setitem__("n", called["n"] + 1))
+
+    result = runner.invoke(cli.app, ["scan"])
+    assert result.exit_code == 0
+    assert called["n"] == 0  # no silent upload off a TTY
+
+
+def test_scan_flag_uploads_without_prompt_non_tty(monkeypatch, tmp_path):
+    _login(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli.config, "roms_root_configured", lambda s: True)
+    monkeypatch.setattr(cli, "_run_scan", lambda s, *, assume_yes: _FakeScanResult(2))
+    monkeypatch.setattr(cli, "_stdin_isatty", lambda: False)
+    called = {}
+    monkeypatch.setattr(
+        cli, "_run_upload_unmatched",
+        lambda s, unmatched, *, assume_yes: called.update(n=len(unmatched), yes=assume_yes),
+    )
+
+    result = runner.invoke(cli.app, ["scan", "--upload-unmatched"])
+    assert result.exit_code == 0, result.output
+    assert called == {"n": 2, "yes": False}
+
+
 def test_scan_requires_roms_root(monkeypatch):
     settings = cli.config.default_settings()
     settings.romm_url = "http://romm.test"   # roms_root still unset

@@ -59,6 +59,32 @@ _Avoid_: link out, view online.
 Open the downloaded game's on-disk folder in the OS file manager. Available only
 when the game is downloaded.
 
+### Matching & upload
+
+**Unmatched game**:
+A local game in the ES-DE tree that `scan` could not pair to any RomM rom by its
+exact, normalized, platform-scoped key. Surfaced in scan's Unmatched report. A flat
+`.cue`+`.bin` disc game counts as one Unmatched game (the descriptor and its tracks
+coalesce), not several.
+_Avoid_: orphan, missing rom, unsynced game.
+
+**Upload to RomM**:
+Send an Unmatched game's actual rom file(s) up to RomM so it becomes a tracked rom —
+the reverse of Download. Offered from the Unmatched report (GUI dialog picker + CLI
+checklist, or the non-interactive `--upload-unmatched` flag). Only the real rom
+files go up (never the ES-DE `.m3u`/`noload.txt` artifacts). Resolvable only when the
+game's ES-DE system maps to a RomM platform, or the user opts to create that platform.
+If an upload is interrupted (force-quit, power loss), recovery is to re-run `scan`:
+an un-uploaded game is still an Unmatched game, so it re-surfaces on its own — there
+is no separate resumable upload queue.
+_Avoid_: push, sync up, send, publish.
+
+**Resolvable** (of an Unmatched game):
+Whether the game can actually be uploaded: its ES-DE system maps to an existing RomM
+platform (or one the user agrees to create) and it has real files on disk. Unresolvable
+games are shown but disabled, with the reason.
+_Avoid_: uploadable, eligible.
+
 ### Activity feedback
 
 **Activity event**:

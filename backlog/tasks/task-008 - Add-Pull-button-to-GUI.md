@@ -1,11 +1,11 @@
 ---
 id: TASK-008
 title: Add Pull button to GUI
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-06-16 15:04'
-updated_date: '2026-06-23 12:58'
+updated_date: '2026-06-23 13:01'
 labels:
   - feature
   - ready-for-agent

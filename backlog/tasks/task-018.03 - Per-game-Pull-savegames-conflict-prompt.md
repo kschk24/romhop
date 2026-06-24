@@ -1,11 +1,11 @@
 ---
 id: TASK-018.03
 title: Per-game Pull savegames + conflict prompt
-status: In Progress
+status: Done
 assignee:
   - '@kschk24'
 created_date: '2026-06-16 22:30'
-updated_date: '2026-06-17 15:34'
+updated_date: '2026-06-23 14:07'
 labels:
   - feature
   - game-detail-panel

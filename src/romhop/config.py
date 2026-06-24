@@ -35,6 +35,7 @@ class Settings:
     debug_logging: bool = False
     desktop_notifications: bool = False
     scan_timeout_seconds: int = 120
+    upload_chunk_size_mb: int = 8  # bigger chunk = fewer round-trips = faster upload
 
 
 @dataclass(frozen=True)
@@ -88,6 +89,8 @@ SCHEMA: list[FieldSpec] = [
               "Show OS notifications for sync, downloads, and errors when romhop is in the background (requires system tray)"),
     FieldSpec("scan_timeout_seconds", "behavior", "Upload scan timeout (seconds)", "int",
               "How long to wait for RomM to finish importing an uploaded game (0 = skip scan trigger)"),
+    FieldSpec("upload_chunk_size_mb", "behavior", "Upload chunk size (MB)", "int",
+              "Bytes per chunk when uploading; bigger = fewer round-trips = faster, but a strict reverse proxy may reject large bodies (lower if uploads fail)"),
 ]
 
 
