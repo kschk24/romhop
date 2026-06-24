@@ -267,6 +267,8 @@ class RommClient:
         stop_event: threading.Event | None = None,
         progress_fn: Callable[[int], None] | None = None,
         chunk_size: int = UPLOAD_CHUNK_SIZE,
+        on_session_start: Callable[[str], None] | None = None,
+        on_session_end: Callable[[str], None] | None = None,
     ) -> None:
         """Stream one rom file from disk via the chunked start→PUT→complete flow.
 
@@ -297,11 +299,16 @@ class RommClient:
         self._check_scope(resp, "roms.write")
         upload_id = resp.json()["upload_id"]
 
+        if on_session_start:
+            on_session_start(upload_id)
+
         try:
             with file_path.open("rb") as fh:
                 for chunk_index in range(total_chunks):
                     if stop_event and stop_event.is_set():
                         self._cancel_upload(upload_id)
+                        if on_session_end:
+                            on_session_end(upload_id)
                         raise UploadCancelled(file_name)
                     chunk = fh.read(chunk_size)
                     put = self._http.put(
@@ -316,10 +323,14 @@ class RommClient:
             raise
         except Exception:
             self._cancel_upload(upload_id)
+            if on_session_end:
+                on_session_end(upload_id)
             raise
 
         complete = self._http.post(f"/api/roms/upload/{upload_id}/complete")
         complete.raise_for_status()
+        if on_session_end:
+            on_session_end(upload_id)
 
     def _cancel_upload(self, upload_id: str) -> None:
         try:

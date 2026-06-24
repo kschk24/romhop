@@ -235,14 +235,32 @@ class ScanResultDialog(QDialog):
         self._log.show()
         self._log.appendPlainText(text)
 
-    def _on_item_started(self, index: int, count: int, name: str) -> None:
-        self._progress_bar.setFormat(f"Uploading {name} ({index}/{count})…")
+    # QProgressBar's range is a signed 32-bit int, so raw byte counts overflow on
+    # large roms. Track progress on a fixed permille scale (mirrors download bar).
+    _PROGRESS_SCALE = 1000
 
-    def _on_item_progress(self, bytes_sent: int, speed: float) -> None:
+    def _on_item_started(self, index: int, count: int, name: str) -> None:
+        self._progress_name = name
+        self._progress_pos = f"{index}/{count}"
+        # New game in the batch: bar goes indeterminate until its total arrives.
+        self._progress_bar.setMaximum(0)
+        self._progress_bar.setValue(0)
+        self._progress_bar.setFormat(f"Uploading {name} ({self._progress_pos})…")
+
+    def _on_item_progress(self, bytes_sent: int, total: int, speed: float) -> None:
         from romhop.gui.main_window import _human_size, _human_speed
-        self._progress_bar.setFormat(
-            f"Uploading… {_human_size(bytes_sent)} · {_human_speed(speed)}"
-        )
+        name = getattr(self, "_progress_name", "")
+        pos = getattr(self, "_progress_pos", "")
+        prefix = f"Uploading {name} ({pos})" if name else "Uploading…"
+        rate = _human_speed(speed)
+        if total > 0:
+            self._progress_bar.setMaximum(self._PROGRESS_SCALE)
+            self._progress_bar.setValue(int(bytes_sent * self._PROGRESS_SCALE / total))
+            size = f"{_human_size(bytes_sent)} / {_human_size(total)}"
+        else:
+            self._progress_bar.setMaximum(0)  # unknown size → indeterminate
+            size = _human_size(bytes_sent)
+        self._progress_bar.setFormat(f"{prefix} · {size} · {rate}")
 
     def _on_item_error(self, name: str, message: str) -> None:
         self._log_line(f"✗ {name}: {message}")
@@ -256,11 +274,18 @@ class ScanResultDialog(QDialog):
                     self._checkboxes[key].hide()
 
     def _on_upload_finished(self) -> None:
+        cancelled = (self._upload_worker is not None
+                     and self._upload_worker.was_cancelled())
         if self._upload_worker is not None:
             self._upload_worker.deleteLater()
             self._upload_worker = None
         self._progress_bar.hide()
-        self._upload_btn.setText("Upload complete")
+        if cancelled:
+            n_remaining = sum(1 for cb in self._checkboxes.values() if cb.isVisible())
+            self._upload_btn.setText("Cancelled")
+            self._log_line(f"batch cancelled, {n_remaining} not uploaded")
+        else:
+            self._upload_btn.setText("Upload complete")
         self._ok_btn.setEnabled(True)
 
     def summary_text(self) -> str:

@@ -616,7 +616,6 @@ def _run_scan(settings, *, assume_yes: bool):
 def _run_upload_unmatched(settings, unmatched, *, assume_yes: bool) -> None:
     """Upload resolvable unmatched games to RomM after a scan."""
     from romhop.platform_resolve import invert_to_slugs, resolve_platform
-    from romhop.upload import upload_game
 
     client = _client()
     cache = MappingCache(_cache_path())
@@ -688,27 +687,23 @@ def _run_upload_unmatched(settings, unmatched, *, assume_yes: bool) -> None:
         typer.echo("Aborted.")
         return
 
-    # Upload each game.
-    for game, platform_id, platform_slug in selected:
-        typer.echo(f"Uploading {game.game_name}…")
-        try:
-            result = upload_game(
-                game, client,
-                platform_id=platform_id,
-                platform_slug=platform_slug,
-                roms_root=settings.roms_root,
-                cache=cache,
-                scan_timeout=float(settings.scan_timeout_seconds),
-                on_event=lambda e: typer.echo(f"  {e.message}"),
-            )
-            if result.fallback:
-                typer.echo(f"  Uploaded (scan skipped — run a Scan in RomM to finish importing)")
-            else:
-                n_up = len(result.uploaded_files)
-                n_sk = len(result.skipped_files)
-                typer.echo(f"  Done: {n_up} uploaded, {n_sk} skipped (already existed)")
-        except Exception as exc:
-            typer.echo(f"  Failed: {exc}", err=True)
+    # Upload each game via run_upload_batch for crash-safe session tracking.
+    from romhop.upload import run_upload_batch
+    run_upload_batch(
+        selected, client,
+        roms_root=settings.roms_root,
+        cache=cache,
+        scan_timeout=float(settings.scan_timeout_seconds),
+        chunk_size=max(1, settings.upload_chunk_size_mb) * (1 << 20),
+        on_item_started=lambda i, n, name: typer.echo(f"Uploading {name}…"),
+        on_item_error=lambda name, msg: typer.echo(f"  Failed: {msg}", err=True),
+        on_event=lambda e: typer.echo(f"  {e.message}"),
+    )
+
+
+def _stdin_isatty() -> bool:
+    """Seam so tests can simulate an interactive terminal (CliRunner is non-TTY)."""
+    return sys.stdin.isatty()
 
 
 def _select_games_for_upload(candidates: list, *, assume_yes: bool) -> list:
@@ -716,7 +711,7 @@ def _select_games_for_upload(candidates: list, *, assume_yes: bool) -> list:
     if assume_yes:
         return candidates
 
-    if not sys.stdin.isatty():
+    if not _stdin_isatty():
         return candidates  # non-TTY: upload all resolvable
 
     try:
@@ -752,9 +747,22 @@ def scan(
     if not config.roms_root_configured(settings):
         typer.echo("ROMs folder not set. Run: romhop setup  (or: romhop config set roms_root <path>)", err=True)
         raise typer.Exit(code=1)
+    from romhop import upload_session as _up_sess
+    info = _up_sess.recover(_client())
+    if info.was_dirty:
+        typer.echo("Note: previous upload was interrupted — re-run scan to continue.")
     result = _run_scan(settings, assume_yes=yes)
-    if upload_unmatched and result is not None and result.unmatched:
+    if result is None or not result.unmatched:
+        return
+    if upload_unmatched:
+        # Explicit flag: upload non-interactively.
         _run_upload_unmatched(settings, result.unmatched, assume_yes=yes)
+    elif _stdin_isatty() and not yes:
+        # No flag: offer it. --yes is the non-interactive override; without the
+        # flag we never upload silently.
+        n = len(result.unmatched)
+        if typer.confirm(f"Upload {n} unmatched game(s) to RomM now?", default=False):
+            _run_upload_unmatched(settings, result.unmatched, assume_yes=False)
 
 
 @app.command()

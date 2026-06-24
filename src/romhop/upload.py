@@ -10,6 +10,7 @@ from romhop.activity import ActivityEvent, ActivityKind
 from romhop.local_index import LocalGame
 from romhop.mapping_cache import MappingCache, seed_entry
 from romhop.romm_client import RomAlreadyExists, RommClient, ScanConnectError, UploadCancelled
+from romhop import upload_session as _sess
 
 _log = logging.getLogger(__name__)
 
@@ -53,9 +54,12 @@ def upload_game(
     roms_root: Path,
     cache: MappingCache,
     scan_timeout: float = 120.0,
+    chunk_size: int | None = None,
     stop_event: threading.Event | None = None,
-    progress_fn: Callable[[str, int], None] | None = None,
+    progress_fn: Callable[[str, int, int], None] | None = None,
     on_event: Callable[[ActivityEvent], None] | None = None,
+    on_session_start: Callable[[str], None] | None = None,
+    on_session_end: Callable[[str], None] | None = None,
 ) -> UploadResult:
     """Upload all real rom files for a LocalGame to RomM, then trigger a scan.
 
@@ -76,29 +80,38 @@ def upload_game(
               f"Upload skipped: {game.game_name} — no real rom files found")
         return result
 
+    # Resolve every file's path once, then sum sizes so progress can report a
+    # determinate "bytes sent / total" across the whole game (not per file).
+    paths = {fname: _file_path(game, roms_root, fname) for fname in real_files}
+    total_bytes = sum(p.stat().st_size for p in paths.values() if p.exists())
+    game_sent = 0  # cumulative across all of this game's files
+
     # --- 1. Upload files ---
     for fname in real_files:
         if stop_event and stop_event.is_set():
             raise UploadCancelled(game.game_name)
-        fpath = _file_path(game, roms_root, fname)
+        fpath = paths[fname]
         if not fpath.exists():
             _log.warning("upload_game: file not found: %s", fpath)
             continue
-        bytes_uploaded = 0
 
-        def _progress(chunk_bytes: int) -> None:
-            nonlocal bytes_uploaded
-            bytes_uploaded += chunk_bytes
+        def _progress(chunk_bytes: int, _fname: str = fname) -> None:
+            nonlocal game_sent
+            game_sent += chunk_bytes
             if progress_fn:
-                progress_fn(fname, bytes_uploaded)
+                progress_fn(_fname, game_sent, total_bytes)
 
         try:
+            upload_kwargs = {} if chunk_size is None else {"chunk_size": chunk_size}
             client.upload_rom(
                 platform_id=platform_id,
                 file_path=fpath,
                 file_name=fname,
                 stop_event=stop_event,
                 progress_fn=_progress,
+                on_session_start=on_session_start,
+                on_session_end=on_session_end,
+                **upload_kwargs,
             )
             result.uploaded_files.append(fname)
             _log.debug("upload_game: uploaded %s", fname)
@@ -177,6 +190,77 @@ def upload_game(
             msg += f", {n_sk} already existed"
     _emit(on_event, ActivityKind.UPLOAD_DONE, msg)
     return result
+
+
+def run_upload_batch(
+    jobs: list[tuple[LocalGame, int, str]],
+    client: RommClient,
+    roms_root: Path,
+    cache: MappingCache,
+    *,
+    scan_timeout: float = 120.0,
+    chunk_size: int | None = None,
+    stop_event: threading.Event | None = None,
+    on_item_started: Callable[[int, int, str], None] | None = None,
+    progress_factory: Callable[[], Callable] | None = None,
+    on_item_error: Callable[[str, str], None] | None = None,
+    on_event: Callable[[ActivityEvent], None] | None = None,
+) -> bool:
+    """Upload a batch of games to RomM with crash-safe session tracking.
+
+    Calls upload_session.set_in_progress() at batch start and clear() on a
+    clean finish. Each file's upload_id is bracketed (add/remove) via the
+    on_session_start/on_session_end callbacks so a hard kill leaves reapable
+    orphans that recover() can cancel at next startup.
+
+    Returns True if the batch completed without cancellation.
+    """
+    _sess.set_in_progress()
+    n = len(jobs)
+    cancelled = False
+
+    try:
+        for i, (game, platform_id, platform_slug) in enumerate(jobs, 1):
+            if stop_event and stop_event.is_set():
+                cancelled = True
+                break
+            if on_item_started:
+                on_item_started(i, n, game.game_name)
+            progress_fn = progress_factory() if progress_factory else None
+
+            def _on_sess_start(uid: str, _pid: int = platform_id) -> None:
+                _sess.add_upload(uid, _pid, "")
+
+            def _on_sess_end(uid: str) -> None:
+                _sess.remove_upload(uid)
+
+            try:
+                upload_game(
+                    game, client,
+                    platform_id=platform_id,
+                    platform_slug=platform_slug,
+                    roms_root=roms_root,
+                    cache=cache,
+                    scan_timeout=scan_timeout,
+                    chunk_size=chunk_size,
+                    stop_event=stop_event,
+                    progress_fn=progress_fn,
+                    on_event=on_event,
+                    on_session_start=_on_sess_start,
+                    on_session_end=_on_sess_end,
+                )
+            except UploadCancelled:
+                cancelled = True
+                break
+            except Exception as exc:
+                if on_item_error:
+                    on_item_error(game.game_name, str(exc))
+                _emit(on_event, ActivityKind.ERROR, str(exc))
+    finally:
+        if not cancelled:
+            _sess.clear()
+
+    return not cancelled
 
 
 def _emit(

@@ -134,6 +134,80 @@ def test_upload_game_uploads_and_seeds_cache(tmp_path):
     assert cache.find_by_basename("Mario") is not None
 
 
+def test_upload_game_progress_is_cumulative_with_total(tmp_path):
+    """progress_fn reports bytes cumulative across all of a game's files plus a
+    fixed total (= sum of file sizes), so the GUI can draw a determinate bar."""
+    from romhop.upload import upload_game
+
+    sub = tmp_path / "psx" / "Metal Gear"
+    sub.mkdir(parents=True)
+    (sub / "Disc1.bin").write_bytes(b"a" * 1024)
+    (sub / "Disc2.bin").write_bytes(b"b" * 2048)
+    total_expected = 1024 + 2048
+
+    def handler(request):
+        path = request.url.path
+        if path == "/api/roms/upload/start":
+            return httpx.Response(201, json={"upload_id": "uid-1"})
+        if path.startswith("/api/roms/upload/uid-1") and request.method == "PUT":
+            return httpx.Response(200)
+        if path == "/api/roms/upload/uid-1/complete":
+            return httpx.Response(201)
+        return httpx.Response(404)
+
+    client = _client(handler)
+    cache = MappingCache(tmp_path / "cache.json")
+    game = LocalGame(system="psx", game_name="Metal Gear",
+                     file_names=["Disc1.bin", "Disc2.bin"], match_key="metal gear")
+
+    reports: list[tuple[str, int, int]] = []
+    upload_game(
+        game, client,
+        platform_id=1, platform_slug="psx",
+        roms_root=tmp_path, cache=cache,
+        scan_timeout=0,  # fallback path: skip scan, keep the test transport-only
+        progress_fn=lambda fname, sent, total: reports.append((fname, sent, total)),
+    )
+
+    assert reports, "expected progress callbacks"
+    # Total is constant and equals the summed file sizes.
+    assert {t for _, _, t in reports} == {total_expected}
+    # Bytes sent is cumulative across files (non-decreasing) and reaches the total.
+    sent_seq = [s for _, s, _ in reports]
+    assert sent_seq == sorted(sent_seq)
+    assert sent_seq[-1] == total_expected
+    # Both files contribute.
+    assert {f for f, _, _ in reports} == {"Disc1.bin", "Disc2.bin"}
+
+
+def test_upload_game_passes_chunk_size_to_client(tmp_path):
+    """chunk_size flows through to client.upload_rom (the upload-speed knob)."""
+    from romhop.upload import upload_game
+
+    rom = tmp_path / "snes" / "Mario.sfc"
+    rom.parent.mkdir(parents=True)
+    rom.write_bytes(b"x" * 16)
+
+    captured = {}
+
+    class FakeClient:
+        def upload_rom(self, *, platform_id, file_path, file_name,
+                       stop_event=None, progress_fn=None, chunk_size=None,
+                       on_session_start=None, on_session_end=None):
+            captured["chunk_size"] = chunk_size
+
+    cache = MappingCache(tmp_path / "cache.json")
+    game = _game("snes", "Mario.sfc")
+    upload_game(
+        game, FakeClient(),
+        platform_id=1, platform_slug="snes",
+        roms_root=tmp_path, cache=cache,
+        scan_timeout=0,
+        chunk_size=8 << 20,
+    )
+    assert captured["chunk_size"] == 8 << 20
+
+
 def test_upload_game_dedup_skip(tmp_path):
     """RomAlreadyExists from upload/start → file goes to skipped_files, not error."""
     from romhop.upload import upload_game
@@ -268,3 +342,208 @@ def test_upload_game_no_real_files(tmp_path):
     assert result.uploaded_files == []
     assert called == []  # no HTTP calls made
     assert any(e.is_error for e in events)
+
+
+# --- upload_session tests ---
+
+
+def test_upload_session_recover_reaps_orphans(tmp_path, monkeypatch):
+    """recover() POSTs cancel for each active upload_id, reports dirty, clears file."""
+    import json
+    from romhop import upload_session
+    from romhop.config import user_data_dir
+
+    monkeypatch.setattr(upload_session, "_session_path",
+                        lambda: tmp_path / "upload_session.json")
+
+    cancelled = []
+
+    class FakeClient:
+        def _cancel_upload(self, uid):
+            cancelled.append(uid)
+
+    session_file = tmp_path / "upload_session.json"
+    session_file.write_text(json.dumps({
+        "in_progress": True,
+        "active_uploads": [
+            {"upload_id": "uid-a", "platform_id": 1, "file_name": "a.rom"},
+            {"upload_id": "uid-b", "platform_id": 2, "file_name": "b.rom"},
+        ],
+    }))
+
+    info = upload_session.recover(FakeClient())
+
+    assert info.was_dirty is True
+    assert info.reaped == 2
+    assert set(cancelled) == {"uid-a", "uid-b"}
+    assert not session_file.exists()
+
+
+def test_upload_session_recover_idempotent_on_missing(tmp_path, monkeypatch):
+    """recover() on missing or already-expired session is a no-op, not dirty."""
+    from romhop import upload_session
+
+    monkeypatch.setattr(upload_session, "_session_path",
+                        lambda: tmp_path / "upload_session.json")
+
+    class FakeClient:
+        def _cancel_upload(self, uid):
+            raise Exception("404 not found")
+
+    info = upload_session.recover(FakeClient())
+    assert info.was_dirty is False
+    assert info.reaped == 0
+
+
+def test_upload_session_recover_tolerates_expired_uid(tmp_path, monkeypatch):
+    """recover() ignores 404/errors from _cancel_upload (server may have expired session)."""
+    import json
+    from romhop import upload_session
+
+    monkeypatch.setattr(upload_session, "_session_path",
+                        lambda: tmp_path / "upload_session.json")
+
+    (tmp_path / "upload_session.json").write_text(json.dumps({
+        "in_progress": True,
+        "active_uploads": [{"upload_id": "uid-expired", "platform_id": 1, "file_name": "x"}],
+    }))
+
+    class FakeClient:
+        def _cancel_upload(self, uid):
+            raise Exception("404")
+
+    info = upload_session.recover(FakeClient())
+    assert info.was_dirty is True
+    assert info.reaped == 0  # cancel failed but session is still cleared
+    assert not (tmp_path / "upload_session.json").exists()
+
+
+def test_run_upload_batch_session_lifecycle(tmp_path, monkeypatch):
+    """run_upload_batch sets in_progress at start and clears on clean finish."""
+    import json
+    from romhop.upload import run_upload_batch
+    from romhop import upload_session
+
+    session_path = tmp_path / "upload_session.json"
+    monkeypatch.setattr(upload_session, "_session_path", lambda: session_path)
+
+    rom_file = tmp_path / "snes" / "Mario.sfc"
+    rom_file.parent.mkdir(parents=True)
+    rom_file.write_bytes(b"x" * 64)
+
+    upload_ids_seen: list[str] = []
+
+    def handler(request):
+        path = request.url.path
+        if path == "/api/roms/upload/start":
+            return httpx.Response(201, json={"upload_id": "uid-1"})
+        if "/upload/uid-1" in path and request.method == "PUT":
+            return httpx.Response(200)
+        if path == "/api/roms/upload/uid-1/complete":
+            return httpx.Response(201)
+        return httpx.Response(404)
+
+    client = _client(handler)
+    cache = MappingCache(tmp_path / "cache.json")
+    game = _game("snes", "Mario.sfc")
+
+    clean = run_upload_batch(
+        [(game, 1, "snes")], client,
+        roms_root=tmp_path, cache=cache, scan_timeout=0,
+    )
+
+    assert clean is True
+    assert not session_path.exists()  # cleared on clean finish
+
+
+def test_run_upload_batch_session_adds_removes_upload_id(tmp_path, monkeypatch):
+    """Callbacks add upload_id after /start and remove after /complete."""
+    import json
+    from romhop.upload import run_upload_batch
+    from romhop import upload_session
+
+    session_path = tmp_path / "upload_session.json"
+    monkeypatch.setattr(upload_session, "_session_path", lambda: session_path)
+
+    rom_file = tmp_path / "snes" / "Mario.sfc"
+    rom_file.parent.mkdir(parents=True)
+    rom_file.write_bytes(b"x" * 64)
+
+    snapshots: list[list] = []
+
+    original_add = upload_session.add_upload
+    original_remove = upload_session.remove_upload
+
+    def patched_add(uid, pid, fname):
+        original_add(uid, pid, fname)
+        data = json.loads(session_path.read_text())
+        snapshots.append([u["upload_id"] for u in data.get("active_uploads", [])])
+
+    def patched_remove(uid):
+        original_remove(uid)
+
+    monkeypatch.setattr(upload_session, "add_upload", patched_add)
+    monkeypatch.setattr(upload_session, "remove_upload", patched_remove)
+
+    def handler(request):
+        path = request.url.path
+        if path == "/api/roms/upload/start":
+            return httpx.Response(201, json={"upload_id": "uid-42"})
+        if "/upload/uid-42" in path and request.method == "PUT":
+            return httpx.Response(200)
+        if path == "/api/roms/upload/uid-42/complete":
+            return httpx.Response(201)
+        return httpx.Response(404)
+
+    client = _client(handler)
+    cache = MappingCache(tmp_path / "cache.json")
+    game = _game("snes", "Mario.sfc")
+
+    run_upload_batch([(game, 1, "snes")], client,
+                     roms_root=tmp_path, cache=cache, scan_timeout=0)
+
+    assert any("uid-42" in snap for snap in snapshots), "uid-42 should appear in session during upload"
+
+
+def test_run_upload_batch_cancelled_leaves_in_progress(tmp_path, monkeypatch):
+    """When cancelled mid-batch, in_progress session NOT cleared (stays for recover)."""
+    import json
+    import threading
+    from romhop.upload import run_upload_batch
+    from romhop import upload_session
+
+    session_path = tmp_path / "upload_session.json"
+    monkeypatch.setattr(upload_session, "_session_path", lambda: session_path)
+
+    # Two games; cancel before second
+    game_a = _game("snes", "A.sfc")
+    game_b = _game("snes", "B.sfc")
+    for g in [game_a, game_b]:
+        rom = tmp_path / "snes" / g.file_names[0]
+        rom.parent.mkdir(parents=True, exist_ok=True)
+        rom.write_bytes(b"x" * 64)
+
+    call_count = {"n": 0}
+    stop = threading.Event()
+
+    def handler(request):
+        path = request.url.path
+        if path == "/api/roms/upload/start":
+            call_count["n"] += 1
+            return httpx.Response(201, json={"upload_id": f"uid-{call_count['n']}"})
+        if request.method == "PUT":
+            stop.set()  # cancel mid-upload of first game
+            return httpx.Response(200)
+        if "/complete" in path:
+            return httpx.Response(201)
+        return httpx.Response(404)
+
+    client = _client(handler)
+    cache = MappingCache(tmp_path / "cache.json")
+
+    clean = run_upload_batch(
+        [(game_a, 1, "snes"), (game_b, 1, "snes")], client,
+        roms_root=tmp_path, cache=cache, scan_timeout=0, stop_event=stop,
+    )
+
+    assert clean is False

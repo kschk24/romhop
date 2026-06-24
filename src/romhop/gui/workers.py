@@ -118,32 +118,35 @@ class DownloadWorker(QThread):
 
 
 class UploadWorker(QThread):
-    """Runs a batch of uploads sequentially, mirroring DownloadWorker.
+    """Runs a batch of uploads via a batch function (handles session lifecycle).
 
-    Each job is a tuple ``(game, platform_id, platform_slug)`` where ``game``
-    is a ``LocalGame``. ``action(game, platform_id, platform_slug,
-    on_progress, stop_event, on_event)`` performs one upload and returns an
-    ``UploadResult``.
+    ``batch_fn(jobs, *, on_item_started, progress_factory, on_item_error,
+    stop_event, on_event) -> bool`` performs the whole batch and returns True
+    on clean finish. ``progress_factory()`` is called once per game to obtain a
+    fresh progress function ``(fname, bytes_sent, total) -> None`` so each game
+    gets independent rate-limiting and speed tracking.
 
     Signals:
       item_started(index, count, name) - 1-based position in the batch
-      item_progress(bytes_uploaded, speed) - bytes sent so far + bytes/sec
+      item_progress(bytes_uploaded, total, speed) - bytes sent so far,
+                                         total bytes for the game (0 if unknown),
+                                         and bytes/sec
       item_error(name, message)        - one job failed; batch continues
       activity(ActivityEvent)          - UPLOAD_DONE or ERROR
       finished (built-in)              - whole batch done
     """
 
     item_started = Signal(int, int, str)
-    item_progress = Signal("qlonglong", float)
+    item_progress = Signal("qlonglong", "qlonglong", float)
     item_error = Signal(str, str)
     activity = Signal(object)
 
     _MIN_INTERVAL = 0.1
 
-    def __init__(self, jobs: Sequence, action: Callable[..., object], parent=None):
+    def __init__(self, jobs: Sequence, batch_fn: Callable[..., bool], parent=None):
         super().__init__(parent)
         self._jobs = list(jobs)
-        self._action = action
+        self._batch_fn = batch_fn
         self._cancel = threading.Event()
         self._cancelled = False
 
@@ -153,10 +156,10 @@ class UploadWorker(QThread):
     def was_cancelled(self) -> bool:
         return self._cancelled
 
-    def _make_on_progress(self):
+    def _make_on_progress(self) -> Callable:
         state = {"t0": None, "last_t": 0.0, "last_b": 0, "emitted": False}
 
-        def on_progress(fname: str, bytes_sent: int) -> None:
+        def on_progress(fname: str, bytes_sent: int, total: int = 0) -> None:
             now = time.monotonic()
             if state["t0"] is None:
                 state.update(t0=now, last_t=now, last_b=0)
@@ -166,29 +169,22 @@ class UploadWorker(QThread):
             dt = now - state["last_t"]
             db = bytes_sent - state["last_b"]
             speed = db / dt if dt > 0 else 0.0
-            self.item_progress.emit(bytes_sent, max(speed, 0.0))
+            self.item_progress.emit(bytes_sent, total, max(speed, 0.0))
             state.update(last_t=now, last_b=bytes_sent, emitted=True)
 
         return on_progress
 
     def run(self) -> None:
-        from romhop.activity import ActivityEvent, ActivityKind
-        count = len(self._jobs)
-        for index, (game, platform_id, platform_slug) in enumerate(self._jobs, start=1):
-            if self._cancel.is_set():
-                self._cancelled = True
-                break
-            self.item_started.emit(index, count, game.game_name)
-            try:
-                self._action(game, platform_id, platform_slug,
-                             self._make_on_progress(), self._cancel,
-                             on_event=self.activity.emit)
-            except UploadCancelled:
-                self._cancelled = True
-                break
-            except Exception as exc:
-                self.item_error.emit(game.game_name, str(exc))
-                self.activity.emit(ActivityEvent(ActivityKind.ERROR, str(exc)))
+        is_clean = self._batch_fn(
+            self._jobs,
+            on_item_started=self.item_started.emit,
+            progress_factory=self._make_on_progress,
+            on_item_error=self.item_error.emit,
+            stop_event=self._cancel,
+            on_event=self.activity.emit,
+        )
+        if not is_clean:
+            self._cancelled = True
 
 
 class CoverLoader(QThread):

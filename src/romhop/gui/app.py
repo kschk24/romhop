@@ -181,6 +181,10 @@ def run() -> None:
     )
 
     client = RommClient(base_url=settings.romm_url, token=get_token() or "")
+
+    from romhop import upload_session as _up_sess
+    _recovery = _up_sess.recover(client)
+
     cache_path = Path(platformdirs.user_data_dir("romhop")) / "mapping_cache.json"
     cache = MappingCache(cache_path)
 
@@ -258,18 +262,20 @@ def run() -> None:
     def create_platform_fn(slug: str) -> dict:
         return client.create_platform(slug)
 
-    def upload_action(game, platform_id, platform_slug, on_progress, stop_event, on_event=None):
-        from romhop.upload import upload_game
+    def upload_batch_fn(jobs, *, on_item_started, progress_factory,
+                        on_item_error, stop_event, on_event):
+        from romhop.upload import run_upload_batch
         s = live["settings"]
-        return upload_game(
-            game, client,
-            platform_id=platform_id,
-            platform_slug=platform_slug,
+        return run_upload_batch(
+            jobs, client,
             roms_root=s.roms_root,
             cache=cache,
             scan_timeout=float(s.scan_timeout_seconds),
+            chunk_size=max(1, s.upload_chunk_size_mb) * (1 << 20),
+            on_item_started=on_item_started,
+            progress_factory=progress_factory,
+            on_item_error=on_item_error,
             stop_event=stop_event,
-            progress_fn=on_progress,
             on_event=on_event,
         )
 
@@ -389,12 +395,18 @@ def run() -> None:
         open_in_romm=open_in_romm_fn,
         open_folder=open_folder_fn,
         pull_action=pull_action,
-        upload_action=upload_action,
+        upload_action=upload_batch_fn,
         list_platforms_fn=list_platforms_fn,
         create_platform_fn=create_platform_fn,
     )
     instance.activated.connect(window.show_and_raise)
     window.resize(900, 600)
+    if _recovery.was_dirty:
+        from romhop.activity import ActivityEvent, ActivityKind
+        window._activity_hub.post(ActivityEvent(
+            ActivityKind.UPLOAD_DONE,
+            "previous upload was interrupted — re-run scan to continue",
+        ))
     if settings.auto_update_check and _updates_supported:
         window.check_for_updates()
     if not is_configured(settings):

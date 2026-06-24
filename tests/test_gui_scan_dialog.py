@@ -75,6 +75,38 @@ def test_scan_dialog_select_all(qtbot):
     assert all(cb.isChecked() for cb in dlg._checkboxes.values())
 
 
+def test_scan_dialog_progress_bar_is_determinate_with_total(qtbot):
+    """Upload progress mirrors the download bar: determinate permille fill plus a
+    'name (i/n) · sent/total · rate' label once a total is known."""
+    from romhop.gui.scan_result_dialog import ScanResultDialog
+
+    result = MatchResult(unmatched=[_local("snes", "Mario.sfc")])
+    dlg = ScanResultDialog(result, upload_action=lambda *a, **k: None)
+    qtbot.addWidget(dlg)
+
+    dlg._on_item_started(1, 1, "Mario.sfc")
+    dlg._on_item_progress(512, 1024, 2048.0)
+
+    assert dlg._progress_bar.maximum() == dlg._PROGRESS_SCALE
+    assert dlg._progress_bar.value() == dlg._PROGRESS_SCALE // 2  # 512/1024
+    fmt = dlg._progress_bar.format()
+    assert "Mario.sfc" in fmt
+    assert "(1/1)" in fmt
+    assert "/" in fmt  # sent / total
+
+
+def test_scan_dialog_progress_indeterminate_when_total_unknown(qtbot):
+    from romhop.gui.scan_result_dialog import ScanResultDialog
+
+    dlg = ScanResultDialog(MatchResult(unmatched=[_local("nes", "X.nes")]),
+                           upload_action=lambda *a, **k: None)
+    qtbot.addWidget(dlg)
+
+    dlg._on_item_started(1, 1, "X.nes")
+    dlg._on_item_progress(4096, 0, 0.0)  # total unknown
+    assert dlg._progress_bar.maximum() == 0  # stays indeterminate
+
+
 def test_scan_dialog_upload_resolves_platform(qtbot, monkeypatch):
     """_resolve_platforms returns correct job tuples for a resolvable game."""
     from romhop.gui.scan_result_dialog import ScanResultDialog
@@ -122,8 +154,24 @@ def test_scan_dialog_upload_skips_unresolvable(qtbot, monkeypatch):
     assert jobs == []
 
 
+def _make_batch_fn(per_game_fn):
+    """Wrap a per-game callable into the batch_fn signature UploadWorker expects."""
+    def batch_fn(jobs, *, on_item_started, progress_factory,
+                 on_item_error, stop_event, on_event):
+        for i, (game, pid, pslug) in enumerate(jobs, 1):
+            if stop_event.is_set():
+                return False
+            on_item_started(i, len(jobs), game.game_name)
+            try:
+                per_game_fn(game, pid, pslug)
+            except Exception as exc:
+                on_item_error(game.game_name, str(exc))
+        return True
+    return batch_fn
+
+
 def test_upload_worker_runs_action(qtbot):
-    """UploadWorker calls action for each job and emits item_started/finished."""
+    """UploadWorker calls batch_fn for each job and emits item_started/finished."""
     from romhop.gui.workers import UploadWorker
     from romhop.local_index import LocalGame
 
@@ -132,10 +180,10 @@ def test_upload_worker_runs_action(qtbot):
     started = []
     errors = []
 
-    def fake_action(g, pid, pslug, on_progress, stop_event, on_event=None):
+    def fake_per_game(g, pid, pslug):
         started.append(g.game_name)
 
-    worker = UploadWorker([(game, 1, "snes")], fake_action)
+    worker = UploadWorker([(game, 1, "snes")], _make_batch_fn(fake_per_game))
     worker.item_started.connect(lambda i, c, n: None)
     worker.item_error.connect(lambda n, m: errors.append(m))
 
@@ -156,12 +204,13 @@ def test_upload_worker_continues_after_error(qtbot):
     done_names = []
     error_names = []
 
-    def fake_action(g, pid, pslug, on_progress, stop_event, on_event=None):
+    def fake_per_game(g, pid, pslug):
         if g.game_name == "A.sfc":
             raise RuntimeError("boom")
         done_names.append(g.game_name)
 
-    worker = UploadWorker([(game_a, 1, "snes"), (game_b, 1, "snes")], fake_action)
+    worker = UploadWorker([(game_a, 1, "snes"), (game_b, 1, "snes")],
+                          _make_batch_fn(fake_per_game))
     worker.item_error.connect(lambda n, m: error_names.append(n))
 
     with qtbot.waitSignal(worker.finished, timeout=2000):
@@ -169,3 +218,28 @@ def test_upload_worker_continues_after_error(qtbot):
 
     assert "A.sfc" in error_names
     assert "B.sfc" in done_names  # second game still ran
+
+
+def test_scan_dialog_finished_shows_cancelled_not_complete(qtbot):
+    """_on_upload_finished shows 'Cancelled' not 'Upload complete' when worker cancelled."""
+    from romhop.gui.scan_result_dialog import ScanResultDialog
+
+    result = MatchResult(unmatched=[_local("snes", "Mario.sfc")])
+    dlg = ScanResultDialog(result, upload_action=lambda *a, **k: None)
+    qtbot.addWidget(dlg)
+
+    # Simulate a worker that reports cancelled.
+    class FakeWorker:
+        def was_cancelled(self):
+            return True
+        def deleteLater(self):
+            pass
+
+    # show buttons/progress so _on_upload_finished can hide them
+    dlg._upload_btn.show()
+    dlg._progress_bar.show()
+    dlg._upload_worker = FakeWorker()
+    dlg._on_upload_finished()
+
+    assert dlg._upload_btn.text() == "Cancelled"
+    assert dlg._ok_btn.isEnabled()
