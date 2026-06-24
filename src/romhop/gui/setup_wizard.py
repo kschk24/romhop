@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWizard,
@@ -217,6 +218,10 @@ class SetupWizard(QWizard):
         settings = config.load_settings()
         settings.romm_url = self.connection_page.url_edit.text().strip()
         settings.roms_root = Path(self.paths_page.roms_edit.text().strip()).expanduser()
+        problem = config.roms_root_problem(settings.roms_root)
+        if problem is not None:
+            QMessageBox.warning(self, "ROMs folder unusable", problem)
+            return  # keep the wizard open so the user can fix the path
         saves = self.paths_page.saves_edit.text().strip()
         states = self.paths_page.states_edit.text().strip()
         if saves:

@@ -96,6 +96,24 @@ def test_download_no_match_exits_1(monkeypatch, tmp_path):
     assert result.exit_code == 1
 
 
+def test_download_unwritable_roms_root_friendly_exit_1(monkeypatch, tmp_path):
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    ro.chmod(0o500)  # no write: download_rom's mkdir would PermissionError
+    settings = cli.config.default_settings()
+    settings.romm_url = "http://romm.test"
+    settings.roms_root = ro / "games"
+    monkeypatch.setattr(cli.config, "get_token", lambda: "rmm_x")
+    monkeypatch.setattr(cli.config, "load_settings", lambda: settings)
+    try:
+        result = runner.invoke(cli.app, ["download", "Anything"])
+    finally:
+        ro.chmod(0o700)
+    assert result.exit_code == 1
+    assert "writable" in result.output.lower()
+    assert "Traceback" not in result.output  # no raw traceback dumped
+
+
 def _login(monkeypatch, tmp_path):
     monkeypatch.setattr(cli.config, "get_token", lambda: "rmm_x")
     settings = cli.config.default_settings()

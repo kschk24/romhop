@@ -236,3 +236,26 @@ def test_rate_limiter_picks_up_limit_change_mid_stream():
     limit[0] = 100                   # user drops the cap to 100 KiB/s mid-stream
     rl.tick(1_000_000 + 200 * 1024)  # 200 KiB at 100 KiB/s, ~0 elapsed => sleep ~2s
     assert slept and abs(sum(slept) - 2.0) < 0.05
+
+
+def test_download_rom_rejects_unwritable_roms_root(tmp_path):
+    import pytest
+    from romhop.download import RomsRootError
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    ro.chmod(0o500)  # r-x: mkdir under here would PermissionError
+    rom = Rom(id=1, name="A", platform_slug="gba", fs_name="A.gba",
+              fs_name_no_ext="A", file_names=["A.gba"])
+    try:
+        with pytest.raises(RomsRootError) as ei:
+            download_rom(rom, StreamClient(b"DATA"), roms_root=ro / "games",
+                         cache=MappingCache(tmp_path / "c.json"), overrides={})
+        assert "writable" in str(ei.value).lower()
+    finally:
+        ro.chmod(0o700)
+
+
+def test_friendly_download_error_passes_roms_root_message():
+    from romhop.download import RomsRootError, friendly_download_error
+    msg = friendly_download_error("A", 1, RomsRootError("ROMs folder X is not writable"))
+    assert msg == "ROMs folder X is not writable"

@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -271,6 +272,12 @@ class SettingsView(QWidget):
         }
         self._settings = replace(self._settings, **updates)
         self._refresh_scan_enabled()
+        # Warn (don't block) if the ROMs folder isn't usable, so downloads fail
+        # later with a clear reason set here rather than a raw worker traceback.
+        if config.roms_root_configured(self._settings):
+            problem = config.roms_root_problem(self._settings.roms_root)
+            if problem is not None:
+                QMessageBox.warning(self, "ROMs folder unusable", problem)
         config.save_settings(self._settings)
         # Token lives in the keyring, not the ini. Blank == keep current, so a
         # bad save can never wipe a working token.

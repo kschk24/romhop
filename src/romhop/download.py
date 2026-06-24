@@ -12,6 +12,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 from romhop.activity import ActivityEvent, ActivityKind
+from romhop.config import roms_root_problem
 from romhop.library import write_game
 from romhop.mapping_cache import MappingCache, seed_entry
 from romhop.platform_map import esde_system_for_slug
@@ -56,6 +57,11 @@ class DownloadCancelled(Exception):
     """Raised when a download is aborted via stop_event."""
 
 
+class RomsRootError(Exception):
+    """Raised when roms_root is unset or not a writable directory, so we fail
+    with an actionable message instead of a raw mkdir PermissionError."""
+
+
 def friendly_download_error(rom_name: str, rom_id: int, exc: Exception) -> str:
     """User-facing message for a failed rom download.
 
@@ -74,6 +80,8 @@ def friendly_download_error(rom_name: str, rom_id: int, exc: Exception) -> str:
             return (f"RomM has no downloadable files for '{rom_name}' (id {rom_id}). "
                     "It looks unscanned/missing on the server — try a rescan in RomM.")
         return f"RomM returned HTTP {code}."
+    if isinstance(exc, RomsRootError):
+        return str(exc)
     if isinstance(exc, httpx.HTTPError):
         return f"Could not reach RomM: {exc}"
     return str(exc)
@@ -116,6 +124,9 @@ def download_rom(rom: Rom, client, *, roms_root: Path, cache: MappingCache,
     during the transfer (total may be None). Pass ``stop_event`` to abort
     mid-stream (raises DownloadCancelled) and ``rate_limit_kbps`` to throttle.
     """
+    problem = roms_root_problem(roms_root)
+    if problem is not None:
+        raise RomsRootError(problem)
     system = esde_system_for_slug(rom.platform_slug, overrides)
     game_name = rom.fs_name_no_ext
     system_dir = roms_root / system

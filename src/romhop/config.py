@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import configparser
 import logging
+import os
 import shutil
 import sys
 from dataclasses import dataclass, field
@@ -176,6 +177,32 @@ def default_settings() -> Settings:
 def roms_root_configured(settings: Settings) -> bool:
     """True if the user has set a real ROMs root (not the unset sentinel)."""
     return str(settings.roms_root) not in ("", ".")
+
+
+def roms_root_problem(roms_root) -> str | None:
+    """Return an actionable message if ``roms_root`` is not a usable download
+    target (creatable + writable), else None.
+
+    There is no "create the whole path then check" without side effects, so we
+    walk up to the nearest existing ancestor and verify we could create and
+    write under it. Catches the unwritable/nonexistent path that otherwise lets
+    ``download_rom``'s ``mkdir`` raise a raw ``PermissionError`` traceback.
+    """
+    p = Path(roms_root).expanduser()
+    if str(p) in ("", "."):
+        return ("ROMs folder is not set. Run: romhop setup  "
+                "(or: romhop config set roms_root <path>)")
+    probe = p
+    while not probe.exists() and probe.parent != probe:
+        probe = probe.parent
+    if not probe.exists():
+        return f"ROMs folder '{p}' is on a path that does not exist."
+    if not probe.is_dir():
+        return f"ROMs folder '{p}': '{probe}' is not a directory."
+    if not os.access(probe, os.W_OK | os.X_OK):
+        return (f"ROMs folder '{p}' is not writable — no write permission on "
+                f"'{probe}'. Pick a folder you own, e.g. under your home directory.")
+    return None
 
 
 def is_configured(settings: Settings) -> bool:

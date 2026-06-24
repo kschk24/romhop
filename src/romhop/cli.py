@@ -463,6 +463,10 @@ def download(
     if not config.roms_root_configured(settings):
         typer.echo("ROMs folder not set. Run: romhop setup  (or: romhop config set roms_root <path>)", err=True)
         raise typer.Exit(code=1)
+    problem = config.roms_root_problem(settings.roms_root)
+    if problem is not None:
+        typer.echo(problem, err=True)
+        raise typer.Exit(code=1)
     client = _client()
     try:
         roms = client.list_roms(search_term=name)

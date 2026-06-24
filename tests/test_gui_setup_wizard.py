@@ -143,6 +143,33 @@ def test_finish_persists_and_emits(qtbot, monkeypatch, tmp_path):
     assert do_scan is True
 
 
+def test_finish_blocks_on_unusable_roms_root(qtbot, monkeypatch, tmp_path):
+    import romhop.config as config
+    from romhop.gui import setup_wizard
+    monkeypatch.setattr(config, "set_token", lambda t: None)
+    monkeypatch.setattr(config, "get_token", lambda: None)
+    monkeypatch.setattr(config, "load_settings", config.default_settings)
+    warned = {}
+    monkeypatch.setattr(setup_wizard.QMessageBox, "warning",
+                        lambda *a, **k: warned.setdefault("hit", a[2]))
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    ro.chmod(0o500)
+    persisted = []
+    wiz = SetupWizard(validate_fn=lambda u, t: None,
+                      detect_retroarch_fn=_noop_detect,
+                      persist=lambda s: persisted.append(s))
+    qtbot.addWidget(wiz)
+    wiz.connection_page.url_edit.setText("http://romm.test")
+    wiz.paths_page.roms_edit.setText(str(ro / "games"))
+    try:
+        wiz.accept()
+    finally:
+        ro.chmod(0o700)
+    assert "writable" in warned["hit"].lower()  # warned the user
+    assert persisted == []  # did not save unusable settings
+
+
 def test_finish_blank_token_keeps_existing(qtbot, monkeypatch, tmp_path):
     import romhop.config as config
     calls = []

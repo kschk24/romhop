@@ -340,3 +340,30 @@ def test_purge_user_data_default_dirs_exclude_roms_and_saves(tmp_path, monkeypat
 
     assert removed == [cfg, data, logs]
     assert roms.exists() and saves.exists()  # untouched
+
+
+def test_roms_root_problem_ok_for_writable_dir(tmp_path):
+    assert config.roms_root_problem(tmp_path / "roms") is None  # creatable under tmp
+
+
+def test_roms_root_problem_flags_unset():
+    msg = config.roms_root_problem(config.UNSET_PATH)
+    assert msg and "not set" in msg.lower()
+
+
+def test_roms_root_problem_flags_unwritable(tmp_path):
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    ro.chmod(0o500)  # r-x: no write
+    try:
+        msg = config.roms_root_problem(ro / "games")
+        assert msg and "writable" in msg.lower()
+        assert str(ro) in msg
+    finally:
+        ro.chmod(0o700)  # let pytest clean up
+
+
+def test_roms_root_problem_flags_nonexistent_root(tmp_path):
+    # A path whose nearest existing ancestor is a non-writable system dir.
+    msg = config.roms_root_problem("/proc/nonexistent/games")
+    assert msg is not None
