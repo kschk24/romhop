@@ -35,3 +35,26 @@ QLabel#StatusDim {
 #Cover[downloaded="true"] {
     background: rgba(0, 0, 0, 0.45);
 }
+QProgressBar {
+    background-color: {{panel}};
+    border: 1px solid {{text_dim}};
+    border-radius: 4px;
+    color: {{text}};
+    text-align: center;
+}
+QProgressBar::chunk {
+    background-color: {{accent}};
+    border-radius: 3px;
+}
+QDialog {
+    background-color: {{bg}};
+}
+QWizard {
+    background-color: {{bg}};
+}
+QWizard QFrame {
+    background-color: {{bg}};
+}
+QDialogButtonBox {
+    background-color: {{bg}};
+}

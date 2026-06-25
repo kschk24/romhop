@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from dataclasses import replace
 
 logger = logging.getLogger(__name__)
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QStackedWidget,
     QSystemTrayIcon,
     QVBoxLayout,
@@ -25,7 +26,6 @@ from PySide6.QtWidgets import (
 
 from romhop import config
 from romhop.config import Settings
-from romhop.gui import theme
 from romhop.gui.tray import SYNC_DOT_COLORS, TrayIcon
 from romhop.gui.filter_bar import FilterBar
 from romhop.gui.library_view import LibraryView, platforms_from_roms
@@ -139,9 +139,6 @@ class MainWindow(QWidget):
         self._confirm_no_tray = confirm_no_tray or self._default_no_tray_notice
         self.setWindowTitle("romhop")
 
-        loaded = theme.load_active_theme(settings.theme)
-        self.setStyleSheet(loaded.qss)
-
         # Top row: search + settings gear.
         self.search = QLineEdit()
         self.search.setPlaceholderText("Search…")
@@ -199,6 +196,12 @@ class MainWindow(QWidget):
         self.progress_bar.hide()
         self.progress_label = QLabel("")
         self.progress_label.setObjectName("StatusDim")
+        self.progress_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        # Don't let the fallback style's font metrics under-allocate width and
+        # clip the leading characters of the game name (frozen-build TASK-005).
+        self.progress_label.setSizePolicy(
+            QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred
+        )
         self.progress_label.hide()
         # Single sync control: one button toggles sync on/off and its leading
         # dot reports the live worker state (grey idle → green watching → red

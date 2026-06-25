@@ -2,13 +2,13 @@ from romhop import config
 from romhop.romm_client import Rom, RomDetail
 
 
-def test_main_window_builds_and_applies_theme(qtbot):
+def test_main_window_does_not_self_theme(qtbot):
     from romhop.gui.main_window import MainWindow
 
     win = MainWindow(settings=config.default_settings())
     qtbot.addWidget(win)
-    # Theme QSS is applied to the window.
-    assert win.styleSheet() != ""
+    # Theme is applied at app level; MainWindow must not set its own stylesheet.
+    assert win.styleSheet() == ""
     # Bottom bar starts in the idle sync state.
     assert "idle" in win.sync_status_text().lower()
 
@@ -126,6 +126,19 @@ def test_progress_slots_update_bottom_bar(qtbot):
     win._end_progress()
     assert win.progress_bar.isHidden()
     assert win.progress_label.isHidden()
+
+
+def test_progress_label_does_not_clip(qtbot):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QSizePolicy
+
+    from romhop.gui.main_window import MainWindow
+
+    win = MainWindow(settings=config.default_settings())
+    qtbot.addWidget(win)
+    policy = win.progress_label.sizePolicy().horizontalPolicy()
+    assert policy in (QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
+    assert win.progress_label.alignment() & Qt.AlignmentFlag.AlignLeft
 
 
 def test_download_selected_drives_progress_and_recovers(qtbot):

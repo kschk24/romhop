@@ -63,6 +63,30 @@ def bundled_default_dir() -> Path:
     return _gui_themes_root() / "default"
 
 
+def scheme_theme_dir(scheme: str) -> Path:
+    """Bundled theme dir for a resolved color scheme."""
+    if scheme == "light":
+        return _gui_themes_root() / "light"
+    return _gui_themes_root() / "default"
+
+
+def resolve_scheme(mode: str, app) -> str:
+    """Resolve a theme mode to a concrete scheme ("light" or "dark").
+
+    "light"/"dark" force that scheme. "system" reads the OS color scheme via
+    the QApplication's style hints; Unknown falls back to dark.
+    """
+    if mode == "light":
+        return "light"
+    if mode == "dark":
+        return "dark"
+    from PySide6.QtCore import Qt
+    scheme = app.styleHints().colorScheme()
+    if scheme == Qt.ColorScheme.Light:
+        return "light"
+    return "dark"
+
+
 def themes_dir() -> Path:
     """User-installed themes live here (created on demand)."""
     d = Path(platformdirs.user_config_dir("romhop")) / "themes"
@@ -103,6 +127,28 @@ def load_active_theme(name: str) -> LoadedTheme:
         if candidate.is_dir():
             return load_theme_dir(candidate)
     return _render_dir(bundled_default_dir())
+
+
+def apply_theme(app, settings) -> None:
+    """Apply themed stylesheet to the whole application.
+
+    Drives native chrome (incl. Windows title bar) via setColorScheme and
+    sets the QSS at QApplication level so every top-level window is themed.
+    """
+    from PySide6.QtCore import Qt
+
+    mode = settings.theme_mode
+    hints = app.styleHints()
+    if mode == "light":
+        hints.setColorScheme(Qt.ColorScheme.Light)
+    elif mode == "dark":
+        hints.setColorScheme(Qt.ColorScheme.Dark)
+    else:
+        hints.setColorScheme(Qt.ColorScheme.Unknown)
+
+    scheme = resolve_scheme(mode, app)
+    loaded = load_theme_dir(scheme_theme_dir(scheme))
+    app.setStyleSheet(loaded.qss)
 
 
 def install_theme(zip_path: Path) -> str:

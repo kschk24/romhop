@@ -127,3 +127,89 @@ def test_load_active_theme_default_uses_bundled(tmp_path, monkeypatch):
     loaded = theme.load_active_theme("default")
     assert loaded.name == "default"
     assert "{{" not in loaded.qss
+
+
+def test_base_qss_styles_progress_bar():
+    qss = theme.render_qss(theme.base_qss(), {})
+    assert "QProgressBar" in qss
+    assert "QProgressBar::chunk" in qss
+    # tokens must be substituted, not left as raw placeholders
+    assert "{{" not in qss
+
+
+def test_resolve_scheme_forced_modes():
+    from romhop.gui import theme
+    assert theme.resolve_scheme("light", app=None) == "light"
+    assert theme.resolve_scheme("dark", app=None) == "dark"
+
+
+def test_resolve_scheme_system_reads_os(qtbot):
+    from PySide6.QtCore import Qt
+    from romhop.gui import theme
+
+    class FakeHints:
+        def __init__(self, scheme):
+            self._s = scheme
+        def colorScheme(self):
+            return self._s
+
+    class FakeApp:
+        def __init__(self, scheme):
+            self._h = FakeHints(scheme)
+        def styleHints(self):
+            return self._h
+
+    assert theme.resolve_scheme("system", FakeApp(Qt.ColorScheme.Light)) == "light"
+    assert theme.resolve_scheme("system", FakeApp(Qt.ColorScheme.Dark)) == "dark"
+    assert theme.resolve_scheme("system", FakeApp(Qt.ColorScheme.Unknown)) == "dark"
+
+
+def test_scheme_theme_dir():
+    from romhop.gui import theme
+    assert theme.scheme_theme_dir("light").name == "light"
+    assert theme.scheme_theme_dir("dark").name == "default"
+
+
+def test_base_qss_styles_dialog_and_wizard():
+    from romhop.gui import theme
+    qss = theme.render_qss(theme.base_qss(), {})
+    assert "QDialog" in qss
+    assert "QWizard" in qss
+    assert "QDialogButtonBox" in qss
+
+
+def test_light_theme_dir_renders_without_placeholders():
+    from romhop.gui import theme
+    loaded = theme.load_theme_dir(theme.scheme_theme_dir("light"))
+    assert loaded.name == "light"
+    assert "{{" not in loaded.qss
+    assert "QProgressBar::chunk" in loaded.qss
+
+
+def test_apply_theme_forces_scheme_and_sets_app_stylesheet(qtbot):
+    from dataclasses import replace
+    from unittest.mock import patch
+
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+
+    from romhop import config
+    from romhop.gui import theme
+
+    app = QApplication.instance() or QApplication([])
+    hints = app.styleHints()
+
+    dark = replace(config.default_settings(), theme_mode="dark")
+    with patch.object(hints, "setColorScheme") as mock_sc:
+        theme.apply_theme(app, dark)
+        mock_sc.assert_called_once_with(Qt.ColorScheme.Dark)
+    qss_dark = app.styleSheet()
+    assert qss_dark
+    assert "{{" not in qss_dark
+    assert "QWizard" in qss_dark
+
+    light = replace(config.default_settings(), theme_mode="light")
+    with patch.object(hints, "setColorScheme") as mock_sc:
+        theme.apply_theme(app, light)
+        mock_sc.assert_called_once_with(Qt.ColorScheme.Light)
+    assert app.styleSheet() != qss_dark

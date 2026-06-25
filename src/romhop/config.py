@@ -30,7 +30,8 @@ class Settings:
     sync_delay_seconds: float = 8.0
     sync_enabled: bool = False
     start_on_login: bool = False
-    theme: str = "default"
+    theme: str = "default"  # reserved; not persisted via SCHEMA
+    theme_mode: str = "system"
     download_rate_limit_kbps: int = 0  # 0 = unlimited
     auto_update_check: bool = True
     update_include_prereleases: bool = False
@@ -45,8 +46,9 @@ class FieldSpec:
     key: str       # Settings attribute name
     category: str  # one of CATEGORY_ORDER
     label: str     # GUI label / never written to the ini
-    type: str      # "str" | "path" | "int" | "float" | "bool"
+    type: str      # "str" | "path" | "int" | "float" | "bool" | "choice"
     help: str      # tooltip in GUI; comment above the key in the ini
+    options: tuple[str, ...] = ()  # valid values for type=="choice"
 
 
 CATEGORY_ORDER = ["connection", "paths", "behavior"]
@@ -81,7 +83,9 @@ SCHEMA: list[FieldSpec] = [
     FieldSpec("download_rate_limit_kbps", "behavior",
               "Download limit (KB/s, 0 = unlimited)", "int",
               "Throttle downloads; 0 disables the cap"),
-    FieldSpec("theme", "behavior", "Theme", "str", "GUI theme name"),
+    FieldSpec("theme_mode", "behavior", "Theme", "choice",
+              "Color scheme: system follows the OS preference",
+              options=("system", "light", "dark")),
     FieldSpec("auto_update_check", "behavior", "Check for updates on launch", "bool",
               "Look for a new version at startup (frozen installs only)"),
     FieldSpec("update_include_prereleases", "behavior",
@@ -117,6 +121,8 @@ def coerce_value(type_: str, raw: str):
         return float(raw)
     if type_ == "bool":
         return raw.strip().lower() in _TRUE_TOKENS
+    if type_ == "choice":
+        return raw
     raise ValueError(f"unknown field type: {type_}")
 
 

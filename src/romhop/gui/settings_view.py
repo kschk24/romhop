@@ -5,6 +5,7 @@ from dataclasses import replace
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QFormLayout,
     QGroupBox,
@@ -119,6 +120,11 @@ class SettingsView(QWidget):
         # so a checkbox with its own text would double the label.
         if spec.type == "bool":
             return QCheckBox()
+        if spec.type == "choice":
+            combo = QComboBox()
+            for opt in spec.options:
+                combo.addItem(opt)
+            return combo
         return QLineEdit()
 
     def _add_token_row(self, form: QFormLayout) -> None:
@@ -142,6 +148,8 @@ class SettingsView(QWidget):
             value = getattr(self._settings, spec.key)
             if isinstance(widget, QCheckBox):
                 widget.setChecked(bool(value))
+            elif isinstance(widget, QComboBox):
+                widget.setCurrentText(str(value))
             else:
                 widget.setText(str(value))
         self._populate_token()
@@ -260,6 +268,8 @@ class SettingsView(QWidget):
         spec = self._spec_by_label[label]
         if isinstance(widget, QCheckBox):
             return widget.isChecked()
+        if isinstance(widget, QComboBox):
+            return widget.currentText()
         return config.coerce_value(spec.type, widget.text())
 
     def _on_save(self) -> None:
