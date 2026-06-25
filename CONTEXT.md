@@ -70,13 +70,16 @@ _Avoid_: orphan, missing rom, unsynced game.
 
 **Upload to RomM**:
 Send an Unmatched game's actual rom file(s) up to RomM so it becomes a tracked rom —
-the reverse of Download. Offered from the Unmatched report (GUI dialog picker + CLI
-checklist, or the non-interactive `--upload-unmatched` flag). Only the real rom
+the reverse of Download. Reachable two ways: as a first-class action (the `upload`
+command / GUI Upload button) that runs the match internally to discover Unmatched
+games, or offered from the Unmatched report after a `scan` (GUI dialog picker + CLI
+checklist, or the non-interactive `--upload-unmatched` flag). Either way the input
+set is Unmatched games only — the standalone path just runs the match for you. Only the real rom
 files go up (never the ES-DE `.m3u`/`noload.txt` artifacts). Resolvable only when the
 game's ES-DE system maps to a RomM platform, or the user opts to create that platform.
-If an upload is interrupted (force-quit, power loss), recovery is to re-run `scan`:
-an un-uploaded game is still an Unmatched game, so it re-surfaces on its own — there
-is no separate resumable upload queue.
+If an upload is interrupted (force-quit, power loss), recovery is to re-run `scan` or
+`upload`: an un-uploaded game is still an Unmatched game, so the match re-surfaces it
+on its own — there is no separate resumable upload queue.
 _Avoid_: push, sync up, send, publish.
 
 **Resolvable** (of an Unmatched game):
