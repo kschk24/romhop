@@ -1,11 +1,11 @@
 ---
 id: TASK-054
 title: 'Settings UI: render choice field as combo box'
-status: In Progress
+status: Done
 assignee:
   - '@kschk24'
 created_date: '2026-06-24 15:20'
-updated_date: '2026-06-25 00:44'
+updated_date: '2026-06-25 00:45'
 labels:
   - adaptive-themes
 dependencies:
