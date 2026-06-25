@@ -91,6 +91,7 @@ def test_update_clicked_invokes_apply(qtbot):
 
 def test_update_progress_shown(qtbot):
     w = _window(qtbot, update_check_fn=lambda: _FAKE_INFO)
+    w._claim_progress("update")
     w._on_update_progress(50, 100)
     assert w.progress_bar.isVisibleTo(w)
     assert w.progress_bar.value() == w._PROGRESS_SCALE // 2
@@ -165,3 +166,80 @@ def test_check_for_updates_twice_no_dangling_thread(qtbot):
     # First worker was replaced — current worker must have finished
     assert w._check_worker is not None
     assert not w._check_worker.isRunning()
+
+
+# ---------------------------------------------------------------------------
+# Progress bar ownership / isolation (TASK-029)
+# ---------------------------------------------------------------------------
+
+def test_update_apply_cancels_active_download_and_claims_bar(qtbot):
+    """Update click cancels in-flight download and takes ownership of the bar."""
+    cancelled: list[bool] = []
+
+    class _FakeWorker:
+        def cancel(self):
+            cancelled.append(True)
+
+        def was_cancelled(self):
+            return True
+
+        def deleteLater(self):
+            pass
+
+    w = _window(qtbot, update_check_fn=lambda: _FAKE_INFO, update_apply_fn=lambda i, cb: None)
+    w._download_worker = _FakeWorker()  # type: ignore[assignment]
+    w._pending_update = _FAKE_INFO
+    w._on_update_clicked()
+
+    assert len(cancelled) == 1
+    assert w._progress_owner == "update"
+    assert "Updating" in w.progress_bar.format()
+
+
+def test_late_download_teardown_does_not_hide_update_bar(qtbot):
+    """_on_batch_finished fired after update claimed bar must not hide the bar."""
+    w = _window(qtbot)
+    w._claim_progress("update")
+    w.progress_bar.setFormat("Updating…")
+
+    # Simulate a stale _on_batch_finished (download worker already None).
+    w._on_batch_finished()
+
+    assert w._progress_owner == "update"
+    assert w.progress_bar.isVisibleTo(w)
+    assert "Updating" in w.progress_bar.format()
+
+
+def test_download_start_refused_during_update(qtbot):
+    """_start_download is a no-op when update owns the bar."""
+    from romhop.romm_client import Rom
+
+    roms = [Rom(id=1, name="Sonic", platform_slug="genesis",
+                fs_name="Sonic.md", fs_name_no_ext="Sonic", file_names=["Sonic.md"])]
+
+    def action(rom, on_progress, stop_event, on_event=None):
+        return rom.name
+
+    w = _window(qtbot, update_check_fn=lambda: _FAKE_INFO,
+                update_apply_fn=lambda i, cb: None)
+    w._download_action = action
+    w._progress_owner = "update"
+    w.download_btn.setEnabled(False)
+
+    w._start_download(roms)
+
+    assert w._download_worker is None
+    assert not w.download_btn.isEnabled()
+
+
+def test_update_failure_releases_bar_and_reenables_download(qtbot):
+    """_on_update_failed must release the bar and re-enable the download button."""
+    w = _window(qtbot)
+    w._claim_progress("update")
+    w.download_btn.setEnabled(False)
+
+    w._on_update_failed("network error")
+
+    assert w._progress_owner is None
+    assert w.progress_bar.isHidden()
+    assert w.download_btn.isEnabled()

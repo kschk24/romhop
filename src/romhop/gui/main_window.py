@@ -133,6 +133,7 @@ class MainWindow(QWidget):
         self._activity_hub.event.connect(self._on_activity_desktop_notify)
         self._progress_name = ""
         self._progress_pos = ""
+        self._progress_owner: str | None = None
         self.tray = None
         self._quitting = False
         self._tray_hint_shown = False
@@ -623,6 +624,8 @@ class MainWindow(QWidget):
     def _start_download(self, roms: list) -> None:
         if self._download_action is None or not roms or self._download_worker is not None:
             return
+        if self._progress_owner == "update":
+            return
         self.download_btn.setEnabled(False)
         self.download_btn.setText("Downloading…")
         self.cancel_btn.show()
@@ -722,15 +725,30 @@ class MainWindow(QWidget):
     def _on_pull_failed(self, message: str) -> None:
         QMessageBox.critical(self, "Pull failed", message)
 
+    # --- progress bar ownership ---
+
+    def _claim_progress(self, owner: str) -> None:
+        self._progress_owner = owner
+        self.progress_bar.show()
+
+    def _release_progress(self, owner: str) -> None:
+        if self._progress_owner != owner:
+            return
+        self._progress_owner = None
+        self.progress_bar.hide()
+        self.progress_label.hide()
+
     # --- download progress UI ---
     def _begin_progress(self) -> None:
+        self._claim_progress("download")
         self.progress_bar.setMaximum(0)  # busy until the first byte count lands
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("")
-        self.progress_bar.show()
         self.progress_label.hide()
 
     def _on_item_started(self, index: int, count: int, name: str) -> None:
+        if self._progress_owner != "download":
+            return
         self._progress_name = name
         self._progress_pos = f"{index}/{count}"
         # New game in the batch: bar goes indeterminate until its total arrives.
@@ -743,6 +761,8 @@ class MainWindow(QWidget):
     _PROGRESS_SCALE = 1000
 
     def _on_item_progress(self, downloaded: int, total: int, speed: float) -> None:
+        if self._progress_owner != "download":
+            return
         if total > 0:
             self.progress_bar.setMaximum(self._PROGRESS_SCALE)
             self.progress_bar.setValue(int(downloaded * self._PROGRESS_SCALE / total))
@@ -760,6 +780,8 @@ class MainWindow(QWidget):
             )
 
     def _on_item_error(self, name: str, message: str) -> None:
+        if self._progress_owner != "download":
+            return
         # A download failure belongs in the download area, not on the sync dot.
         # The batch keeps going; the label is overwritten by the next item (or
         # cleared by _end_progress), so a transient flash is fine here.
@@ -781,16 +803,15 @@ class MainWindow(QWidget):
         self.download_btn.setText("Download")
         self.download_btn.setEnabled(True)
         self.cancel_btn.hide()
-        if cancelled:
-            # _end_progress hid the label; show a brief note in its place.
+        if cancelled and self._progress_owner is None:
+            # Bar was released by _end_progress (not stolen by update); show brief note.
             self.progress_label.setText("Download cancelled")
             self.progress_label.show()
         self._refresh_downloaded()
         self.downloads_finished.emit()
 
     def _end_progress(self) -> None:
-        self.progress_bar.hide()
-        self.progress_label.hide()
+        self._release_progress("download")
 
     # --- update flow ---
 
@@ -824,11 +845,17 @@ class MainWindow(QWidget):
 
     def _on_update_clicked(self) -> None:
         self._hide_update_bar()
+        if self._download_worker is not None:
+            self._download_worker.cancel()
         if self._apply_worker is not None:
             self._apply_worker.quit()
             self._apply_worker.wait()
             self._apply_worker.deleteLater()
             self._apply_worker = None
+        self._claim_progress("update")
+        self.progress_bar.setMaximum(0)
+        self.progress_bar.setFormat("Updating…")
+        self.download_btn.setEnabled(False)
         self._apply_worker = UpdateWorker(
             apply_fn=self._update_apply_fn, info=self._pending_update
         )
@@ -838,20 +865,23 @@ class MainWindow(QWidget):
         self._apply_worker.start()
 
     def _on_update_progress(self, done: int, total: int) -> None:
+        if self._progress_owner != "update":
+            return
         if total > 0:
             self.progress_bar.setMaximum(self._PROGRESS_SCALE)
             self.progress_bar.setValue(int(done * self._PROGRESS_SCALE / total))
         else:
             self.progress_bar.setMaximum(0)
         self.progress_bar.setFormat("Updating…")
-        self.progress_bar.show()
 
     def _on_update_applied(self) -> None:
-        self.progress_bar.hide()
+        self._release_progress("update")
         QMessageBox.information(self, "Update ready", "Restart romhop to finish updating.")
         if self._relaunch_fn is not None:
             self._relaunch_fn()
 
     def _on_update_failed(self, msg: str) -> None:
+        self._release_progress("update")
+        self.download_btn.setEnabled(True)
         logger.warning("Update failed: %s", msg)
         self.set_sync_status(f"update error: {msg}")
