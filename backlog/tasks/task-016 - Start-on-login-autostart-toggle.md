@@ -1,17 +1,17 @@
 ---
 id: TASK-016
 title: Start on login (autostart) toggle
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-06-16 15:07'
-updated_date: '2026-06-25 14:04'
+updated_date: '2026-06-25 16:43'
 labels:
   - feature
   - ready-for-agent
 dependencies: []
 priority: low
-ordinal: 19000
+ordinal: 73000
 ---
 
 ## Description

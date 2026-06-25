@@ -1,11 +1,11 @@
 ---
 id: TASK-057.01
 title: Extract Qt-free discover_uploadable core seam
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-06-25 17:35'
-updated_date: '2026-06-25 17:45'
+updated_date: '2026-06-25 17:50'
 labels:
   - upload-frontdoor
 dependencies: []
@@ -28,3 +28,9 @@ Extract the 'find unmatched local games + categorize' logic currently inline in 
 - [x] #3 cli.py _run_upload_unmatched refactored to call it; existing scan-path upload behavior unchanged
 - [x] #4 Unit test covers the three categories incl. an ES-DE system that diverges from its RomM slug
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Extracted discover_uploadable into upload.py. CLI refactored to call it. 5 new tests, 617 pass total.
+<!-- SECTION:NOTES:END -->

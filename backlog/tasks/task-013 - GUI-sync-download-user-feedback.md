@@ -1,16 +1,16 @@
 ---
 id: TASK-013
 title: GUI sync/download user feedback
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-16 15:04'
-updated_date: '2026-06-22 17:33'
+updated_date: '2026-06-25 14:38'
 labels:
   - feature
   - activity-feedback
 dependencies: []
 priority: low
-ordinal: 13000
+ordinal: 72000
 ---
 
 ## Description

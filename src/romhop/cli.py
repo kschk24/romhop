@@ -793,6 +793,164 @@ def _select_games_for_upload(candidates: list, *, assume_yes: bool) -> list:
     return []
 
 
+def _select_for_upload(candidates: list, *, assume_yes: bool) -> list:
+    """Enhanced InquirerPy picker for the standalone upload command.
+
+    Sorted and grouped by ES-DE system dir; ctrl+a to select all; default unchecked.
+    Falls back to all-or-confirm when InquirerPy is unavailable.
+    """
+    if assume_yes:
+        return candidates
+
+    if not _stdin_isatty():
+        return candidates  # non-TTY: upload all resolvable
+
+    try:
+        from InquirerPy import inquirer
+        from InquirerPy.separator import Separator
+
+        sorted_cands = sorted(candidates, key=lambda x: (x[0].system, x[0].game_name.lower()))
+        choices: list = []
+        current_system: str | None = None
+        for g, pid, pslug in sorted_cands:
+            if g.system != current_system:
+                choices.append(Separator(f"── {g.system} ──"))
+                current_system = g.system
+            choices.append({"name": g.game_name, "value": (g, pid, pslug), "enabled": False})
+
+        selected = inquirer.checkbox(
+            message="Select games to upload:",
+            choices=choices,
+            instruction="[space] toggle  [ctrl+a] all  [enter] confirm",
+        ).execute()
+        return selected
+    except ImportError:
+        pass
+
+    if typer.confirm(f"Upload all {len(candidates)} resolvable games?", default=False):
+        return candidates
+    return []
+
+
+@app.command()
+def upload(
+    name: list[str] = typer.Argument(
+        default=None,
+        help="Game name(s) (substring match against local unmatched games); pass multiple to filter.",
+    ),
+    platform: list[str] = typer.Option(
+        None, "--platform", "-p",
+        help="Filter to ES-DE system dir (repeatable, case-insensitive exact match).",
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Non-interactive: upload all resolvable."),
+) -> None:
+    """Upload local unmatched games to RomM (runs match internally, no cache seeding for matched)."""
+    settings = config.load_settings()
+    if not config.roms_root_configured(settings):
+        typer.echo("ROMs folder not set. Run: romhop setup  (or: romhop config set roms_root <path>)", err=True)
+        raise typer.Exit(code=1)
+    problem = config.roms_root_problem(settings.roms_root)
+    if problem is not None:
+        typer.echo(problem, err=True)
+        raise typer.Exit(code=1)
+
+    from romhop import upload_session as _up_sess
+    info = _up_sess.recover(_client())
+    if info.was_dirty:
+        typer.echo("Note: previous upload was interrupted — re-run scan or upload to continue.")
+
+    client = _client()
+
+    try:
+        roms = client.list_roms()
+    except httpx.HTTPStatusError as exc:
+        _exit_http(exc)
+    except httpx.HTTPError as exc:
+        typer.echo(f"Could not reach RomM: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    # Discovery only — match to find unmatched; do NOT seed cache for matched games.
+    locals_ = index_local_library(settings.roms_root, settings.platform_overrides)
+    result = match_to_roms(locals_, roms, settings.platform_overrides)
+    unmatched = result.unmatched
+
+    # Variadic name filter: substring match against game_name (case-insensitive).
+    if name:
+        terms = [t.lower() for t in name]
+        unmatched = [g for g in unmatched if any(t in g.game_name.lower() for t in terms)]
+
+    # --platform filter: exact case-insensitive match on ES-DE system dir.
+    if platform:
+        plat_lower = {p.lower() for p in platform}
+        unmatched = [g for g in unmatched if g.system.lower() in plat_lower]
+
+    if not unmatched:
+        typer.echo("No unmatched local games found.")
+        return
+
+    from romhop.upload import discover_uploadable, run_upload_batch
+
+    try:
+        romm_platforms = client.list_platforms()
+    except Exception as exc:
+        typer.echo(f"Could not fetch RomM platforms: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    cats = discover_uploadable(unmatched, romm_platforms, settings.platform_overrides)
+
+    if cats.unresolvable:
+        typer.echo("Cannot upload (no RomM slug derivable):")
+        for g in cats.unresolvable:
+            typer.echo(f"  {g.system}/{g.game_name}")
+
+    all_candidates = [(g, p["id"], p.get("slug") or p.get("fs_slug", g.system))
+                      for g, p in cats.resolvable]
+
+    if cats.missing_platform:
+        typer.echo("Platforms missing in RomM:")
+        for game, slug in cats.missing_platform:
+            typer.echo(f"  {game.system}/{game.game_name}  → would create '{slug}'")
+        if yes or typer.confirm("Create missing platforms and include those games?", default=False):
+            for game, slug in cats.missing_platform:
+                try:
+                    new_platform = client.create_platform(slug)
+                    pid = new_platform["id"]
+                    pslug = new_platform.get("slug") or new_platform.get("fs_slug", slug)
+                    all_candidates.append((game, pid, pslug))
+                    typer.echo(f"Created platform '{slug}' (id {pid})")
+                except Exception as exc:
+                    typer.echo(f"  Failed to create '{slug}': {exc}", err=True)
+
+    if not all_candidates:
+        typer.echo("No games to upload.")
+        return
+
+    cache = MappingCache(_cache_path())
+    selected = _select_for_upload(all_candidates, assume_yes=yes)
+    if not selected:
+        typer.echo("No games selected.")
+        return
+
+    typer.echo(f"Will upload {len(selected)} game(s):")
+    for game, pid, pslug in selected:
+        typer.echo(f"  {game.system}/{game.game_name}  ({len(game.file_names)} file(s))")
+
+    if not yes and not typer.confirm("Proceed?", default=True):
+        typer.echo("Aborted.")
+        return
+
+    run_upload_batch(
+        selected, client,
+        roms_root=settings.roms_root,
+        cache=cache,
+        scan_timeout=float(settings.scan_timeout_seconds),
+        chunk_size=max(1, settings.upload_chunk_size_mb) * (1 << 20),
+        on_item_started=lambda i, n, item_name: typer.echo(f"Uploading {item_name}…"),
+        on_item_error=lambda item_name, msg: typer.echo(f"  Failed: {msg}", err=True),
+        on_event=lambda e: typer.echo(f"  {e.message}"),
+    )
+
+
 @app.command()
 def scan(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts."),

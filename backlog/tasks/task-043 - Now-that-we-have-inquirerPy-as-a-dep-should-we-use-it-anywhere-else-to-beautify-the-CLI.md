@@ -1,11 +1,11 @@
 ---
 id: TASK-043
 title: CLI batch download + multi-select pull via InquirerPy
-status: In Progress
+status: Done
 assignee:
   - '@kschk24'
 created_date: '2026-06-23 14:34'
-updated_date: '2026-06-25 17:10'
+updated_date: '2026-06-25 17:11'
 labels:
   - feature
   - ready-for-agent
@@ -41,8 +41,6 @@ Out of scope: `config set`, `config set-platform`, `config set-core` (dropped), 
 - [x] #10 per name arg: exact/single match goes straight into the batch (no picker); an ambiguous term opens the picker (tty) or exits 2 (non-tty), scoped to that term
 <!-- AC:END -->
 
-
-
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
@@ -51,6 +49,12 @@ Out of scope: `config set`, `config set-platform`, `config set-core` (dropped), 
 3. download cmd: name: list[str] variadic, per-name resolve into deduped batch, sequential loop continues past failures, summary line, exit 1 on any failure
 4. Tests: variadic batch, tty picker (monkeypatched), batch-past-failure, exit codes, pull ambiguous tty picker
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+608 tests pass (1 skipped). All 10 ACs checked. Committed 448d020.
+<!-- SECTION:NOTES:END -->
 
 ## Comments
 
@@ -100,3 +104,9 @@ created: 2026-06-25 17:03
 **Notes for the implementer:** `from __future__ import annotations` is mandatory (repo rule). Commit via `caveman-commit`. Follow the Qt-free-core boundary — this is all CLI, no GUI imports.
 ---
 <!-- COMMENTS:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Refactored _select_match to return list[Rom] with InquirerPy checkbox for tty ambiguous matches; _select_entries_by_name same pattern for pull; download cmd variadic list[str], deduped batch, continue-past-failure loop, summary line, exit-1 on failure; 6 new tests added (variadic batch, tty picker, batch failure, exit codes). 608 tests pass.
+<!-- SECTION:FINAL_SUMMARY:END -->
