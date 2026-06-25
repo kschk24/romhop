@@ -23,9 +23,23 @@ CELL_TARGET_WIDTH = 160
 # spilling into an extra column. Height is fixed so few-game platforms don't
 # stretch their tiles tall (see overflow handling in _relayout).
 CELL_WIDTH = 150
-CELL_HEIGHT = 170
-# Cover image area inside a tile; the rest holds the name checkbox.
-COVER_HEIGHT = 120
+CELL_HEIGHT = 255
+# Horizontal padding inside the tile (box contentsMargins, both sides).
+COVER_PAD = 4
+# Inner width covers render at: every cover fills this exact width (no
+# left/right letterbox bars), so a row of tiles lines up cleanly.
+COVER_WIDTH = CELL_WIDTH - 2 * COVER_PAD
+# Height of the green DOWNLOADED strip reserved at the very top of a downloaded
+# tile's cover. The cover art is drawn below this strip (never under it), and
+# the strip's top edge is the tile top — so every banner's top lines up.
+BANNER_HEIGHT = 20
+# Cap on cover-art height. Covers scale to full width; this bounds the tallest
+# (portrait, ~0.71 w/h IGDB ratio) so a tile can't grow unbounded. Shorter
+# (wide-aspect) covers stay their natural height, freeing vertical room below
+# for the name — the cover label is sized to the art, not a fixed box.
+MAX_COVER_HEIGHT = 200
+# Placeholder cover height shown before the real pixmap loads.
+DEFAULT_COVER_HEIGHT = 190
 
 
 def columns_for_width(width: int, cell_width: int = CELL_TARGET_WIDTH) -> int:
@@ -157,24 +171,28 @@ class LibraryView(QWidget):
             # rather than the grid stretching tiles to fill the viewport.
             cell.setFixedSize(CELL_WIDTH, CELL_HEIGHT)
             box = QVBoxLayout(cell)
-            box.setContentsMargins(4, 4, 4, 4)
+            box.setContentsMargins(COVER_PAD, COVER_PAD, COVER_PAD, COVER_PAD)
             box.setSpacing(2)
-            # Cover area: blank placeholder until the loader supplies a pixmap.
+            # Cover area: full-width, top-anchored, height tracks the art (set in
+            # _place_cover once the pixmap loads).
+            downloaded = rom.id in self._downloaded_ids
             cover = QLabel()
             cover.setObjectName("Cover")
-            cover.setFixedSize(CELL_WIDTH - 8, COVER_HEIGHT)
-            cover.setAlignment(Qt.AlignCenter)
-            # Platform pill overlaid on the cover image (bottom-left corner).
+            cover.setFixedWidth(COVER_WIDTH)
+            cover.setFixedHeight(DEFAULT_COVER_HEIGHT)
+            cover.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
+            # Platform pill overlaid on the cover image (bottom-left corner);
+            # repositioned to the art's bottom in _place_cover.
             pill = QLabel(self._platform_label(rom), cover)
             pill.setObjectName("PlatformPill")
-            pill.move(4, COVER_HEIGHT - 20)
+            pill.move(4, DEFAULT_COVER_HEIGHT - 20)
             self._pills[rom.id] = pill
-            # Downloaded indicator: dim cover + green ribbon across the top.
-            if rom.id in self._downloaded_ids:
-                cover.setProperty("downloaded", True)
+            # Downloaded indicator: green banner overlaying the top edge of the
+            # cover art, tile-top aligned across the grid.
+            if downloaded:
                 ribbon = QLabel("DOWNLOADED", cover)
                 ribbon.setObjectName("DownloadedRibbon")
-                ribbon.setFixedWidth(CELL_WIDTH - 8)
+                ribbon.setFixedSize(COVER_WIDTH, BANNER_HEIGHT)
                 ribbon.setAlignment(Qt.AlignCenter)
                 ribbon.move(0, 0)
                 self._ribbons[rom.id] = ribbon
@@ -212,9 +230,7 @@ class LibraryView(QWidget):
 
         # Apply cached pixmaps synchronously — zero decode cost.
         for rom in cached:
-            label = self._cover_labels.get(rom.id)
-            if label is not None:
-                label.setPixmap(self._pixmap_cache[rom.id])
+            self._place_cover(rom.id, self._pixmap_cache[rom.id])
 
         # Always cancel any stale loader (may be running from a previous filter).
         self._stop_cover_load()
@@ -226,7 +242,7 @@ class LibraryView(QWidget):
         # Ask it to stop, but keep it referenced in _cover_loaders until it
         # actually finishes — dropping a running QThread crashes the app.
         loader = CoverLoader(misses, self._cover_provider,
-                             cover_size=(CELL_WIDTH - 8, COVER_HEIGHT))
+                             cover_size=(COVER_WIDTH, MAX_COVER_HEIGHT))
         loader.cover_ready.connect(self._apply_cover)
         loader.finished.connect(lambda ldr=loader: self._cover_loaders.discard(ldr))
         self._cover_loaders.add(loader)
@@ -241,15 +257,29 @@ class LibraryView(QWidget):
             self._cover_loader = None
 
     def _apply_cover(self, rom_id: int, image: QImage) -> None:
+        pm = QPixmap.fromImage(image)
+        if pm.isNull():
+            return
+        self._place_cover(rom_id, pm)
+
+    def _place_cover(self, rom_id: int, pm: QPixmap) -> None:
         # A loader from a previous platform may emit for a tile that's gone.
         label = self._cover_labels.get(rom_id)
         if label is None:
             return
-        pm = QPixmap.fromImage(image)
-        if pm.isNull():
-            return
         self._pixmap_cache[rom_id] = pm
         label.setPixmap(pm)
+        # Size the cover label to the art. Shorter covers stay short, so the name
+        # row below moves up and gets more room. The banner overlays the art's
+        # top edge (raised above it); the pill tracks the art's bottom-left.
+        label.setFixedHeight(pm.height())
+        ribbon = self._ribbons.get(rom_id)
+        if ribbon is not None:
+            ribbon.raise_()
+        pill = self._pills.get(rom_id)
+        if pill is not None:
+            pill.move(4, pm.height() - 20)
+            pill.raise_()
 
     def _on_toggle(self, rom_id: int, checked: bool) -> None:
         # Update the global set, then report the new cross-platform selection.

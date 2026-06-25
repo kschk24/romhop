@@ -69,6 +69,8 @@ All notable changes to romhop are documented here. Format loosely follows
 
 ### Changed
 
+- **Gallery covers now render at full tile width with a cleaner downloaded banner (TASK-064).** Cover art scales to the full inner tile width instead of being height-bound, so portrait box-art no longer shows letterbox bars on the left/right and every cover in a row shares the same width. Each cover label is sized to its art (top-anchored), so a shorter wide-aspect cover (e.g. a GBA compilation) frees vertical room for the name below instead of being padded out. The green *DOWNLOADED* banner overlays the top edge of the cover art with its top aligned across the grid, and the old grey dim box is gone.
+
 - **Download and update flows no longer share the progress bar without isolation (TASK-029).** `MainWindow` now tracks `_progress_owner` (`"download"` | `"update"` | `None`). `_claim_progress(owner)` / `_release_progress(owner)` are the only entry points for show/hide; stale callbacks from the losing flow early-return without touching the bar. Clicking "Update" while a download is running cancels the download first, then claims the bar. `_on_update_failed` releases the bar and re-enables the download button (previously the bar was left stuck at "Updating…"). `_start_download` is a no-op when the update flow owns the bar.
 
 - **Qt plugin exclusions moved from `build_appimage.sh` post-hoc deletion to PyInstaller spec (TASK-028).** `libqtiff.so`, `libqjasper.so`, and `libqatspiplugin.so` are now filtered out in `romhop.spec` alongside `libxkbcommon`, so they are never bundled regardless of SONAME changes on the build host. The fragile `find … | xargs rm` block in `build_appimage.sh` is removed.
