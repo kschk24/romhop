@@ -57,6 +57,10 @@ All notable changes to romhop are documented here. Format loosely follows
 
 - **Game detail panel now hides when switching to Settings or Activity Log (TASK-042).** Previously the panel remained visible behind other screens when a tile was selected before navigating away. `show_settings` and `show_activity_log` now call `detail_panel.hide()`; returning to the library restores the panel only when a rom is already loaded. A new `DetailPanel.has_rom` property exposes the selection state cleanly.
 
+### Changed
+
+- **Qt plugin exclusions moved from `build_appimage.sh` post-hoc deletion to PyInstaller spec (TASK-028).** `libqtiff.so`, `libqjasper.so`, and `libqatspiplugin.so` are now filtered out in `romhop.spec` alongside `libxkbcommon`, so they are never bundled regardless of SONAME changes on the build host. The fragile `find … | xargs rm` block in `build_appimage.sh` is removed.
+
 - **DetailPanel image header no longer flips or flashes between cover and screenshot.** Both loaders raced for the same slot, so the displayed image was nondeterministic and re-clicking flashed cover→screenshot every time. Games with a screenshot now load only the screenshot (no cover-upgrade flash), and loaded images are cached per game so re-selecting one re-displays it instantly instead of blanking to a placeholder and reloading.
 
 - **DetailPanel sidebar now stays a fixed 300 px wide.** Previously the panel resized with each game selection as word-wrapped labels responded to varying content; long descriptions, summaries, and file lists now scroll inside the panel rather than pushing it wider or taller.
