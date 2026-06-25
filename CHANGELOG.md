@@ -41,6 +41,8 @@ All notable changes to romhop are documented here. Format loosely follows
 
 ### Fixed
 
+- **Long game titles no longer overlap the cover art in the gallery grid.** Tile name labels had word-wrap enabled but no height bound, so a long title's wrapped height overflowed the fixed-height cell and squeezed the fixed-height cover above it — painting the name on top of the art. The name row is now capped at `NAME_LINES` (2) lines (`setFixedHeight` from font line-spacing); longer titles clip and show the full name on hover via a tooltip.
+
 - **Settings Save now shows a brief toast confirmation (TASK-041).** `_on_settings_saved` in `MainWindow` now posts an `ActivityEvent(SETTINGS_SAVED, "Settings saved")` through `_activity_hub`, which routes it to `ToastManager` as an info-style toast. `ActivityKind.SETTINGS_SAVED` was added to the enum; no new UI widgets introduced.
 
 - **Download progress bar now renders in the frozen Windows build (TASK-005).** `base.qss` had no `QProgressBar` rule, so the bar relied on the native Qt style's default painting — invisible against the dark bottom bar when the frozen build falls back to a different style than source runs use. Added explicit token-colored `QProgressBar` / `QProgressBar::chunk` rules to the shared `base.qss` so every theme renders a visible bar regardless of the active Qt style.

@@ -40,6 +40,11 @@ BANNER_HEIGHT = 20
 MAX_COVER_HEIGHT = 200
 # Placeholder cover height shown before the real pixmap loads.
 DEFAULT_COVER_HEIGHT = 190
+# Fixed vertical budget for the name row under the cover. Bounding it stops a
+# long, word-wrapped title from blowing past its share of the fixed-height cell
+# and squeezing the (fixed-height) cover label — which made names overlap the
+# art. Titles longer than this many lines are elided with an ellipsis.
+NAME_LINES = 2
 
 
 def columns_for_width(width: int, cell_width: int = CELL_TARGET_WIDTH) -> int:
@@ -204,6 +209,13 @@ class LibraryView(QWidget):
             name = QLabel(rom.name)
             name.setObjectName("TileName")
             name.setWordWrap(True)
+            name.setToolTip(rom.name)  # full title on hover when truncated
+            # Fixed budget: word-wrap up to NAME_LINES, then clip. Without this the
+            # name's wrapped height overflows the fixed-height cell and overlaps the
+            # (fixed-height) cover above it.
+            name.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+            line_h = name.fontMetrics().lineSpacing()
+            name.setFixedHeight(line_h * NAME_LINES)
             cover.mousePressEvent = lambda e, rid=rom.id: self._activate_rom(rid)
             name.mousePressEvent = lambda e, rid=rom.id: self._activate_rom(rid)
             name_row = QHBoxLayout()
@@ -215,6 +227,10 @@ class LibraryView(QWidget):
                 lambda pos, rid=rom.id, c=cell: self._show_menu(c, rid)
             )
             box.addWidget(cover)
+            # Slack floats between the cover and the name: covers pin to the cell
+            # top, name rows pin to the cell bottom, so both edges line up across
+            # tiles regardless of cover height (gap opens in the middle instead).
+            box.addStretch(1)
             box.addLayout(name_row)
             self._cells.append(cell)
             self._checks[rom.id] = (check, rom)
