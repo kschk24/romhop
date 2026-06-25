@@ -4,7 +4,7 @@ title: Frozen Windows download progress bar does not render
 status: To Do
 assignee: []
 created_date: '2026-06-16 15:03'
-updated_date: '2026-06-16 22:06'
+updated_date: '2026-06-24 15:03'
 labels:
   - bug
   - ready-for-human
@@ -24,3 +24,9 @@ In the frozen Windows build the download runs fine but the bottom-bar QProgressB
 - [ ] #1 Bottom-bar progress bar renders during download in frozen Windows build
 - [ ] #2 Status label shows full game name, not clipped
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Code complete on branch fix/windows-frozen-gui-theme (commits 68806b5 QProgressBar QSS + 36a974f progress_label size policy/align). Frozen Windows smoke 2026-06-24: wizard verified (TASK-006), but download bar+label NOT yet tested. Remaining acceptance: start a download in the frozen build, confirm AC#1 bottom-bar progress bar renders + AC#2 full game name shows (not clipped).
+<!-- SECTION:NOTES:END -->

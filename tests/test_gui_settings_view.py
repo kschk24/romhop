@@ -256,3 +256,25 @@ def test_load_repopulates_from_new_settings(qtbot):
     s.romm_url = "http://new.test"
     view.load(s)
     assert view._edits["RomM URL"].text() == "http://new.test"
+
+
+def test_choice_field_renders_as_combobox_with_options(qtbot):
+    from PySide6.QtWidgets import QComboBox
+    view = SettingsView(config.default_settings())
+    qtbot.addWidget(view)
+    widget = view._edits["Theme"]
+    assert isinstance(widget, QComboBox)
+    items = [widget.itemText(i) for i in range(widget.count())]
+    assert items == ["system", "light", "dark"]
+    assert widget.currentText() == "system"
+
+
+def test_choice_field_read_widget_returns_selected_text(qtbot):
+    from PySide6.QtWidgets import QComboBox
+    s = config.default_settings()
+    s.theme_mode = "dark"
+    view = SettingsView(s)
+    qtbot.addWidget(view)
+    widget = view._edits["Theme"]
+    assert isinstance(widget, QComboBox)
+    assert view._read_widget("Theme") == "dark"
