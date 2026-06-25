@@ -78,6 +78,8 @@ All notable changes to romhop are documented here. Format loosely follows
   the human-readable platform name, and a scrollable metadata/summary block —
   with action buttons pinned at the bottom. File list removed.
 
+- **App-level theming: theme applied at startup, on save, and on OS scheme change (TASK-055).** `app.run()` calls `theme.apply_theme(app, settings)` immediately after `QApplication` is created, so every top-level window is styled before any widget appears. `colorSchemeChanged` is connected to re-apply the theme live when the OS color scheme changes (relevant in `system` mode). `apply_settings` also re-applies the theme on settings save so a mode change takes effect without a restart. `MainWindow` no longer sets its own stylesheet — per-window `self.setStyleSheet` and the now-unused `theme` import are removed.
+
 - **Game Detail panel.** Clicking a game tile (body, not the checkbox) opens a
   Detail panel docked to the right of the library grid. It shows name,
   platform, and file list instantly, then fills in RomM-fetched metadata

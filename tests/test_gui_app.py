@@ -2,13 +2,13 @@ from romhop import config
 from romhop.romm_client import Rom, RomDetail
 
 
-def test_main_window_builds_and_applies_theme(qtbot):
+def test_main_window_does_not_self_theme(qtbot):
     from romhop.gui.main_window import MainWindow
 
     win = MainWindow(settings=config.default_settings())
     qtbot.addWidget(win)
-    # Theme QSS is applied to the window.
-    assert win.styleSheet() != ""
+    # Theme is applied at app level; MainWindow must not set its own stylesheet.
+    assert win.styleSheet() == ""
     # Bottom bar starts in the idle sync state.
     assert "idle" in win.sync_status_text().lower()
 

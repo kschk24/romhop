@@ -26,7 +26,6 @@ from PySide6.QtWidgets import (
 
 from romhop import config
 from romhop.config import Settings
-from romhop.gui import theme
 from romhop.gui.tray import SYNC_DOT_COLORS, TrayIcon
 from romhop.gui.filter_bar import FilterBar
 from romhop.gui.library_view import LibraryView, platforms_from_roms
@@ -139,9 +138,6 @@ class MainWindow(QWidget):
         self._quit_fn = quit_fn or (lambda: QApplication.instance().quit())
         self._confirm_no_tray = confirm_no_tray or self._default_no_tray_notice
         self.setWindowTitle("romhop")
-
-        loaded = theme.load_active_theme(settings.theme)
-        self.setStyleSheet(loaded.qss)
 
         # Top row: search + settings gear.
         self.search = QLineEdit()

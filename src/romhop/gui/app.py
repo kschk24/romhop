@@ -162,7 +162,7 @@ def run() -> None:
     from romhop import retroarch_cfg
     from romhop.config import get_token, is_configured, load_settings
     from romhop.download import download_rom, friendly_download_error, DownloadCancelled
-    from romhop.gui import covers
+    from romhop.gui import covers, theme
     from romhop.gui.main_window import MainWindow
     from romhop.gui.single_instance import SingleInstance
     from romhop.mapping_cache import MappingCache
@@ -222,6 +222,7 @@ def run() -> None:
                 romm_url=new_settings.romm_url,
             )
         live["settings"] = new_settings
+        theme.apply_theme(app, new_settings)
 
     def download_action(rom, on_progress=None, stop_event=None, on_event=None):
         s = live["settings"]
@@ -365,6 +366,12 @@ def run() -> None:
     app = QApplication(_sys.argv)
     # Hiding the window must not quit the app — the sync worker lives on.
     app.setQuitOnLastWindowClosed(False)
+
+    theme.apply_theme(app, settings)
+    # Re-apply when OS color scheme changes (only meaningful in system mode).
+    app.styleHints().colorSchemeChanged.connect(
+        lambda _scheme: theme.apply_theme(app, live["settings"])
+    )
 
     # Single instance: if one is already up, ask it to surface and exit.
     instance = SingleInstance()
