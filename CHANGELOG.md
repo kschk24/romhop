@@ -55,6 +55,8 @@ All notable changes to romhop are documented here. Format loosely follows
 
 - **`romhop --help` now uses full terminal width on Windows.** Rich's `console.width` returned 80 in the PyInstaller `.exe` even on wider terminals; switched to `shutil.get_terminal_size()` which queries the OS directly, so the frog/body layout fills the real terminal width.
 
+- **Game detail panel now hides when switching to Settings or Activity Log (TASK-042).** Previously the panel remained visible behind other screens when a tile was selected before navigating away. `show_settings` and `show_activity_log` now call `detail_panel.hide()`; returning to the library restores the panel only when a rom is already loaded. A new `DetailPanel.has_rom` property exposes the selection state cleanly.
+
 - **DetailPanel image header no longer flips or flashes between cover and screenshot.** Both loaders raced for the same slot, so the displayed image was nondeterministic and re-clicking flashed cover→screenshot every time. Games with a screenshot now load only the screenshot (no cover-upgrade flash), and loaded images are cached per game so re-selecting one re-displays it instantly instead of blanking to a placeholder and reloading.
 
 - **DetailPanel sidebar now stays a fixed 300 px wide.** Previously the panel resized with each game selection as word-wrapped labels responded to varying content; long descriptions, summaries, and file lists now scroll inside the panel rather than pushing it wider or taller.
