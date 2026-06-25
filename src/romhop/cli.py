@@ -303,24 +303,48 @@ def config_set_core(core: str = typer.Argument(..., help="RetroArch core folder 
     typer.echo(f"core_overrides = {settings.core_overrides}")
 
 
-def _select_match(name: str, matches: list[Rom]) -> Rom:
-    """Pick the rom to download. Prefer an exact (case-insensitive) name match;
-    otherwise refuse to guess and list the candidates so the user can be specific."""
+def _select_match(name: str, matches: list[Rom]) -> list[Rom]:
+    """Resolve a name term to a list of Roms.
+
+    Exact/single match: returns [rom] immediately (no prompt).
+    Ambiguous + tty + InquirerPy: checkbox picker, returns selected list.
+    Ambiguous + non-tty or no InquirerPy: prints candidates, exits 2.
+    """
     if len(matches) == 1:
-        return matches[0]
+        return matches
     exact = [r for r in matches if r.name.lower() == name.lower()]
     if len(exact) == 1:
-        return exact[0]
+        return exact
+
+    if _stdin_isatty():
+        try:
+            from InquirerPy import inquirer
+            names_svc = PlatformNames(_platform_names_path())
+            choices = [
+                {"name": f"{r.name} - {display_name(r, names_svc)}", "value": r, "enabled": False}
+                for r in matches
+            ]
+            selected = inquirer.checkbox(
+                message=f"Multiple games match '{name}' — select to download:",
+                choices=choices,
+            ).execute()
+            if not selected:
+                typer.echo("Nothing selected.", err=True)
+                raise typer.Exit(code=0)
+            return selected
+        except ImportError:
+            pass
+
     typer.echo(f"{len(matches)} games match '{name}'. Be more specific (or use the exact name):", err=True)
-    names = PlatformNames(_platform_names_path())
+    names_svc = PlatformNames(_platform_names_path())
     for r in matches:
-        typer.echo(f"  {r.name} - {display_name(r, names)}", err=True)
+        typer.echo(f"  {r.name} - {display_name(r, names_svc)}", err=True)
     raise typer.Exit(code=2)
 
 
 def _select_entries_by_name(entries: list[RomEntry], name: str) -> list[RomEntry]:
     """Pick cached entries by game name: exact (case-insensitive) preferred,
-    else unique substring. Aborts (exit 2) on ambiguity, exit 1 on no match."""
+    else unique substring. Ambiguous + tty: InquirerPy checkbox. Else exits 2."""
     matches = [e for e in entries if name.lower() in e.game_name.lower()]
     if not matches:
         typer.echo(f"No cached game matching '{name}'.", err=True)
@@ -330,6 +354,25 @@ def _select_entries_by_name(entries: list[RomEntry], name: str) -> list[RomEntry
         return exact
     if len(matches) == 1:
         return matches
+
+    if _stdin_isatty():
+        try:
+            from InquirerPy import inquirer
+            choices = [
+                {"name": e.game_name, "value": e, "enabled": False}
+                for e in matches
+            ]
+            selected = inquirer.checkbox(
+                message=f"Multiple cached games match '{name}' — select to pull:",
+                choices=choices,
+            ).execute()
+            if not selected:
+                typer.echo("Nothing selected.", err=True)
+                raise typer.Exit(code=0)
+            return selected
+        except ImportError:
+            pass
+
     typer.echo(f"{len(matches)} cached games match '{name}'. Be more specific:", err=True)
     for e in matches:
         typer.echo(f"  {e.game_name}", err=True)
@@ -453,12 +496,12 @@ def _exit_http(exc: httpx.HTTPStatusError, *, not_found: str | None = None):
 
 @app.command()
 def download(
-    name: str = typer.Argument(
-        ..., help="Game name (substring match)",
+    name: list[str] = typer.Argument(
+        ..., help="Game name(s) (substring match); pass multiple to batch-download",
         autocompletion=complete_game_name,
-        )
-    ):
-    """Download a game into the ES-DE layout (exact name, or a unique substring)."""
+    )
+):
+    """Download games into the ES-DE layout (exact name, substring, or batch of names)."""
     settings = config.load_settings()
     if not config.roms_root_configured(settings):
         typer.echo("ROMs folder not set. Run: romhop setup  (or: romhop config set roms_root <path>)", err=True)
@@ -468,43 +511,70 @@ def download(
         typer.echo(problem, err=True)
         raise typer.Exit(code=1)
     client = _client()
-    try:
-        roms = client.list_roms(search_term=name)
-    except httpx.HTTPStatusError as exc:
-        _exit_http(exc)
-    except httpx.HTTPError as exc:
-        typer.echo(f"Could not reach RomM: {exc}", err=True)
-        raise typer.Exit(code=1)
-    PlatformNames(_platform_names_path()).update_from_roms(roms)
-    matches = [r for r in roms if name.lower() in r.name.lower()]
-    if not matches:
-        typer.echo(f"No game matching '{name}'.", err=True)
-        raise typer.Exit(code=1)
-    rom = _select_match(name, matches)
-    # Already on disk? Skip the transfer, just record the mapping for save sync.
-    system = esde_system_for_slug(rom.platform_slug, settings.platform_overrides)
-    locals_ = index_local_library(settings.roms_root, settings.platform_overrides, system=system)
-    target_keys = {norm(rom.fs_name), norm(rom.fs_name_no_ext)}
-    already = next((g for g in locals_ if g.match_key in target_keys), None)
-    if already is not None:
-        cache = MappingCache(_cache_path())
-        cache.add(seed_entry(rom.id, system, rom.fs_name_no_ext, already.file_names))
-        cache.save()
-        typer.echo(f"Already local: {rom.name} — mapped for save sync (no download).")
-        raise typer.Exit(code=0)
+
+    # Resolve each name term to Roms, building a deduped batch.
+    batch: list[Rom] = []
+    seen_ids: set[int] = set()
+    for term in name:
+        try:
+            roms = client.list_roms(search_term=term)
+        except httpx.HTTPStatusError as exc:
+            _exit_http(exc)
+        except httpx.HTTPError as exc:
+            typer.echo(f"Could not reach RomM: {exc}", err=True)
+            raise typer.Exit(code=1)
+        PlatformNames(_platform_names_path()).update_from_roms(roms)
+        matches = [r for r in roms if term.lower() in r.name.lower()]
+        if not matches:
+            typer.echo(f"No game matching '{term}'.", err=True)
+            raise typer.Exit(code=1)
+        for rom in _select_match(term, matches):
+            if rom.id not in seen_ids:
+                seen_ids.add(rom.id)
+                batch.append(rom)
+
     cache = MappingCache(_cache_path())
-    try:
-        with _download_progress(rom.name) as on_progress:
-            m3u = download_rom(rom, client, roms_root=settings.roms_root, cache=cache,
-                               overrides=settings.platform_overrides, on_progress=on_progress)
-    except httpx.HTTPStatusError as exc:
-        _exit_http(exc, not_found=(
-            f"RomM has no downloadable files for '{rom.name}' (id {rom.id}). "
-            "It looks unmatched/unscanned on the server — try a rescan in RomM."))
-    except httpx.HTTPError as exc:
-        typer.echo(f"Could not reach RomM: {exc}", err=True)
+    n_downloaded = 0
+    n_skipped = 0
+    n_failed = 0
+
+    for rom in batch:
+        system = esde_system_for_slug(rom.platform_slug, settings.platform_overrides)
+        locals_ = index_local_library(settings.roms_root, settings.platform_overrides, system=system)
+        target_keys = {norm(rom.fs_name), norm(rom.fs_name_no_ext)}
+        already = next((g for g in locals_ if g.match_key in target_keys), None)
+        if already is not None:
+            cache.add(seed_entry(rom.id, system, rom.fs_name_no_ext, already.file_names))
+            typer.echo(f"Already local: {rom.name} — mapped for save sync (no download).")
+            n_skipped += 1
+            continue
+        try:
+            with _download_progress(rom.name) as on_progress:
+                m3u = download_rom(rom, client, roms_root=settings.roms_root, cache=cache,
+                                   overrides=settings.platform_overrides, on_progress=on_progress)
+            typer.echo(f"Downloaded {rom.name} -> {m3u}")
+            n_downloaded += 1
+        except httpx.HTTPStatusError as exc:
+            code = exc.response.status_code
+            if code == 404:
+                typer.echo(
+                    f"Failed {rom.name}: RomM has no downloadable files — try a rescan in RomM.",
+                    err=True)
+            else:
+                typer.echo(f"Failed {rom.name}: HTTP {code} {exc.response.reason_phrase}.", err=True)
+            n_failed += 1
+        except httpx.HTTPError as exc:
+            typer.echo(f"Failed {rom.name}: {exc}", err=True)
+            n_failed += 1
+
+    # Persist already-local mappings (download_rom already saves for each download).
+    cache.save()
+
+    if len(batch) > 1 or n_failed:
+        typer.echo(f"Downloaded {n_downloaded}, skipped {n_skipped} (already local), failed {n_failed}.")
+
+    if n_failed:
         raise typer.Exit(code=1)
-    typer.echo(f"Downloaded {rom.name} -> {m3u}")
 
 
 @app.command()

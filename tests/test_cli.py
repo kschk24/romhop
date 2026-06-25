@@ -744,3 +744,161 @@ def test_download_ambiguous_lists_platform(monkeypatch, tmp_path):
     assert result.exit_code == 2
     assert "Super Mario Land - Game Boy" in combined
     assert "Super Mario Land 2: 6 Golden Coins - Game Boy" in combined
+
+
+def test_download_multi_name_batch(monkeypatch, tmp_path):
+    """Multiple name args resolve and download as one batch."""
+    _login(monkeypatch, tmp_path)
+    sonic = Rom(id=1, name="Sonic", platform_slug="genesis", fs_name="s.md",
+                fs_name_no_ext="s", file_names=["s.md"])
+    mario = Rom(id=2, name="Mario", platform_slug="snes", fs_name="m.sfc",
+                fs_name_no_ext="m", file_names=["m.sfc"])
+
+    class FakeClient:
+        def __init__(self, *a, **k): pass
+        def list_roms(self, search_term=None):
+            return [sonic] if search_term == "Sonic" else [mario]
+    monkeypatch.setattr(cli, "RommClient", FakeClient)
+
+    downloaded = []
+    def fake_download(rom_arg, client, **kwargs):
+        downloaded.append(rom_arg.id)
+        return tmp_path / f"{rom_arg.fs_name_no_ext}.m3u"
+    monkeypatch.setattr(cli, "download_rom", fake_download)
+
+    result = runner.invoke(cli.app, ["download", "Sonic", "Mario"])
+    assert result.exit_code == 0, result.output
+    assert sorted(downloaded) == [1, 2]
+    assert "Downloaded 2" in result.output
+
+
+def test_download_batch_continues_past_failure(monkeypatch, tmp_path):
+    """Batch keeps going when one game fails; prints summary; exits 1."""
+    import httpx as _httpx
+    _login(monkeypatch, tmp_path)
+    broken = Rom(id=1, name="Broken", platform_slug="snes", fs_name="b.zip",
+                 fs_name_no_ext="b", file_names=["b.zip"])
+    good = Rom(id=2, name="Good", platform_slug="snes", fs_name="g.zip",
+               fs_name_no_ext="g", file_names=["g.zip"])
+
+    class FakeClient:
+        def __init__(self, *a, **k): pass
+        def list_roms(self, search_term=None):
+            return [broken] if search_term == "Broken" else [good]
+    monkeypatch.setattr(cli, "RommClient", FakeClient)
+
+    def fake_download(rom_arg, client, **kwargs):
+        if rom_arg.id == 1:
+            raise _httpx.HTTPStatusError(
+                "500", request=_httpx.Request("GET", "http://romm.test"),
+                response=_httpx.Response(500))
+        return tmp_path / "g.m3u"
+    monkeypatch.setattr(cli, "download_rom", fake_download)
+
+    result = runner.invoke(cli.app, ["download", "Broken", "Good"])
+    assert result.exit_code == 1
+    assert "Downloaded 1" in result.output
+    assert "failed 1" in result.output
+
+
+def test_download_batch_exit_0_all_success(monkeypatch, tmp_path):
+    """All games in batch succeed → exit 0."""
+    _login(monkeypatch, tmp_path)
+    roms = [
+        Rom(id=1, name="Sonic", platform_slug="genesis", fs_name="s.md",
+            fs_name_no_ext="s", file_names=["s.md"]),
+        Rom(id=2, name="Mario", platform_slug="snes", fs_name="m.sfc",
+            fs_name_no_ext="m", file_names=["m.sfc"]),
+    ]
+
+    class FakeClient:
+        def __init__(self, *a, **k): pass
+        def list_roms(self, search_term=None):
+            return [r for r in roms if search_term and search_term.lower() in r.name.lower()]
+    monkeypatch.setattr(cli, "RommClient", FakeClient)
+    monkeypatch.setattr(cli, "download_rom",
+                        lambda r, *a, **k: tmp_path / f"{r.fs_name_no_ext}.m3u")
+
+    result = runner.invoke(cli.app, ["download", "Sonic", "Mario"])
+    assert result.exit_code == 0
+    assert "failed 0" in result.output
+
+
+def test_download_ambiguous_tty_picker(monkeypatch, tmp_path):
+    """Ambiguous match on tty → InquirerPy checkbox; selected games download."""
+    _login(monkeypatch, tmp_path)
+    sonic1 = Rom(id=1, name="Sonic", platform_slug="genesis", fs_name="s1.md",
+                 fs_name_no_ext="s1", file_names=["s1.md"])
+    sonic2 = Rom(id=2, name="Sonic 2", platform_slug="genesis", fs_name="s2.md",
+                 fs_name_no_ext="s2", file_names=["s2.md"])
+    _fake_client(monkeypatch, [sonic1, sonic2])
+    monkeypatch.setattr(cli, "_stdin_isatty", lambda: True)
+
+    class FakeCheckbox:
+        def __init__(self, **kwargs): self._choices = kwargs["choices"]
+        def execute(self): return [c["value"] for c in self._choices[:1]]  # select first
+
+    class FakeInquirer:
+        @staticmethod
+        def checkbox(**kwargs): return FakeCheckbox(**kwargs)
+
+    monkeypatch.setattr("InquirerPy.inquirer", FakeInquirer, raising=False)
+
+    downloaded = []
+    monkeypatch.setattr(cli, "download_rom",
+                        lambda r, *a, **k: downloaded.append(r.id) or (tmp_path / "x.m3u"))
+
+    result = runner.invoke(cli.app, ["download", "Sonic"])
+    assert result.exit_code == 0, result.output
+    assert downloaded == [1]
+
+
+def test_pull_ambiguous_tty_picker(monkeypatch, tmp_path):
+    """Ambiguous pull name on tty → InquirerPy checkbox; selected entries pulled."""
+    _login(monkeypatch, tmp_path)
+    _fake_client(monkeypatch, [])
+    monkeypatch.setattr(cli, "_cache_path", lambda: tmp_path / "cache.json")
+
+    from romhop.mapping_cache import MappingCache, RomEntry
+    c = MappingCache(tmp_path / "cache.json")
+    c.add(RomEntry(rom_id=1, system="genesis", game_name="Sonic 1", candidate_basenames={"Sonic 1"}))
+    c.add(RomEntry(rom_id=2, system="genesis", game_name="Sonic 2", candidate_basenames={"Sonic 2"}))
+    c.save()
+
+    monkeypatch.setattr(cli, "_stdin_isatty", lambda: True)
+
+    class FakeCheckbox:
+        def __init__(self, **kwargs): self._choices = kwargs["choices"]
+        def execute(self): return [self._choices[0]["value"]]  # pick first
+
+    class FakeInquirer:
+        @staticmethod
+        def checkbox(**kwargs): return FakeCheckbox(**kwargs)
+
+    monkeypatch.setattr("InquirerPy.inquirer", FakeInquirer, raising=False)
+
+    captured = {}
+    def fake_pull(client, entries, settings, *, take_remote, on_conflict, on_written, on_error):
+        captured["ids"] = [e.rom_id for e in entries]
+        return {"written": 0, "skipped": 0, "kept": 0}
+    monkeypatch.setattr(cli, "pull_games", fake_pull)
+
+    result = runner.invoke(cli.app, ["pull", "Sonic"])
+    assert result.exit_code == 0, result.output
+    assert captured["ids"] == [1]
+
+
+def test_pull_ambiguous_nontty_exits_2(monkeypatch, tmp_path):
+    """Ambiguous pull on non-tty still exits 2 (scriptable contract unchanged)."""
+    _login(monkeypatch, tmp_path)
+    _fake_client(monkeypatch, [])
+    monkeypatch.setattr(cli, "_cache_path", lambda: tmp_path / "cache.json")
+
+    from romhop.mapping_cache import MappingCache, RomEntry
+    c = MappingCache(tmp_path / "cache.json")
+    c.add(RomEntry(rom_id=1, system="genesis", game_name="Sonic 1", candidate_basenames={"Sonic 1"}))
+    c.add(RomEntry(rom_id=2, system="genesis", game_name="Sonic 2", candidate_basenames={"Sonic 2"}))
+    c.save()
+
+    result = runner.invoke(cli.app, ["pull", "Sonic"])
+    assert result.exit_code == 2
