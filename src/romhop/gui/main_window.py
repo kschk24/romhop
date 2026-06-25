@@ -38,6 +38,7 @@ from romhop.gui.activity_hub import ActivityHub
 from romhop.gui.activity_log import ActivityLogView
 from romhop.gui.toast import ToastManager
 from romhop.gui.workers import CallableWorker, DownloadWorker, PullWorker, SyncWorker, UpdateWorker
+from romhop.activity import ActivityEvent, ActivityKind
 from romhop.local_index import downloaded_rom_ids
 from romhop.platform_names import display_name
 
@@ -531,6 +532,7 @@ class MainWindow(QWidget):
         if self.tray is not None:
             self.tray.set_sync_checked(enabled)
         self._reconcile_sync(enabled)
+        self._activity_hub.post(ActivityEvent(ActivityKind.SETTINGS_SAVED, "Settings saved"))
 
     def _on_selection(self, roms: list) -> None:
         self._sel_label.setText(f"{len(roms)} selected")
