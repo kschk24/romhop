@@ -175,6 +175,10 @@ class DetailPanel(QWidget):
             box.addWidget(btn)
         self.hide()
 
+    @property
+    def has_rom(self) -> bool:
+        return self._rom is not None
+
     def set_downloaded(self, ids: set[int]) -> None:
         self._downloaded_ids = set(ids)
 

@@ -313,6 +313,7 @@ class MainWindow(QWidget):
         self.uncheck_btn.hide()
         self.download_btn.hide()
         self.pull_btn.hide()
+        self.detail_panel.hide()
         self.search.clear()
         self.stack.setCurrentIndex(1)
 
@@ -322,6 +323,8 @@ class MainWindow(QWidget):
         self.uncheck_btn.show()
         self.download_btn.show()
         self.pull_btn.show()
+        if self.detail_panel.has_rom:
+            self.detail_panel.show()
         self.search.clear()
         self.stack.setCurrentIndex(0)
 
@@ -334,6 +337,7 @@ class MainWindow(QWidget):
         self.uncheck_btn.hide()
         self.download_btn.hide()
         self.pull_btn.hide()
+        self.detail_panel.hide()
         self.search.clear()
         self.stack.setCurrentIndex(2)
 
