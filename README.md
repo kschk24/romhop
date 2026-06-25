@@ -168,6 +168,33 @@ different systems aren't confused. When two systems do share a save basename,
 
 Scanning needs no extra token scope (`roms.read`, which you already have).
 
+## Upload local games
+
+Push games that exist on disk but aren't yet in RomM up to your library. Upload
+finds your local *unmatched* games — those under `roms_root` with no corresponding
+RomM entry — and lets you select which ones to send. (The GUI exposes the same
+action as an **"Upload local games to RomM"** button in Settings, alongside Scan;
+it's disabled when `roms_root` is unset.)
+
+```
+romhop upload                      # interactive checklist of all unmatched games
+romhop upload zelda mario          # filter by name (substring match, multiple OK)
+romhop upload --platform gc        # filter to one ES-DE system dir (repeatable)
+romhop upload --yes                # non-interactive: upload all resolvable, no prompt
+```
+
+The interactive picker groups games by ES-DE system dir and defaults to nothing
+checked; use `ctrl+a` to select all. If a game's platform doesn't exist in RomM
+yet, romhop offers to create it before uploading. Games with no resolvable
+platform are shown disabled with an explanation.
+
+If a previous upload was killed mid-batch, romhop cleans up any orphaned
+in-progress uploads on the server automatically before starting the next one.
+
+Uploading (and creating missing platforms) requires `roms.write` and
+`platforms.write` scope on the API token; discovering unmatched games only needs
+`roms.read`.
+
 ## Configuration
 
 ```

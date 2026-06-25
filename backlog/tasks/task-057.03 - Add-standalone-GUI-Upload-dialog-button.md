@@ -1,7 +1,7 @@
 ---
 id: TASK-057.03
 title: Add standalone GUI Upload dialog + button
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-06-25 17:36'
@@ -32,8 +32,6 @@ Evolve ScanResultDialog's upload picker into a standalone Upload dialog opened b
 - [x] #6 pytest-qt tests cover open/filter/sort/select-all and that upload_action is called with selected games
 <!-- AC:END -->
 
-
-
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
@@ -43,3 +41,9 @@ Evolve ScanResultDialog's upload picker into a standalone Upload dialog opened b
 4. gui/app.py: discover_fn closure (list_roms + index_local + match + discover_uploadable, no cache write); inject into MainWindow; broaden recovery copy ('scan or upload')
 5. tests/test_upload_dialog.py: pytest-qt tests for open/filter/sort/select-all/upload_action called with selected
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented: gui/upload_dialog.py (new UploadDialog), settings_view.py (upload_requested signal + upload_btn + set_uploading), main_window.py (discover_action param + run_upload_discover flow), app.py (discover_action closure + broadened recovery copy). 13 new pytest-qt tests, all 641 pass. Committed 2500679.
+<!-- SECTION:NOTES:END -->
