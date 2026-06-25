@@ -1,9 +1,10 @@
 ---
 id: TASK-049
 title: Windows installed-apps still shows 'RomHop version main' on installed build
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-24 15:07'
+updated_date: '2026-06-25 01:20'
 labels:
   - bug
   - windows

@@ -1,16 +1,16 @@
 ---
 id: TASK-005
 title: Frozen Windows download progress bar does not render
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-16 15:03'
-updated_date: '2026-06-24 15:03'
+updated_date: '2026-06-25 00:57'
 labels:
   - bug
   - ready-for-human
 dependencies: []
 priority: medium
-ordinal: 5000
+ordinal: 70000
 ---
 
 ## Description
