@@ -10,21 +10,6 @@ rm -rf "$APPDIR"
 mkdir -p "$APPDIR/usr/bin"
 cp -r packaging/dist/romhop "$APPDIR/usr/bin/romhop"
 
-# Remove Qt imageformat plugins whose system-lib deps have changed SONAME on
-# newer distros (libtiff.so.5 → .so.6 on Fedora/Arch/Ubuntu 23.04+). A failed
-# dlopen can corrupt dl-state and crash unrelated subsequent plugin loads.
-# romhop only uses JPEG/PNG/WebP for cover art; TIFF/JASPER are not needed.
-find "$APPDIR/usr/bin/romhop" \
-    -name "libqtiff.so" -o -name "libqjasper.so" \
-    | xargs --no-run-if-empty rm -v
-
-# Remove Qt's AT-SPI2 accessible plugin.  It dlopen's libatspi.so.0 from the
-# system; on Arch/Fedora the SONAME version differs from the Ubuntu 24.04 build
-# used in CI, causing a segfault on QApplication init.  romhop ships no screen-
-# reader features, so dropping the plugin is safe.
-find "$APPDIR/usr/bin/romhop" \
-    -name "libqatspiplugin.so" \
-    | xargs --no-run-if-empty rm -v
 install -m 0755 packaging/linux/AppRun "$APPDIR/AppRun"
 cp packaging/linux/romhop.desktop "$APPDIR/romhop.desktop"
 cp src/romhop/gui/assets/romhop.png "$APPDIR/romhop.png"

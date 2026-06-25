@@ -31,9 +31,21 @@ a = Analysis(
 # and SIGSEGVs on the first keypress reaching a window/dialog (see TASK-025).
 # Excluding it lets the loader use the system lib (.so.0 ABI is stable) — the
 # standard Qt-on-Linux approach. No-op on Windows, which ships neither.
+#
+# Also drop Qt imageformat plugins whose system-lib deps track SONAME on the
+# host distro (libtiff.so.5→.so.6 on Fedora/Arch; libqjasper similarly). A
+# failed dlopen can corrupt dl-state and crash unrelated plugin loads. romhop
+# only needs JPEG/PNG/WebP for cover art — TIFF/JASPER are unused.
+#
+# Drop Qt's AT-SPI2 accessibility plugin: it dlopen's libatspi.so.0 from the
+# system; the SONAME version on Arch/Fedora differs from the Ubuntu 24.04 CI
+# build, causing a segfault on QApplication init. romhop ships no screen-reader
+# features so removing it is safe (see TASK-028).
+_EXCLUDED_PLUGINS = {"libqtiff.so", "libqjasper.so", "libqatspiplugin.so"}
 a.binaries = [
     b for b in a.binaries
     if not os.path.basename(b[0]).startswith("libxkbcommon")
+    and os.path.basename(b[0]) not in _EXCLUDED_PLUGINS
 ]
 
 pyz = PYZ(a.pure)
