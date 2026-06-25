@@ -22,6 +22,50 @@ def _is_real_rom_file(fname: str) -> bool:
     return Path(fname).suffix.lower() not in _ARTIFACT_SUFFIXES
 
 
+@dataclass
+class UploadCandidates:
+    """Categorized result from discover_uploadable."""
+    resolvable: list[tuple[LocalGame, dict]]       # (game, romm_platform_dict)
+    missing_platform: list[tuple[LocalGame, str]]  # (game, candidate_slug)
+    unresolvable: list[LocalGame]
+
+
+def discover_uploadable(
+    local_games: list[LocalGame],
+    romm_platforms: list[dict],
+    overrides: dict[str, str],
+) -> UploadCandidates:
+    """Categorize unmatched local games against known RomM platforms.
+
+    Returns three buckets:
+    - resolvable: platform exists in RomM
+    - missing_platform: platform derivable but not yet created
+    - unresolvable: no slug derivable at all
+    """
+    from romhop.platform_resolve import invert_to_slugs, resolve_platform
+
+    resolvable: list[tuple[LocalGame, dict]] = []
+    missing_platform: list[tuple[LocalGame, str]] = []
+    unresolvable: list[LocalGame] = []
+
+    for game in local_games:
+        platform = resolve_platform(game.system, romm_platforms, overrides)
+        if platform is not None:
+            resolvable.append((game, platform))
+        else:
+            slugs = invert_to_slugs(game.system, overrides)
+            if slugs:
+                missing_platform.append((game, slugs[0]))
+            else:
+                unresolvable.append(game)
+
+    return UploadCandidates(
+        resolvable=resolvable,
+        missing_platform=missing_platform,
+        unresolvable=unresolvable,
+    )
+
+
 def _file_path(game: LocalGame, roms_root: Path, fname: str) -> Path:
     """Resolve a game file's on-disk path.
 

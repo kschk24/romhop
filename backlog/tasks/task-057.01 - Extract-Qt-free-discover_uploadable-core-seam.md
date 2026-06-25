@@ -1,9 +1,11 @@
 ---
 id: TASK-057.01
 title: Extract Qt-free discover_uploadable core seam
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-06-25 17:35'
+updated_date: '2026-06-25 17:45'
 labels:
   - upload-frontdoor
 dependencies: []
@@ -21,8 +23,8 @@ Extract the 'find unmatched local games + categorize' logic currently inline in 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 discover_uploadable(local_games, romm_platforms, overrides) returns categorized {resolvable, missing_platform, unresolvable}
-- [ ] #2 Function is Qt-free and echo-free (no PySide6, no typer.echo); lives in upload.py or scan.py
-- [ ] #3 cli.py _run_upload_unmatched refactored to call it; existing scan-path upload behavior unchanged
-- [ ] #4 Unit test covers the three categories incl. an ES-DE system that diverges from its RomM slug
+- [x] #1 discover_uploadable(local_games, romm_platforms, overrides) returns categorized {resolvable, missing_platform, unresolvable}
+- [x] #2 Function is Qt-free and echo-free (no PySide6, no typer.echo); lives in upload.py or scan.py
+- [x] #3 cli.py _run_upload_unmatched refactored to call it; existing scan-path upload behavior unchanged
+- [x] #4 Unit test covers the three categories incl. an ES-DE system that diverges from its RomM slug
 <!-- AC:END -->

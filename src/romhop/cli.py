@@ -689,7 +689,7 @@ def _run_scan(settings, *, assume_yes: bool):
 
 def _run_upload_unmatched(settings, unmatched, *, assume_yes: bool) -> None:
     """Upload resolvable unmatched games to RomM after a scan."""
-    from romhop.platform_resolve import invert_to_slugs, resolve_platform
+    from romhop.upload import discover_uploadable
 
     client = _client()
     cache = MappingCache(_cache_path())
@@ -701,38 +701,23 @@ def _run_upload_unmatched(settings, unmatched, *, assume_yes: bool) -> None:
         typer.echo(f"Could not fetch RomM platforms: {exc}", err=True)
         return
 
-    # Resolve / categorize games.
-    resolvable: list = []
-    missing_platform: list = []
-    unresolvable: list = []
+    cats = discover_uploadable(unmatched, romm_platforms, settings.platform_overrides)
 
-    for game in unmatched:
-        from romhop.platform_resolve import resolve_platform as _resolve
-        platform = _resolve(game.system, romm_platforms, settings.platform_overrides)
-        if platform is not None:
-            resolvable.append((game, platform))
-        else:
-            slugs = invert_to_slugs(game.system, settings.platform_overrides)
-            if slugs:
-                missing_platform.append((game, slugs[0]))
-            else:
-                unresolvable.append(game)
-
-    if unresolvable:
+    if cats.unresolvable:
         typer.echo("Cannot upload (no RomM slug derivable):")
-        for g in unresolvable:
+        for g in cats.unresolvable:
             typer.echo(f"  {g.system}/{g.game_name}")
 
     # Select games to upload (interactive or flag).
     all_candidates = [(g, p["id"], p.get("slug") or p.get("fs_slug", g.system))
-                      for g, p in resolvable]
+                      for g, p in cats.resolvable]
 
-    if missing_platform:
+    if cats.missing_platform:
         typer.echo("Platforms missing in RomM:")
-        for game, slug in missing_platform:
+        for game, slug in cats.missing_platform:
             typer.echo(f"  {game.system}/{game.game_name}  → would create '{slug}'")
         if assume_yes or typer.confirm("Create missing platforms and include those games?", default=False):
-            for game, slug in missing_platform:
+            for game, slug in cats.missing_platform:
                 try:
                     new_platform = client.create_platform(slug)
                     pid = new_platform["id"]

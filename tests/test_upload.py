@@ -547,3 +547,94 @@ def test_run_upload_batch_cancelled_leaves_in_progress(tmp_path, monkeypatch):
     )
 
     assert clean is False
+
+
+# --- discover_uploadable tests ---
+
+
+def _platform(slug: str, fs_slug: str | None = None, pid: int = 1) -> dict:
+    return {"id": pid, "slug": slug, "fs_slug": fs_slug or slug}
+
+
+def test_discover_uploadable_resolvable():
+    from romhop.upload import discover_uploadable
+
+    game = _game(system="snes", name="Mario.sfc")
+    platforms = [_platform("snes")]
+    cats = discover_uploadable([game], platforms, {})
+
+    assert cats.resolvable == [(game, platforms[0])]
+    assert cats.missing_platform == []
+    assert cats.unresolvable == []
+
+
+def test_discover_uploadable_missing_platform():
+    """Platform not in RomM but slug derivable → missing_platform bucket."""
+    from romhop.upload import discover_uploadable
+
+    game = _game(system="snes", name="Mario.sfc")
+    cats = discover_uploadable([game], [], {})
+
+    assert cats.resolvable == []
+    assert len(cats.missing_platform) == 1
+    assert cats.missing_platform[0] == (game, "snes")
+    assert cats.unresolvable == []
+
+
+
+def test_discover_uploadable_unresolvable_monkeypatched(monkeypatch):
+    """invert_to_slugs returns [] → game lands in unresolvable."""
+    from romhop.upload import discover_uploadable
+    import romhop.platform_resolve as pr
+
+    monkeypatch.setattr(pr, "invert_to_slugs", lambda system, overrides: [])
+
+    game = _game(system="weirdos", name="Odd.rom")
+    cats = discover_uploadable([game], [], {})
+
+    assert cats.resolvable == []
+    assert cats.missing_platform == []
+    assert cats.unresolvable == [game]
+
+
+def test_discover_uploadable_esde_diverges_from_slug():
+    """ES-DE system dir 'gc' maps to RomM slug 'ngc' via DEFAULT_PLATFORM_OVERRIDES."""
+    from romhop.upload import discover_uploadable
+
+    game = _game(system="gc", name="Zelda.iso")
+    # RomM has platform with slug "ngc"
+    platforms = [_platform("ngc", pid=7)]
+    cats = discover_uploadable([game], platforms, {})
+
+    assert len(cats.resolvable) == 1
+    assert cats.resolvable[0][0] is game
+    assert cats.resolvable[0][1]["id"] == 7
+    assert cats.missing_platform == []
+    assert cats.unresolvable == []
+
+
+def test_discover_uploadable_three_categories_mixed():
+    """All three buckets populated in one call."""
+    from romhop.upload import discover_uploadable
+    import romhop.platform_resolve as pr
+
+    game_res = _game(system="snes", name="Mario.sfc")
+    game_miss = _game(system="gba", name="Metroid.gba")
+    game_bad = _game(system="unknown99", name="Bad.rom")
+
+    platforms = [_platform("snes", pid=1)]
+
+    orig_invert = pr.invert_to_slugs
+
+    def _fake_invert(system, overrides):
+        if system == "unknown99":
+            return []
+        return orig_invert(system, overrides)
+
+    import unittest.mock as mock
+    with mock.patch("romhop.platform_resolve.invert_to_slugs", side_effect=_fake_invert):
+        cats = discover_uploadable([game_res, game_miss, game_bad], platforms, {})
+
+    assert cats.resolvable == [(game_res, platforms[0])]
+    assert cats.missing_platform[0][0] is game_miss
+    assert cats.unresolvable == [game_bad]
