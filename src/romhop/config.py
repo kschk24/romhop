@@ -29,6 +29,7 @@ class Settings:
     sort_states_by_core: bool = False
     sync_delay_seconds: float = 8.0
     sync_enabled: bool = False
+    start_on_login: bool = False
     theme: str = "default"
     download_rate_limit_kbps: int = 0  # 0 = unlimited
     auto_update_check: bool = True
@@ -73,6 +74,8 @@ SCHEMA: list[FieldSpec] = [
               "Mirror RetroArch's per-core state subfolders"),
     FieldSpec("sync_enabled", "behavior", "Enable save sync", "bool",
               "Auto-push changed saves to RomM after play"),
+    FieldSpec("start_on_login", "behavior", "Start on login", "bool",
+              "Launch romhop to the system tray when you log in"),
     FieldSpec("sync_delay_seconds", "behavior", "Sync delay (seconds)", "float",
               "Debounce window before pushing a changed save"),
     FieldSpec("download_rate_limit_kbps", "behavior",

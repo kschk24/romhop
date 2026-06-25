@@ -124,6 +124,26 @@ def _maybe_smoke_exit(argv) -> bool:
     _sys.exit(0)
 
 
+def _wants_tray(argv) -> bool:
+    """True when launched with ``--tray`` (autostart starts hidden in the tray)."""
+    return "--tray" in argv
+
+
+def _apply_autostart(old_settings, new_settings) -> None:
+    """Register/unregister OS autostart when the start_on_login flag flips.
+
+    Best-effort: a registry/file failure is logged, never raised, so a bad OS
+    write can't break saving settings.
+    """
+    if old_settings.start_on_login == new_settings.start_on_login:
+        return
+    from romhop.gui import autostart
+    try:
+        autostart.set_enabled(new_settings.start_on_login)
+    except Exception as exc:  # noqa: BLE001 - best-effort OS side effect
+        logger.warning("Could not update start-on-login autostart: %s", exc)
+
+
 def _install_sigint_handler(app, window) -> None:
     """Install a Ctrl-C handler so terminal launches exit cleanly.
 
@@ -221,6 +241,7 @@ def run() -> None:
                 token=get_token() or "",
                 romm_url=new_settings.romm_url,
             )
+        _apply_autostart(live["settings"], new_settings)
         live["settings"] = new_settings
 
     def download_action(rom, on_progress=None, stop_event=None, on_event=None):
@@ -409,6 +430,10 @@ def run() -> None:
         ))
     if settings.auto_update_check and _updates_supported:
         window.check_for_updates()
+    # Autostart launches with --tray: stay hidden in the system tray instead of
+    # popping the window at login. Needs a real tray, and only makes sense once
+    # configured (an unconfigured launch must surface the setup wizard).
+    start_hidden = _wants_tray(_sys.argv) and window.tray is not None
     if not is_configured(settings):
         # Unconfigured: guide the user before trying to talk to RomM. The
         # wizard's completion handler refreshes the library itself; a cancel
@@ -420,12 +445,14 @@ def run() -> None:
         # bad/stale URL or revoked token passes is_configured yet fails here. Open
         # the window, surface the failure, and guide the user back into the wizard
         # so they can fix it instead of staring at an empty, silent library.
-        window.show()
+        if not start_hidden:
+            window.show()
         try:
             window.load_library()
         except Exception as exc:  # noqa: BLE001 - keep the window alive
             logger.warning("Could not load RomM library at startup: %s", exc)
             window.set_sync_status(f"library load failed: {exc}")
+            window.show()  # surface the failure even if we started hidden to tray
             window.run_setup_wizard()
     _install_sigint_handler(app, window)
     _sys.exit(app.exec())

@@ -55,6 +55,63 @@ def test_no_flag_is_not_handled():
     assert gui_app._maybe_bootstrap(["romhop"]) is False
 
 
+def test_wants_tray_detects_flag():
+    assert gui_app._wants_tray(["romhop", "--tray"]) is True
+    assert gui_app._wants_tray(["romhop"]) is False
+
+
+def test_apply_autostart_registers_when_flag_turns_on(monkeypatch):
+    from dataclasses import replace
+    from romhop import config
+    from romhop.gui import autostart
+
+    calls = []
+    monkeypatch.setattr(autostart, "set_enabled", lambda v: calls.append(v))
+    old = config.default_settings()
+    new = replace(old, start_on_login=True)
+    gui_app._apply_autostart(old, new)
+    assert calls == [True]
+
+
+def test_apply_autostart_unregisters_when_flag_turns_off(monkeypatch):
+    from dataclasses import replace
+    from romhop import config
+    from romhop.gui import autostart
+
+    calls = []
+    monkeypatch.setattr(autostart, "set_enabled", lambda v: calls.append(v))
+    old = replace(config.default_settings(), start_on_login=True)
+    new = replace(old, start_on_login=False)
+    gui_app._apply_autostart(old, new)
+    assert calls == [False]
+
+
+def test_apply_autostart_noop_when_unchanged(monkeypatch):
+    from romhop import config
+    from romhop.gui import autostart
+
+    calls = []
+    monkeypatch.setattr(autostart, "set_enabled", lambda v: calls.append(v))
+    s = config.default_settings()
+    gui_app._apply_autostart(s, s)
+    assert calls == []
+
+
+def test_apply_autostart_swallows_errors(monkeypatch):
+    from dataclasses import replace
+    from romhop import config
+    from romhop.gui import autostart
+
+    def boom(_v):
+        raise OSError("registry locked")
+
+    monkeypatch.setattr(autostart, "set_enabled", boom)
+    old = config.default_settings()
+    new = replace(old, start_on_login=True)
+    # Best-effort: a failing OS write must not propagate out of save.
+    gui_app._apply_autostart(old, new)
+
+
 def test_uninstall_dispatch_removes_and_exits(monkeypatch):
     import pytest
     import romhop.config as config

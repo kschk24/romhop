@@ -51,6 +51,15 @@ def test_sync_enabled_defaults_false_and_roundtrips(tmp_path):
     assert config.load_settings(path).sync_enabled is True
 
 
+def test_start_on_login_defaults_false_and_roundtrips(tmp_path):
+    assert config.default_settings().start_on_login is False
+    s = config.default_settings()
+    s.start_on_login = True
+    path = tmp_path / "settings.ini"
+    config.save_settings(s, path)
+    assert config.load_settings(path).start_on_login is True
+
+
 def test_token_uses_keyring_not_file(tmp_path):
     config.set_token("rmm_secret")
     assert config.get_token() == "rmm_secret"
@@ -122,7 +131,7 @@ def test_schema_covers_every_scalar_settings_field():
     expected = {
         "romm_url", "roms_root", "saves_dir", "states_dir",
         "sort_saves_by_core", "sort_states_by_core",
-        "sync_enabled", "sync_delay_seconds",
+        "sync_enabled", "start_on_login", "sync_delay_seconds",
         "download_rate_limit_kbps", "theme",
         "auto_update_check", "update_include_prereleases",
         "debug_logging", "desktop_notifications",
