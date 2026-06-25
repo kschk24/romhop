@@ -33,6 +33,7 @@ from romhop.gui.settings_view import SettingsView
 from romhop.gui.setup_wizard import SetupWizard
 from romhop.gui.detail_panel import DetailPanel
 from romhop.gui.scan_result_dialog import ScanResultDialog
+from romhop.gui.upload_dialog import UploadDialog
 from romhop.gui.pull_conflict_dialog import PullConflictDialog
 from romhop.gui.activity_hub import ActivityHub
 from romhop.gui.activity_log import ActivityLogView
@@ -93,7 +94,8 @@ class MainWindow(QWidget):
                  update_check_fn=None, update_apply_fn=None, relaunch_fn=None,
                  open_log_dir_fn=None, export_logs_fn=None, detail_provider=None,
                  open_in_romm=None, open_folder=None, pull_action=None,
-                 upload_action=None, list_platforms_fn=None, create_platform_fn=None):
+                 upload_action=None, list_platforms_fn=None, create_platform_fn=None,
+                 discover_action=None):
         super().__init__(parent)
         self._settings = settings
         self._apply_token = apply_token
@@ -118,6 +120,7 @@ class MainWindow(QWidget):
         self._upload_action = upload_action
         self._list_platforms_fn = list_platforms_fn
         self._create_platform_fn = create_platform_fn
+        self._discover_action = discover_action
         self._pull_workers: set = set()
         self._bulk_pull_worker = None
         self._pending_update = None
@@ -125,6 +128,7 @@ class MainWindow(QWidget):
         self._apply_worker = None
         self._download_worker = None
         self._scan_worker = None
+        self._discover_worker = None
         self._sync_worker = None
         self._activity_hub = ActivityHub(self)
         self._activity_log_connected = False
@@ -168,6 +172,7 @@ class MainWindow(QWidget):
         self.settings_view.saved.connect(self._on_settings_saved)
         self.settings_view.cancelled.connect(self.show_library)
         self.settings_view.scan_requested.connect(self.run_scan)
+        self.settings_view.upload_requested.connect(self.run_upload_discover)
         self.settings_view.token_changed.connect(self._on_token_changed)
         self.settings_view.setup_requested.connect(self.run_setup_wizard)
         self.settings_view.update_check_requested.connect(self.check_for_updates)
@@ -620,6 +625,36 @@ class MainWindow(QWidget):
         if self._scan_worker is not None:
             self._scan_worker.deleteLater()
             self._scan_worker = None
+
+    def run_upload_discover(self) -> None:
+        if self._discover_action is None or self._discover_worker is not None:
+            return
+        self.settings_view.set_uploading(True)
+        settings = self._settings
+        worker = CallableWorker(lambda: self._discover_action(settings))
+        worker.done.connect(self._on_discover_done)
+        worker.error.connect(self._on_discover_error)
+        worker.finished.connect(self._on_discover_finished)
+        self._discover_worker = worker
+        worker.start()
+
+    def _on_discover_done(self, candidates) -> None:
+        self.settings_view.set_uploading(False)
+        UploadDialog(
+            candidates, self,
+            upload_action=self._upload_action,
+            create_platform_fn=self._create_platform_fn,
+            overrides=self._settings.platform_overrides,
+        ).exec()
+
+    def _on_discover_error(self, message: str) -> None:
+        self.settings_view.set_uploading(False)
+        QMessageBox.critical(self, "Upload discovery failed", message)
+
+    def _on_discover_finished(self) -> None:
+        if self._discover_worker is not None:
+            self._discover_worker.deleteLater()
+            self._discover_worker = None
 
     def _start_download(self, roms: list) -> None:
         if self._download_action is None or not roms or self._download_worker is not None:

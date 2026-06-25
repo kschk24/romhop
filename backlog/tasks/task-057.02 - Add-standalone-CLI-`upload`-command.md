@@ -1,11 +1,11 @@
 ---
 id: TASK-057.02
 title: Add standalone CLI `upload` command
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-06-25 17:36'
-updated_date: '2026-06-25 17:56'
+updated_date: '2026-06-25 17:59'
 labels:
   - upload-frontdoor
 dependencies:
@@ -33,10 +33,20 @@ New top-level `upload` command mirroring `download`: runs the match internally (
 - [x] #7 Tests cover name match, --platform filter, --yes, and discovery-only (no stray cache writes)
 <!-- AC:END -->
 
-
-
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
 1. Add _select_for_upload() to cli.py: InquirerPy checkbox sorted by (system,game_name) with Separator groups, ctrl+a hint, default unchecked; fallback to all-or-confirm. 2. Add upload() command to cli.py: roms_root check, recover() on entry, list_roms+match_to_roms (discovery-only, no cache seeding for matched), name substring filter, --platform exact-CI filter on ES-DE system dir, discover_uploadable, missing_platform create offer, _select_for_upload, summary+confirm, run_upload_batch. 3. Tests in tests/test_cli_upload.py: name match, --platform filter, --yes non-interactive, no stray cache writes for matched-only games.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+628 passed, 1 skipped. All 7 ACs checked. CHANGELOG updated. Committed 4c27185.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Added romhop upload command to cli.py: variadic name substring filter, repeatable --platform filter, --yes non-interactive, discovery-only match (no cache seeding for matched), InquirerPy picker grouped by system with ctrl+a, full parity (missing-platform create, unresolvable display, recover on entry). 11 new tests in test_cli_upload.py covering all ACs. Full suite green.
+<!-- SECTION:FINAL_SUMMARY:END -->

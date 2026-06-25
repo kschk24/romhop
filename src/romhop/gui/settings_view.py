@@ -33,6 +33,7 @@ class SettingsView(QWidget):
     saved = Signal()
     cancelled = Signal()
     scan_requested = Signal()
+    upload_requested = Signal()
     setup_requested = Signal()
     token_changed = Signal(str)  # emitted with the new token on a non-blank save
     update_check_requested = Signal()
@@ -86,6 +87,9 @@ class SettingsView(QWidget):
         self.scan_btn = QPushButton("Scan local library")
         self.scan_btn.setObjectName("ScanButton")
         self.scan_btn.clicked.connect(lambda: self.scan_requested.emit())
+        self.upload_btn = QPushButton("Upload local games to RomM")
+        self.upload_btn.setObjectName("UploadButton")
+        self.upload_btn.clicked.connect(lambda: self.upload_requested.emit())
         self.setup_btn = QPushButton("Run setup wizard")
         self.setup_btn.setObjectName("SetupButton")
         self.setup_btn.clicked.connect(lambda: self.setup_requested.emit())
@@ -94,6 +98,7 @@ class SettingsView(QWidget):
         self.update_check_btn.clicked.connect(lambda: self.update_check_requested.emit())
         scan_row = QHBoxLayout()
         scan_row.addWidget(self.scan_btn)
+        scan_row.addWidget(self.upload_btn)
         scan_row.addWidget(self.setup_btn)
         scan_row.addWidget(self.update_check_btn)
         scan_row.addStretch(1)
@@ -113,6 +118,7 @@ class SettingsView(QWidget):
 
         self._populate()
         self._refresh_scan_enabled()
+        self._refresh_upload_enabled()
 
     # --- build helpers ---
     def _make_widget(self, spec) -> QWidget:
@@ -206,7 +212,7 @@ class SettingsView(QWidget):
         if dest:
             self._export_logs_fn(Path(dest))
 
-    # --- scan action ---
+    # --- scan / upload actions ---
     def _refresh_scan_enabled(self) -> None:
         self.scan_btn.setEnabled(config.roms_root_configured(self._settings))
 
@@ -217,6 +223,17 @@ class SettingsView(QWidget):
         else:
             self.scan_btn.setText("Scan local library")
             self._refresh_scan_enabled()
+
+    def _refresh_upload_enabled(self) -> None:
+        self.upload_btn.setEnabled(config.roms_root_configured(self._settings))
+
+    def set_uploading(self, uploading: bool) -> None:
+        if uploading:
+            self.upload_btn.setEnabled(False)
+            self.upload_btn.setText("Discovering…")
+        else:
+            self.upload_btn.setText("Upload local games to RomM")
+            self._refresh_upload_enabled()
 
     # --- search/filter ---
     def _widget_for(self, label: str) -> QWidget:
@@ -246,6 +263,7 @@ class SettingsView(QWidget):
     def reset(self) -> None:
         self._populate()
         self._refresh_scan_enabled()
+        self._refresh_upload_enabled()
 
     def load(self, settings: Settings) -> None:
         """Replace the backing settings and refresh every widget. Used after the

@@ -278,6 +278,17 @@ def run() -> None:
     def scan_action(settings):
         return run_scan(client, cache, names, settings)
 
+    def discover_action(settings):
+        # Discovery only — no cache seeding; upload keeps sole cache-write for
+        # matched games after the actual upload.
+        from romhop.local_index import index_local_library, match_to_roms
+        from romhop.upload import discover_uploadable
+        roms = client.list_roms()
+        locals_ = index_local_library(settings.roms_root, settings.platform_overrides)
+        result = match_to_roms(locals_, roms, settings.platform_overrides)
+        romm_platforms = client.list_platforms()
+        return discover_uploadable(result.unmatched, romm_platforms, settings.platform_overrides)
+
     def list_platforms_fn():
         return client.list_platforms()
 
@@ -426,6 +437,7 @@ def run() -> None:
         upload_action=upload_batch_fn,
         list_platforms_fn=list_platforms_fn,
         create_platform_fn=create_platform_fn,
+        discover_action=discover_action,
     )
     instance.activated.connect(window.show_and_raise)
     window.resize(900, 600)
@@ -433,7 +445,7 @@ def run() -> None:
         from romhop.activity import ActivityEvent, ActivityKind
         window._activity_hub.post(ActivityEvent(
             ActivityKind.UPLOAD_DONE,
-            "previous upload was interrupted — re-run scan to continue",
+            "previous upload was interrupted — re-run scan or upload to continue",
         ))
     if settings.auto_update_check and _updates_supported:
         window.check_for_updates()
