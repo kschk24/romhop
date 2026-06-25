@@ -18,38 +18,51 @@ from romhop.romm_client import Rom
 # Column-wrap budget: width one cell claims (tile + grid spacing) before the
 # grid wraps to another column.
 CELL_TARGET_WIDTH = 160
-# Fixed on-screen tile size — identical on every platform regardless of game
-# count. Slightly narrower than the wrap budget so grid spacing fits without
-# spilling into an extra column. Height is fixed so few-game platforms don't
-# stretch their tiles tall (see overflow handling in _relayout).
-CELL_WIDTH = 150
-CELL_HEIGHT = 255
 # Horizontal padding inside the tile (box contentsMargins, both sides).
 COVER_PAD = 4
+# Cap on cover-art height. Covers scale to full width; this bounds the tallest
+# (portrait, ~0.71 w/h IGDB ratio) so a tile can't grow unbounded.
+MAX_COVER_HEIGHT = 200
+# Fixed on-screen tile size — identical on every platform regardless of game
+# count. The cell holds only the cover now: the name is an overlay drawn over a
+# darkened cover on hover (no name row below), so the cell height is just the
+# tallest cover plus padding.
+CELL_WIDTH = 150
+CELL_HEIGHT = MAX_COVER_HEIGHT + 2 * COVER_PAD
 # Inner width covers render at: every cover fills this exact width (no
 # left/right letterbox bars), so a row of tiles lines up cleanly.
 COVER_WIDTH = CELL_WIDTH - 2 * COVER_PAD
-# Height of the green DOWNLOADED strip reserved at the very top of a downloaded
-# tile's cover. The cover art is drawn below this strip (never under it), and
-# the strip's top edge is the tile top — so every banner's top lines up.
+# Height of the green DOWNLOADED strip overlaid at the very top of a downloaded
+# tile's cover. Tile-top aligned across the grid.
 BANNER_HEIGHT = 20
-# Cap on cover-art height. Covers scale to full width; this bounds the tallest
-# (portrait, ~0.71 w/h IGDB ratio) so a tile can't grow unbounded. Shorter
-# (wide-aspect) covers stay their natural height, freeing vertical room below
-# for the name — the cover label is sized to the art, not a fixed box.
-MAX_COVER_HEIGHT = 200
 # Placeholder cover height shown before the real pixmap loads.
-DEFAULT_COVER_HEIGHT = 190
-# Fixed vertical budget for the name row under the cover. Bounding it stops a
-# long, word-wrapped title from blowing past its share of the fixed-height cell
-# and squeezing the (fixed-height) cover label — which made names overlap the
-# art. Titles longer than this many lines are elided with an ellipsis.
-NAME_LINES = 2
+DEFAULT_COVER_HEIGHT = MAX_COVER_HEIGHT
+# Inset of the checkbox / platform pill from the cover's bottom corners.
+OVERLAY_INSET = 4
 
 
 def columns_for_width(width: int, cell_width: int = CELL_TARGET_WIDTH) -> int:
     """How many columns fit in `width`, never fewer than one."""
     return max(1, width // cell_width)
+
+
+class GameTile(QWidget):
+    """A single cover cell that reports mouse enter/leave so the view can reveal
+    the darkened name overlay and the (unchecked) selection checkbox on hover."""
+
+    hover_changed = Signal(int, bool)  # (rom_id, entered)
+
+    def __init__(self, rom_id: int, parent=None):
+        super().__init__(parent)
+        self._rom_id = rom_id
+
+    def enterEvent(self, event) -> None:
+        self.hover_changed.emit(self._rom_id, True)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self.hover_changed.emit(self._rom_id, False)
+        super().leaveEvent(event)
 
 
 def platforms_from_roms(roms: list[Rom]) -> list[str]:
@@ -96,6 +109,8 @@ class LibraryView(QWidget):
         self._pixmap_cache: dict[int, QPixmap] = {}
         self._pills: dict[int, QLabel] = {}
         self._ribbons: dict[int, QLabel] = {}
+        # Dark name overlay (one per tile) shown only while the cover is hovered.
+        self._overlays: dict[int, QLabel] = {}
         self._cover_loader = None
         # Every loader started but not yet finished. Holding a strong reference
         # here keeps the QThread alive until run() returns, even after a newer
@@ -167,30 +182,42 @@ class LibraryView(QWidget):
         self._cover_labels = {}
         self._pills = {}
         self._ribbons = {}
+        self._overlays = {}
         self._cells = []
         games = filter_games(self._roms, self._platform_filter, self._query,
                              self._downloaded_ids, self._downloaded_mode, self._sort)
         for rom in games:
-            cell = QWidget()
+            cell = GameTile(rom.id)
             # Fixed size: tiles look identical across platforms; overflow scrolls
             # rather than the grid stretching tiles to fill the viewport.
             cell.setFixedSize(CELL_WIDTH, CELL_HEIGHT)
+            cell.hover_changed.connect(self._set_hover)
             box = QVBoxLayout(cell)
             box.setContentsMargins(COVER_PAD, COVER_PAD, COVER_PAD, COVER_PAD)
-            box.setSpacing(2)
-            # Cover area: full-width, top-anchored, height tracks the art (set in
-            # _place_cover once the pixmap loads).
+            box.setSpacing(0)
+            # Cover fills the whole cell now (no name row below). Top-anchored;
+            # height tracks the art once the pixmap loads (see _place_cover).
             downloaded = rom.id in self._downloaded_ids
             cover = QLabel()
             cover.setObjectName("Cover")
             cover.setFixedWidth(COVER_WIDTH)
             cover.setFixedHeight(DEFAULT_COVER_HEIGHT)
             cover.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
-            # Platform pill overlaid on the cover image (bottom-left corner);
-            # repositioned to the art's bottom in _place_cover.
+            # Darkened name overlay: covers the whole art, hidden until hover.
+            # Transparent to the mouse so a click still activates the tile (the
+            # checkbox sits above it and stays clickable).
+            overlay = QLabel(rom.name, cover)
+            overlay.setObjectName("TileNameOverlay")
+            overlay.setWordWrap(True)
+            overlay.setAlignment(Qt.AlignCenter)
+            overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+            overlay.setGeometry(0, 0, COVER_WIDTH, DEFAULT_COVER_HEIGHT)
+            overlay.hide()
+            self._overlays[rom.id] = overlay
+            # Platform pill, bottom-RIGHT corner (bottom-left is the checkbox).
             pill = QLabel(self._platform_label(rom), cover)
             pill.setObjectName("PlatformPill")
-            pill.move(4, DEFAULT_COVER_HEIGHT - 20)
+            pill.adjustSize()
             self._pills[rom.id] = pill
             # Downloaded indicator: green banner overlaying the top edge of the
             # cover art, tile-top aligned across the grid.
@@ -201,40 +228,27 @@ class LibraryView(QWidget):
                 ribbon.setAlignment(Qt.AlignCenter)
                 ribbon.move(0, 0)
                 self._ribbons[rom.id] = ribbon
-            check = QCheckBox()  # bare glyph: batch-select only, no title text
+            # Selection checkbox, bottom-LEFT inside the cover. Shown only on hover
+            # while unchecked; always visible once checked (set in _set_check_vis).
+            check = QCheckBox(cover)  # bare glyph: batch-select only, no title text
+            check.setObjectName("TileCheck")
             check.setChecked(rom.id in self._selected_ids)
             check.toggled.connect(
                 lambda checked, rid=rom.id: self._on_toggle(rid, checked)
             )
-            name = QLabel(rom.name)
-            name.setObjectName("TileName")
-            name.setWordWrap(True)
-            name.setToolTip(rom.name)  # full title on hover when truncated
-            # Fixed budget: word-wrap up to NAME_LINES, then clip. Without this the
-            # name's wrapped height overflows the fixed-height cell and overlaps the
-            # (fixed-height) cover above it.
-            name.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-            line_h = name.fontMetrics().lineSpacing()
-            name.setFixedHeight(line_h * NAME_LINES)
+            check.adjustSize()
             cover.mousePressEvent = lambda e, rid=rom.id: self._activate_rom(rid)
-            name.mousePressEvent = lambda e, rid=rom.id: self._activate_rom(rid)
-            name_row = QHBoxLayout()
-            name_row.setContentsMargins(0, 0, 0, 0)
-            name_row.addWidget(check, 0)
-            name_row.addWidget(name, 1)
             cell.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             cell.customContextMenuRequested.connect(
                 lambda pos, rid=rom.id, c=cell: self._show_menu(c, rid)
             )
-            box.addWidget(cover)
-            # Slack floats between the cover and the name: covers pin to the cell
-            # top, name rows pin to the cell bottom, so both edges line up across
-            # tiles regardless of cover height (gap opens in the middle instead).
+            box.addWidget(cover, 0, Qt.AlignTop | Qt.AlignHCenter)
             box.addStretch(1)
-            box.addLayout(name_row)
             self._cells.append(cell)
             self._checks[rom.id] = (check, rom)
             self._cover_labels[rom.id] = cover
+            self._position_overlays(rom.id, DEFAULT_COVER_HEIGHT)
+            self._set_check_vis(rom.id, hovered=False)
         self._relayout(force=True)
         self._start_cover_load(games)
         self._emit_selection()
@@ -285,17 +299,57 @@ class LibraryView(QWidget):
             return
         self._pixmap_cache[rom_id] = pm
         label.setPixmap(pm)
-        # Size the cover label to the art. Shorter covers stay short, so the name
-        # row below moves up and gets more room. The banner overlays the art's
-        # top edge (raised above it); the pill tracks the art's bottom-left.
+        # Size the cover label to the art, then re-anchor the overlays to the
+        # art's real height (banner at top, pill bottom-right, checkbox
+        # bottom-left, name overlay covering the whole art).
         label.setFixedHeight(pm.height())
+        self._position_overlays(rom_id, pm.height())
+
+    def _position_overlays(self, rom_id: int, cover_h: int) -> None:
+        """Place the per-tile overlays relative to the cover art height."""
+        overlay = self._overlays.get(rom_id)
+        if overlay is not None:
+            overlay.setGeometry(0, 0, COVER_WIDTH, cover_h)
+        ribbon = self._ribbons.get(rom_id)
+        if ribbon is not None:
+            ribbon.move(0, 0)
+            ribbon.raise_()
+        pill = self._pills.get(rom_id)
+        if pill is not None:
+            pill.move(COVER_WIDTH - pill.width() - OVERLAY_INSET,
+                      cover_h - pill.height() - OVERLAY_INSET)
+            pill.raise_()
+        entry = self._checks.get(rom_id)
+        if entry is not None:
+            check = entry[0]
+            check.move(OVERLAY_INSET, cover_h - check.height() - OVERLAY_INSET)
+            check.raise_()
+
+    def _set_hover(self, rom_id: int, entered: bool) -> None:
+        # Reveal the darkened name overlay while hovering; the checkbox also
+        # appears on hover when unchecked.
+        overlay = self._overlays.get(rom_id)
+        if overlay is not None:
+            overlay.setVisible(entered)
+            if entered:
+                overlay.raise_()
+        # Keep banner/pill/checkbox above the raised overlay.
         ribbon = self._ribbons.get(rom_id)
         if ribbon is not None:
             ribbon.raise_()
         pill = self._pills.get(rom_id)
         if pill is not None:
-            pill.move(4, pm.height() - 20)
             pill.raise_()
+        self._set_check_vis(rom_id, hovered=entered)
+
+    def _set_check_vis(self, rom_id: int, hovered: bool) -> None:
+        # Checkbox shows when checked (always) or while the tile is hovered.
+        entry = self._checks.get(rom_id)
+        if entry is None:
+            return
+        check = entry[0]
+        check.setVisible(check.isChecked() or hovered)
+        check.raise_()
 
     def _on_toggle(self, rom_id: int, checked: bool) -> None:
         # Update the global set, then report the new cross-platform selection.
@@ -303,7 +357,13 @@ class LibraryView(QWidget):
             self._selected_ids.add(rom_id)
         else:
             self._selected_ids.discard(rom_id)
+        # A box unchecked while not hovered should disappear again.
+        self._set_check_vis(rom_id, hovered=self._is_hovered(rom_id))
         self._emit_selection()
+
+    def _is_hovered(self, rom_id: int) -> bool:
+        cell = next((c for c in self._cells if c._rom_id == rom_id), None)
+        return bool(cell and cell.underMouse())
 
     def _relayout(self, force: bool = False) -> None:
         # Re-grid the existing cells when the column count changes (live resize).
@@ -334,10 +394,11 @@ class LibraryView(QWidget):
 
     def clear_selection(self) -> None:
         self._selected_ids.clear()
-        for check, _rom in self._checks.values():
+        for rom_id, (check, _rom) in self._checks.items():
             check.blockSignals(True)
             check.setChecked(False)
             check.blockSignals(False)
+            self._set_check_vis(rom_id, hovered=self._is_hovered(rom_id))
         self._emit_selection()
 
     def selected_roms(self) -> list[Rom]:

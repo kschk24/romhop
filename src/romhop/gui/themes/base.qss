@@ -32,6 +32,18 @@ QLabel#StatusDim {
     font-size: 9px;
     padding: 2px 0;
 }
+#TileNameOverlay {
+    background: rgba(0, 0, 0, 0.62);
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 6px;
+}
+#TileCheck {
+    background: rgba(0, 0, 0, 0.45);
+    border-radius: 3px;
+    padding: 1px;
+}
 QProgressBar {
     background-color: {{panel}};
     border: 1px solid {{text_dim}};
